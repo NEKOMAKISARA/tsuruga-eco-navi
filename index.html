@@ -90,11 +90,15 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 .advice{margin:0;font-size:14px;color:var(--hv)}
 .mapbox{display:none}
 #map{height:100%;background:var(--panel)}
+#map{position:relative;overflow:hidden}
+#rot{position:absolute;left:50%;top:50%;width:150%;height:150%;transform:translate(-50%,-50%) rotate(var(--rot,0deg))}
+@media (prefers-reduced-motion:no-preference){#rot{transition:transform .8s}}
 #gmap,#lmap{height:100%}
+#mapNote{position:absolute;left:8px;top:8px;z-index:500;background:rgba(13,20,28,.85);color:var(--fg);font-size:12px;padding:4px 8px;border-radius:6px}
 .alert{background:var(--panel);border:1px solid var(--warn);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:13px}
 /* 横（iPhone横置き）：左に今の指示を固定、右に時間・休憩をスクロール */
 @media (orientation:landscape) and (max-height:500px), (orientation:landscape) and (min-width:1000px){
-  .app{max-width:none;display:grid;grid-template-columns:1.1fr 1fr;align-items:start;gap:14px;padding-block:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-bottom))}
+  .app{max-width:none;display:grid;grid-template-columns:1fr 1.25fr;align-items:start;gap:14px;padding-block:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-bottom))}
   .col{display:flex;flex-direction:column;gap:8px;min-width:0}
   .col:first-child{position:sticky;top:max(8px,env(safe-area-inset-top))}
   .now{padding:10px 14px;gap:8px}
@@ -108,7 +112,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
   .rest{padding:10px 14px;gap:8px}
   .rest-min b{font-size:28px}
   .col>.mapbox{order:0}
-  .mapbox{display:block;height:60vh;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+  .mapbox{display:block;height:80vh;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
 }
 /* タブレット（11インチ等）：離れて見るので文字を大きく */
 @media (min-width:1000px) and (min-height:600px){
@@ -154,7 +158,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
   </section>
  </div>
  <div class="col">
-  <div class="mapbox"><div id="map"><div id="gmap"></div><div id="lmap" hidden></div></div></div>
+  <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
   <div class="time">
     <div class="t"><small>現在</small><b id="clock">--:--</b></div>
     <div class="t"><small>予想到着</small><b id="eta">--:--</b></div>
@@ -479,6 +483,7 @@ function render(km){
     return `<tr class="${past?"past":""}"><td>${s.name}</td><td class="r">${past?"":(s.km-km).toFixed(0)+" km"}</td><td class="r">${at}</td></tr>`;
   }).join("");
   const nj=GUIDE.find(j=>j.km>km+0.02);
+  nextGuideD=nj?nj.km-km:null;
   $("jctBox").hidden=!nj;
   if(nj){const d=Math.max(0,nj.km-km);
     $("jctName").textContent=nj.name;$("jctText").textContent=nj.text;$("jctArrow").textContent=arrowOf(nj.text);
@@ -565,8 +570,8 @@ let GMAPS_KEY="";try{GMAPS_KEY=localStorage.getItem("gmapsKey")||"";}catch(e){} 
 let gmap=null,gMe=null,gLines=[],gState="none"; // none|loading|ok|fail
 function loadGmaps(){
   if(gState!=="none")return;gState="loading";
-  const fail=()=>{if(gState==="ok"&&gmap)return;gState="fail";gmap=null;$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();};
-  window.gm_authFailure=()=>{gmap=null;gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();};
+  const fail=()=>{if(gState==="ok"&&gmap)return;gState="fail";gmap=null;$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();mapNote("Googleマップ：読み込めません");};
+  window.gm_authFailure=()=>{gmap=null;gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();mapNote("Googleマップ：キーが使えません（制限・有効化を確認）");};
   window.onGmaps=()=>{gState="ok";initGmap();};
   const sc=document.createElement("script");
   sc.src=`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&v=weekly&language=ja&region=JP&loading=async&callback=onGmaps`;
@@ -588,10 +593,18 @@ function initGmap(){
   gmap.addListener("zoom_changed",()=>{if(!progMove)holdUntil=Date.now()+30000;});
   updateMap();
 }
+function fitRot(){
+  const m=$("map"),d=Math.ceil(Math.hypot(m.clientWidth,m.clientHeight));
+  if(d){$("rot").style.width=d+"px";$("rot").style.height=d+"px";}
+}
+addEventListener("resize",()=>{fitRot();if(map)map.invalidateSize();});
+// Googleマップにならない時は理由を地図の左上に出す
+function mapNote(t){$("mapNote").hidden=!t;$("mapNote").textContent=t||"";}
 function initMap(){
+  fitRot();
   if(gState!=="none")return;
   if(GMAPS_KEY)loadGmaps();
-  else{gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();}
+  else{gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();mapNote("Googleマップ：キー未設定");}
 }
 function initLeaflet(){
   if(map||!window.L)return;
@@ -604,18 +617,31 @@ function initLeaflet(){
   meMk=L.circleMarker(posAt(curKm),{radius:10,color:"#fff",weight:3,fillColor:"#e8222e",fillOpacity:1}).addTo(map);
   map.on("dragstart zoomstart",()=>{if(!progMove)holdUntil=Date.now()+30000;}); // 手で動かしたら30秒は追いかけない（プログラムでの移動は除く）
 }
+// 2点間の方位（北=0、時計回り）
+function bearing(a,b){const r=Math.PI/180,y=Math.sin((b[1]-a[1])*r)*Math.cos(b[0]*r),x=Math.cos(a[0]*r)*Math.sin(b[0]*r)-Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos((b[1]-a[1])*r);return(Math.atan2(y,x)/r+360)%360;}
+let rotAcc=null,gpsHeading=null,offD=0,nextGuideD=null;
 function updateMap(){
-  const p=curPos||posAt(curKm);
-  // 一般道（60km/h未満）は拡大して交差点を見やすく、高速は広めに
-  const zoom=gpsSpeed!=null&&gpsSpeed<60?16:12;
+  const p=curPos||posAt(curKm),city=gpsSpeed!=null&&gpsSpeed<60,onRoute=!curPos||offD<0.05;
+  // 一般道（60km/h未満）は拡大して交差点を見やすく、高速は広めに。
+  // 次の案内（曲がる所・IC・JCT）が近づいたら、さらに拡大する（一般道300m・高速1.5km手前から）
+  const near=nextGuideD!=null&&nextGuideD<(city?0.3:1.5);
+  const zoom=city?(near?17:16):(near?15:12);
+  // 進行方向：ルート上ならルートの向き、外れていればGPSの向き
+  const hd=onRoute?bearing(posAt(curKm),posAt(curKm+(city?0.05:0.4))):gpsHeading;
+  if(hd!=null&&!isNaN(hd)){
+    if(rotAcc==null)rotAcc=hd;else rotAcc+=((hd-rotAcc)%360+540)%360-180; // 359°→1°で一回転しないよう差分で足す
+    $("rot").style.setProperty("--rot",(-rotAcc)+"deg");
+  }
+  // 現在地を画面の下寄りに置き、前方を広く見せる（ルート上の少し先を中心に）
+  const c=onRoute?posAt(curKm+({17:0.06,16:0.12,15:0.4,12:2.5})[zoom]):p;
   if(gmap&&gMe){
     gMe.setPosition({lat:p[0],lng:p[1]});
-    if(Date.now()>holdUntil){progMove=true;if(gmap.getZoom()!==zoom)gmap.setZoom(zoom);gmap.setCenter({lat:p[0],lng:p[1]});progMove=false;}
+    if(Date.now()>holdUntil){progMove=true;if(gmap.getZoom()!==zoom)gmap.setZoom(zoom);gmap.setCenter({lat:c[0],lng:c[1]});progMove=false;}
     return;
   }
   if(!map)return;
   meMk.setLatLng(p);
-  if(Date.now()>holdUntil){progMove=true;map.setView(p,zoom,{animate:false});progMove=false;}
+  if(Date.now()>holdUntil){progMove=true;map.setView(c,zoom,{animate:false});progMove=false;}
 }
 const land=matchMedia("(orientation:landscape) and (max-height:500px), (orientation:landscape) and (min-width:1000px)");
 function syncMap(){if(!land.matches)return;initMap();if(map)map.invalidateSize();updateMap();}
@@ -675,7 +701,8 @@ $("startBtn").addEventListener("click",()=>{
       const pr=project(p.coords.latitude,p.coords.longitude);
       let s=p.coords.speed!=null&&p.coords.speed>=0?p.coords.speed*3.6:null;
       if(s==null&&lastFix){const dt=(p.timestamp-lastFix.t)/3.6e6;if(dt>0)s=Math.max(0,(pr.km-lastFix.km)/dt);} // 速度が取れない時は進み具合から推定
-      lastFix={t:p.timestamp,km:pr.km};
+      lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
+      if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&(s??0)>5)gpsHeading=p.coords.heading;
       const c=p.coords,alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
       curPos=[c.latitude,c.longitude];
       gpsSpeed=s;addSample(pr.km,s,alt);
