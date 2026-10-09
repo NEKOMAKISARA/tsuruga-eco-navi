@@ -879,8 +879,10 @@ function syncNav(){
   $("rerouteBtn").hidden=!(off&&curPos&&!rerouting);
   // 曲がる所・IC・JCTが近い時は拡大ポップアップ、高速走行中は次のSA・PA
   const city=gpsSpeed!=null&&gpsSpeed<60,nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
-  const showInset=nj&&!off&&onRouteF&&d<(city?0.3:1.0);
+  const navOn=(curPos&&performance.now()-A.fixT<15000)||!!timer;
+  const showInset=navOn&&nj&&!off&&onRouteF&&d>0&&d<(city?0.3:1.0)&&insetClosed!==nj.km;
   $("inset").hidden=!showInset;
+  insetFor=showInset?nj.km:null;
   if(showInset)updateInset(nj,d);
   const zi=zoneAt(curKm),hw=zi.z.v>=70&&zi.i<Z.length;
   const next=SAKM.filter(x=>x.km>curKm+0.3).slice(0,3);
@@ -894,7 +896,7 @@ function syncNav(){
     if(lastEcoSay&&e!==lastEcoSay)speak(`指定速度${T("set")}、シフト${T("regen")}`);lastEcoSay=e;}
 }
 /* ---- 拡大ポップアップ：今の位置から分岐の先までが収まる拡大率で、近づく向きを上にして表示 ---- */
-let iMap=null,iL=null,iMe=null,iLines=[],iKey="";
+let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
 function updateInset(nj,d){
   const city=isCity(),k0=Math.min(A.dispKm??curKm,nj.km-0.01),k1=nj.km+(city?0.04:0.2);
   const from=posAt(Math.max(0,Math.min(k0,nj.km-0.05))),hd=bearing(from,posAt(nj.km));
@@ -1031,6 +1033,7 @@ rebuildRoute(MAN);
 // 再検索で経路を引き直す時に、予定どおりの道を通らせるための本線上の点（元のルート上の距離）
 const VIA=[35,90,200,340,400,445].map(k=>{const p=posAt(k);return{lat:p[0],lon:p[1]};});
 $("zoomReset").addEventListener("click",()=>{userZoom=null;try{localStorage.removeItem("mapZoom");}catch(e){}$("zoomReset").textContent="自動に戻しました（一般道16・高速13）";});
+$("inset").addEventListener("click",()=>{insetClosed=insetFor;$("inset").hidden=true;}); // タップで閉じる（次の案内では また出る）
 render(0);syncMap();
 </script>
 </body></html>
