@@ -667,7 +667,7 @@ function decelFor(km,v){
   const need=(ms*ms-mt*mt)/(2*Math.max(d,1));
   const rg=need>0.9?"B4":need>0.55?"B2":"D";
   const key=nj.km.toFixed(3);
-  if(!DEC.said.has(key)){DEC.said.add(key);if(SET.voiceEco)speak("アクセルを離してください");}
+  if(!DEC.said.has(key)){DEC.said.add(key);if(SET.voiceEco&&!city)speak("アクセルを離してください");} // 一般道の曲がる所ごとには読まない
   return{vt,rg,msg:`${what}まで${Math.round(d/10)*10}m アクセルOFF`};
 }
 
@@ -784,7 +784,7 @@ function render(km){
     if(d>7)adv=(adv?adv+"　":"")+`設定より+${d}km/h`;
   }
   const dc=decelFor(km,gpsSpeed!=null?gpsSpeed:parseInt(z.set,10));
-  if(dc){z.set=String(dc.vt);z.cc="lift";z._rg=dc.rg;adv=dc.msg;}
+  if(dc){if(z.cc!=="off"){z.set=String(dc.vt);z.cc="lift";z._rg=dc.rg;}adv=dc.msg;}
   $("advice").hidden=!adv;$("advice").textContent=adv;
   $("grade").textContent=sl?`勾配 ${sl.g>=0?"+":"−"}${Math.abs(sl.g).toFixed(1)}%`:"";
   const tb=$("trafficBox");
@@ -1160,7 +1160,7 @@ function speak(t,force){
   const u=new SpeechSynthesisUtterance(t.replace(/JCT/g,"ジャンクション").replace(/IC/g,"インター").replace(/SA/g,"サービスエリア").replace(/PA/g,"パーキング").replace(/（.*?）/g,"").replace(/：/g,"、"));
   u.lang="ja-JP";u.rate=1.05;speechSynthesis.speak(u);
 }
-const spoken=new Set();let lastEcoSay="";
+const spoken=new Set();let lastEcoSay="",ecoCand={v:"",t:0};
 function fmtSay(km){return km>=1?`${km.toFixed(km<10?1:0).replace(/\.0$/,"")}キロ先`:`${Math.round(km*10)*100}メートル先`;}
 function voiceGuide(nj,d,city){
   if(!nj)return;
@@ -1200,8 +1200,10 @@ function syncNav(){
     $("sapaCard").innerHTML=next.map(x=>`<div><span class="n">${x.name}</span><span class="i">${ic(x.f)}</span><span class="k">${(x.km-curKm).toFixed(0)} km</span></div>`).join("");
   }
   voiceGuide(nj,d,city);
-  if(SET.voiceEco){const e=T("set")+"|"+T("regen");
-    if(lastEcoSay&&e!==lastEcoSay)speak(`指定速度${T("set")}、シフト${T("regen")}`);lastEcoSay=e;}
+  // 指定速度・シフトの読み上げ：同じ値が8秒続いた時だけ（行ったり来たりする時は読まない）。減速の合図（アクセルOFF）は別に読むので除く
+  if(SET.voiceEco&&T("setUnit")!=="アクセルOFF"){const e=T("set")+"|"+T("regen"),t=performance.now();
+    if(e!==ecoCand.v){ecoCand={v:e,t};}
+    else if(t-ecoCand.t>8000&&e!==lastEcoSay){if(lastEcoSay)speak(`指定速度${T("set")}、シフト${T("regen")}`);lastEcoSay=e;}}
 }
 /* ---- 拡大ポップアップ：今の位置から分岐の先までが収まる拡大率で、近づく向きを上にして表示 ---- */
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
