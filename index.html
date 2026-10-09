@@ -684,10 +684,9 @@ $("fullBtn").addEventListener("click",async()=>{
 });
 document.addEventListener("fullscreenchange",()=>{$("fullBtn").textContent=document.fullscreenElement?"全画面を終了":"全画面";});
 /* ---- API使用量（この端末で今日使った分。Google側の実数ではない） ---- */
-const GEO_MAX=500; // 市区町村の確認は1日500回まで（Geocoding APIの無料枠 月1万回に収める）
 function usageGet(){const t=new Date().toDateString();let u={};try{u=JSON.parse(localStorage.getItem("apiUsage")||"{}");}catch(e){}return u.d===t?Object.assign({geo:0},u):{d:t,gmap:0,route:0,geo:0};}
 function usageBump(k){const u=usageGet();u[k]=(u[k]||0)+1;try{localStorage.setItem("apiUsage",JSON.stringify(u));}catch(e){}showUsage();}
-function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回　再検索 <b>${u.route}</b>回<br>市区町村の確認（Google） <b>${u.geo}</b> / ${GEO_MAX}回`;}
+function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回　再検索 <b>${u.route}</b>回`;}
 showUsage();
 $("menuBtn").addEventListener("click",()=>document.body.classList.add("sheet"));
 $("closeSheet").addEventListener("click",()=>document.body.classList.remove("sheet"));
@@ -856,32 +855,15 @@ function layoutNow(){
   lay={t,h,w,ty};return lay;
 }
 
-/* ---- 市区町村に入った時の案内：GoogleマップのGeocoding（住所の逆引き）で今いる市区町村を調べる ----
-   走行中、前回調べた所から1km以上動いて20秒以上たったら1回だけ調べる（無料枠に収めるため）。
-   Googleが使えない時（キーでGeocodingが許可されていない・上限に達した等）は国土地理院の住所検索（無料・キー不要）で調べる。
-   市が変わったら右上に10秒表示し、音声案内ONなら読み上げる */
+/* ---- 市区町村に入った時の案内：国土地理院の住所検索（無料・キー不要。Googleの使用量は使わない）で今いる市区町村を調べる ----
+   走行中、前回調べた所から1km以上動いて20秒以上たったら1回調べる。市が変わったら右上に10秒表示し、音声案内ONなら読み上げる */
 window.GSI=window.GSI||{};
-const AREA={cur:null,lastQ:null,lastT:0,busy:false,muni:false,timer:null,gc:null,gOff:false};
+const AREA={cur:null,lastQ:null,lastT:0,busy:false,muni:false,timer:null};
 function loadMuni(){
   if(AREA.muni)return;AREA.muni="loading";
   const sc=document.createElement("script");sc.src="https://maps.gsi.go.jp/js/muni.js";
   sc.onload=()=>{AREA.muni=true;};sc.onerror=()=>{AREA.muni=false;};document.head.appendChild(sc);
 }
-function geoGoogle(pos){return new Promise((res,rej)=>{
-  if(AREA.gOff||!window.google||!google.maps||!google.maps.Geocoder||usageGet().geo>=GEO_MAX)return rej("off");
-  AREA.gc=AREA.gc||new google.maps.Geocoder();usageBump("geo");
-  AREA.gc.geocode({location:{lat:pos[0],lng:pos[1]},language:"ja"},(r,st)=>{
-    if(st==="REQUEST_DENIED"){AREA.gOff=true;return rej(st);} // キーでGeocodingが許可されていない → 以後は国土地理院
-    if(st!=="OK"||!r||!r.length)return rej(st);
-    let pref=null,city=null,county=null;
-    for(const x of r)for(const c of x.address_components){
-      if(!pref&&c.types.includes("administrative_area_level_1"))pref=c.long_name;
-      if(!city&&c.types.includes("locality"))city=c.long_name;
-      if(!county&&c.types.includes("administrative_area_level_2"))county=c.long_name;}
-    city=city||county;
-    if(pref&&city)res({pref,city});else rej("noname");
-  });
-});}
 async function geoGsi(pos){
   loadMuni();if(AREA.muni!==true)throw"muni";
   const r=await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${pos[0].toFixed(6)}&lon=${pos[1].toFixed(6)}`);
@@ -895,7 +877,7 @@ async function checkArea(pos){
   if(gpsSpeed!=null&&gpsSpeed<5&&AREA.cur)return; // 止まっている間は調べない
   AREA.busy=true;AREA.lastQ=pos;AREA.lastT=t;
   try{
-    let m;try{m=await geoGoogle(pos);}catch(e){m=await geoGsi(pos);}
+    const m=await geoGsi(pos);
     const key=m.pref+m.city;
     if(AREA.cur&&AREA.cur!==key)showArea(m);
     AREA.cur=key;
