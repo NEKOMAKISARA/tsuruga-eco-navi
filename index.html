@@ -1,4 +1,4 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"></head><body><title>敦賀エコ巡航ナビ</title>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="エコナビ"><meta name="theme-color" content="#0d141c"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-180.png"></head><body><title>敦賀エコ巡航ナビ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Chakra+Petch:wght@500;700&display=swap">
 <!-- Leaflet 1.9.4（オフラインでも動くよう埋め込み） -->
@@ -185,6 +185,8 @@ input[type=range]{width:100%;accent-color:var(--glide)}
   <button class="primary" id="startBtn">ナビ開始（GPS・画面スリープ防止）</button>
   <button id="saveMapBtn">地図をオフライン用に保存</button>
   <button id="gkeyBtn">Googleマップのキー</button>
+  <button id="fullBtn">全画面</button>
+  <div id="a2hs" class="alert" hidden>iPhoneは、Safari下の共有ボタン →「ホーム画面に追加」で追加したアイコンから開くと、URLバーなしの全画面になります。ホーム画面から開いた時は、Googleマップのキーをもう一度入れてください（保存場所が別のため）。</div>
 
   <div class="demo">
     <label for="sim"><span>デモ：ルート上の位置</span><span id="simKm">0 km</span></label>
@@ -552,6 +554,16 @@ $("gkeyBtn").addEventListener("click",()=>{
   try{if(v.trim())localStorage.setItem("gmapsKey",v.trim());else localStorage.removeItem("gmapsKey");}catch(e){}
   location.reload();
 });
+/* ---- 全画面：Android・PCはFullscreen API、iPhoneはホーム画面に追加して開く（Safariではページを全画面にできない） ---- */
+const standalone=matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches||navigator.standalone===true;
+if(standalone)$("fullBtn").hidden=true;
+$("fullBtn").addEventListener("click",async()=>{
+  const el=document.documentElement;
+  if(document.fullscreenElement){document.exitFullscreen();return;}
+  if(el.requestFullscreen&&document.fullscreenEnabled){try{await el.requestFullscreen({navigationUI:"hide"});return;}catch(e){}}
+  $("a2hs").hidden=!$("a2hs").hidden;
+});
+document.addEventListener("fullscreenchange",()=>{$("fullBtn").textContent=document.fullscreenElement?"全画面を終了":"全画面";});
 let saving=false;
 $("saveMapBtn").addEventListener("click",async()=>{
   if(saving)return;const btn=$("saveMapBtn");
