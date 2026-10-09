@@ -92,7 +92,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 #map{height:100%;background:var(--panel)}
 #map{position:relative;overflow:hidden}
 #rot{position:absolute;left:50%;top:50%;width:150%;height:150%;transform:translate(-50%,-50%) rotate(var(--rot,0deg))}
-@media (prefers-reduced-motion:no-preference){#rot{transition:transform .8s}}
+@media (prefers-reduced-motion:no-preference){#rot{transition:none} /* 回転は毎フレーム動かすので、遅れの原因になるアニメーションは使わない */}
 #gmap,#lmap{height:100%}
 #mapNote{position:absolute;left:8px;top:8px;z-index:500;background:rgba(13,20,28,.85);color:var(--fg);font-size:12px;padding:4px 8px;border-radius:6px}
 .alert{background:var(--panel);border:1px solid var(--warn);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:13px}
@@ -101,6 +101,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 @media (orientation:landscape){
   .nav-stack,.nav-bottom{right:auto;width:min(400px,42vw)}
   #rot{left:62%}
+  body.vec #rot{left:50%} /* Googleの立体表示は地図自体を回すので、枠はずらさない（ずらすと左に黒い帯が出る） */
 }
 /* タブレット（11インチ等）：離れて見るので文字を大きく */
 @media (min-width:1000px) and (min-height:600px){
@@ -708,7 +709,7 @@ let gmap=null,gMe=null,gLines=[],gState="none",vectorMode=false;
 const meIcon=h=>({path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW,scale:7,rotation:h,fillColor:"#1a73e8",fillOpacity:1,strokeColor:"#fff",strokeWeight:2,anchor:new google.maps.Point(0,2.5)}); // none|loading|ok|fail
 function loadGmaps(){
   if(gState!=="none")return;gState="loading";
-  const fail=()=>{if(gState==="ok"&&gmap)return;gState="fail";gmap=null;$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();mapNote("Googleマップ：読み込めません");};
+  const fail=()=>{if(gState==="ok"&&gmap)return;gState="fail";gmap=null;vectorMode=false;document.body.classList.remove("vec");$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();mapNote("Googleマップ：読み込めません");};
   window.gm_authFailure=()=>{gmap=null;gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();mapNote("Googleマップ：キーが使えません（制限・有効化を確認）");};
   window.onGmaps=()=>{gState="ok";initGmap();fitRot();usageBump("gmap");};
   const sc=document.createElement("script");
@@ -723,7 +724,7 @@ function initGmap(){
   // Map IDなし：店・駅などを消し、枠ごと回すのでドラッグは止める
   else Object.assign(opt,{gestureHandling:"none",keyboardShortcuts:false,
     styles:[{featureType:"poi",stylers:[{visibility:"off"}]},{featureType:"transit",stylers:[{visibility:"off"}]},{featureType:"administrative.land_parcel",stylers:[{visibility:"off"}]}]});
-  gmap=new google.maps.Map($("gmap"),opt);vectorMode=!!GMAPS_ID;
+  gmap=new google.maps.Map($("gmap"),opt);vectorMode=!!GMAPS_ID;document.body.classList.toggle("vec",vectorMode);fitRot();
   drawRouteLine();
   const dot=(lat,lng,color,scale,title,z)=>new google.maps.Marker({position:{lat,lng},map:gmap,title,zIndex:z,
     icon:{path:google.maps.SymbolPath.CIRCLE,scale,fillColor:color,fillOpacity:1,strokeColor:"#fff",strokeWeight:2}});
@@ -825,7 +826,7 @@ function drawFrame(p){
   if(vectorMode&&w>h)c=destPt(c,hd-90,w*0.12*kpp); // 横向きは現在地を右寄りに（中心を左へずらす）
   if(gmap&&gMe){
     gMe.setPosition({lat:p[0],lng:p[1]});
-    const t=performance.now();if(t-A.lastIcon>200){A.lastIcon=t;gMe.setIcon(meIcon(hd));}
+    const ir=vectorMode?0:hd,t=performance.now();if(t-A.lastIcon>200&&ir!==A.lastIr){A.lastIcon=t;A.lastIr=ir;gMe.setIcon(meIcon(ir));}
     if(Date.now()>holdUntil){progMove=true;
       if(vectorMode)gmap.moveCamera({center:{lat:c[0],lng:c[1]},zoom,heading:hd,tilt:45});
       else{const zi=Math.round(zoom);if(gmap.getZoom()!==zi)gmap.setZoom(zi);gmap.setCenter({lat:c[0],lng:c[1]});}
@@ -941,7 +942,7 @@ function updateInset(nj,d){
       iLines=[new google.maps.Polyline({path,strokeColor:"#fff",strokeWeight:12,map:iMap}),new google.maps.Polyline({path,strokeColor:"#1a73e8",strokeWeight:8,map:iMap})];}
     if(GMAPS_ID){iMap.moveCamera({center:{lat:ctr[0],lng:ctr[1]},zoom:z,heading:hd});$("insetRot").style.setProperty("--irot","0deg");}
     else{iMap.setCenter({lat:ctr[0],lng:ctr[1]});iMap.setZoom(Math.floor(z));$("insetRot").style.setProperty("--irot",(-hd)+"deg");}
-    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(((rotAcc||0)%360+360)%360));
+    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(((((rotAcc||0)-(GMAPS_ID?hd:0))%360)+360)%360)); // 立体表示では、ポップアップの向きとの差だけ回す
     return;
   }
   if(!window.L)return;
