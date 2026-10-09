@@ -219,6 +219,8 @@ body.sheet .app .jct{display:none}
     <label>指定速度・シフトの変化も読み上げ<input type="checkbox" id="setVoiceEco"></label>
     <label>次のSA・PAを表示<input type="checkbox" id="setSapa" checked></label>
     <label>市区町村に入った時に表示（音声案内ONなら読み上げ）<input type="checkbox" id="setArea" checked></label>
+    <label>燃費優先（休憩時間を確保したうえで、余裕があれば速度を下げる）<input type="checkbox" id="setEcoRest"></label>
+    <label>確保する休憩（合計・分）<input type="number" id="setRestMin" min="0" max="240" step="5" inputmode="numeric" style="width:5.5em"></label>
     <button type="button" id="zoomReset">地図の拡大率を自動に戻す</button>
     <button type="button" id="compassBtn">コンパス（向き）の使用を許可</button>
     <label>現在地の上下位置<input type="range" id="setMeY" min="-200" max="100" step="10"></label>
@@ -359,7 +361,7 @@ let ROUTE=[[35.69868,139.41418],[35.69885,139.4141],[35.69898,139.41442],[35.698
 const R=6371;
 const $=id=>document.getElementById(id);
 /* ---- 設定（この端末に保存） ---- */
-const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0};
+const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}catch(e){}
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 function xy(lat,lon){const r=Math.PI/180;return[R*lon*r*Math.cos(35.3*r),R*lat*r];}
@@ -394,6 +396,7 @@ function rebuildRoute(mans,via){
   for(const j of JKM)if(j.km>=fromKm&&!g.some(x=>Math.abs(x.km-j.km)<1.2))g.push(j);
   GUIDE=g.sort((a,b)=>a.km-b.km);
   drawStrip();
+  if(typeof scheduleElev==="function")scheduleElev();
 }
 const DEST=MAN[MAN.length-1]; // 敦賀ICを出て国道8号に入る所
 
@@ -405,7 +408,7 @@ function zoneAt(km){
 // 区間ごとの想定速度で from→to km を走る時間（分）
 function driveMin(from,to){
   let m=0;
-  for(const z of Z){const a=Math.max(from,CUM[z.f]),b=Math.min(to,CUM[z.t]);if(b>a)m+=(b-a)/z.v*60;}
+  for(const z of Z){const a=Math.max(from,CUM[z.f]),b=Math.min(to,CUM[z.t]);const v=(ECO.B&&z.v>=80&&z.cc!=="off")?ECO.B*0.97:z.v;if(b>a)m+=(b-a)/v*60;}
   return m;
 }
 
@@ -494,6 +497,171 @@ function remainMin(km,to,tr,f){
   return lead+driveMin(start,to)/f;
 }
 
+/* ===================== 燃費最適化 =====================
+   1) 坂の先読み：ルート全体の200mごとの標高をValhalla（無料・キー不要）から取り、トンネル上の山・橋の下の谷を除いて道路の高さを推定。
+      上り（2%前後以上・600m以上）はクルーズ−5、下りは+5（上限100）。上りで落とした分を下りで取り戻すので、到着時刻はほぼ変わらない
+   2) 減速ポイント：出口・分岐・曲がる所の手前で、Dのままアクセルを離せば目標の速さまで落ちる地点を出す（ブレーキで捨てる分を回生で回収）
+   3) 燃費優先（設定でONにした時だけ）：確保したい休憩時間を残したうえで、目標到着に間に合う一番遅い（＝燃費の良い）クルーズ速度を選ぶ
+   4) 燃費の計算式：車重・空気抵抗・転がり抵抗・坂から燃料を見積もる（GG3W、100km/h平坦で約12km/Lになるよう合わせてある） */
+const CAR={m:2000,crr:0.010,cda:0.85,kwhPerL:1.97,aux:0.5,regen:0.55};
+function fuelPerKm(vkmh,gPct){
+  const v=vkmh/3.6,F=CAR.m*9.81*(CAR.crr+gPct/100)+0.6*CAR.cda*v*v; // N（0.6＝空気の密度/2）
+  const wh=F/3.6,aux=CAR.aux*1000/Math.max(vkmh,5); // 1kmあたりWh
+  return (wh>0?wh+aux:aux+wh*CAR.regen)/1000/CAR.kwhPerL; // 下りで余った分は回生で一部回収
+}
+const ECO={step:0.2,z:null,g:null,segs:[],state:"none",key:"",B:null,stopMin:0,fuelT:0,fuel:null,timer:null};
+try{const v=JSON.parse(localStorage.getItem("ecoStop")||"null");if(v&&v.d===new Date().toDateString())ECO.stopMin=v.m||0;}catch(e){}
+function saveStop(){try{localStorage.setItem("ecoStop",JSON.stringify({d:new Date().toDateString(),m:ECO.stopMin}));}catch(e){}}
+function routeKey(){return ROUTE.length+":"+ROUTE[0].join(",")+":"+ROUTE[ROUTE.length-1].join(",")+":"+TOTAL.toFixed(2);}
+function encPoly(pts){
+  const enc=v=>{v=v<0?~(v<<1):v<<1;let s="";while(v>=0x20){s+=String.fromCharCode((0x20|(v&0x1f))+63);v>>=5;}return s+String.fromCharCode(v+63);};
+  let o="",pl=0,pg=0;for(const p of pts){const la=Math.round(p[0]*1e6),lo=Math.round(p[1]*1e6);o+=enc(la-pl)+enc(lo-pg);pl=la;pg=lo;}return o;
+}
+// 地形の標高から道路の高さを推定（200mごと、2m刻み。1区間の勾配は±6%まで、勾配の急な変化に罰則、地形との差は12mで頭打ち＝トンネル・橋は外れ値扱い）
+function roadProfile(h,stepM){
+  const n=h.length,BIN=2,G=Math.round(0.06*stepM/BIN),T=12,LAM=1.5,MU=0.15;
+  let lo=Infinity,hi=-Infinity;for(const v of h)if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}
+  if(!isFinite(lo))return null;
+  lo=Math.floor(lo-20);hi=Math.ceil(hi+20);
+  const NB=Math.ceil((hi-lo)/BIN)+1,NG=2*G+1,S=NB*NG,INF=1e15;
+  let D=new Float64Array(S),E=new Float64Array(S);
+  const back=new Int8Array(n*S);
+  const data=(i,b)=>{const v=h[i];return v==null?0:Math.min(Math.abs(lo+b*BIN-v),T);};
+  for(let b=0;b<NB;b++)for(let g=-G;g<=G;g++)D[b*NG+g+G]=data(0,b)+MU*Math.abs(g);
+  for(let i=1;i<n;i++){
+    E.fill(INF);
+    for(let b=0;b<NB;b++){const dc=data(i,b);
+      for(let g=-G;g<=G;g++){const pb=b-g;if(pb<0||pb>=NB)continue;
+        let best=INF,bg=0;const base=pb*NG;
+        for(let gp=Math.max(-G,g-2);gp<=Math.min(G,g+2);gp++){const c=D[base+gp+G]+LAM*Math.abs(g-gp);if(c<best){best=c;bg=gp;}}
+        const k=b*NG+g+G;E[k]=best+dc+MU*Math.abs(g);back[i*S+k]=bg;}}
+    const t=D;D=E;E=t;
+  }
+  let bk=0,bc=INF;for(let k=0;k<S;k++)if(D[k]<bc){bc=D[k];bk=k;}
+  const z=new Float32Array(n);let b=Math.floor(bk/NG),g=bk%NG-G;
+  for(let i=n-1;i>=0;i--){z[i]=lo+b*BIN;if(i===0)break;const gp=back[i*S+b*NG+g+G];b=b-g;g=gp;}
+  return z;
+}
+// 重い計算なので、画面が止まらないよう別スレッドで
+function runProfile(h){return new Promise(res=>{
+  try{const src=roadProfile.toString()+";onmessage=e=>{const z=roadProfile(e.data,200);postMessage(z?Array.from(z):null);};";
+    const w=new Worker(URL.createObjectURL(new Blob([src],{type:"text/javascript"})));
+    w.onmessage=e=>{res(e.data?Float32Array.from(e.data):null);w.terminate();};
+    w.onerror=()=>{w.terminate();res(roadProfile(h,200));};
+    w.postMessage(h);
+  }catch(e){setTimeout(()=>res(roadProfile(h,200)),0);}
+});}
+function scheduleElev(){clearTimeout(ECO.timer);ECO.timer=setTimeout(loadElevation,1500);}
+async function loadElevation(){
+  const key=routeKey();ECO.key=key;
+  try{const c=JSON.parse(localStorage.getItem("ecoElev")||"null");if(c&&c.key===key&&c.z){applyProfile(Float32Array.from(c.z));return;}}catch(e){}
+  ECO.state="loading";ECO.segs=[];
+  try{
+    // 40kmごとに分けて、200m間隔の標高をもらう（1回の問い合わせを小さくする）
+    const CH=40,samples=[];
+    for(let a=0;a<TOTAL-0.01;a+=CH){
+      const b=Math.min(TOTAL,a+CH),pts=[posAt(a)];
+      for(let i=0;i<ROUTE.length;i++)if(RCUM[i]>a&&RCUM[i]<b)pts.push(ROUTE[i]);
+      pts.push(posAt(b));
+      const q={encoded_polyline:encPoly(pts),resample_distance:200};
+      const r=await fetch("https://valhalla1.openstreetmap.de/height?json="+encodeURIComponent(JSON.stringify(q)));
+      if(!r.ok)throw new Error("height "+r.status);
+      const j=await r.json(),hs=j.height||[],n=hs.length;if(n<2)throw new Error("empty");
+      for(let k=(a===0?0:1);k<n;k++)samples.push([a+(b-a)*k/(n-1),hs[k]]);
+      if(key!==ECO.key)return; // 途中でルートが変わった
+      await new Promise(r=>setTimeout(r,400)); // 無料サーバーに負担をかけない
+    }
+    // 200mごとの等間隔に並べ直す
+    const n=Math.floor(TOTAL/ECO.step)+1,h=new Array(n);let j=0;
+    for(let i=0;i<n;i++){const x=i*ECO.step;while(j<samples.length-2&&samples[j+1][0]<x)j++;
+      const [x0,h0]=samples[j],[x1,h1]=samples[j+1]||samples[j];
+      h[i]=h0==null||h1==null?(h0??h1):h0+(h1-h0)*Math.max(0,Math.min(1,(x-x0)/((x1-x0)||1)));}
+    const z=await runProfile(h);if(!z)throw new Error("profile");
+    if(key!==ECO.key)return;
+    try{localStorage.setItem("ecoElev",JSON.stringify({key,z:Array.from(z,v=>Math.round(v))}));}catch(e){}
+    applyProfile(z);
+  }catch(e){if(key===ECO.key)ECO.state="fail";}
+}
+function applyProfile(z){
+  const n=z.length,st=ECO.step,g=new Float32Array(n);
+  for(let i=0;i<n-1;i++)g[i]=(z[i+1]-z[i])/(st*10); // %
+  g[n-1]=g[n-2]||0;
+  const sm=new Float32Array(n);for(let i=0;i<n;i++){let s=0,c=0;for(let k=-2;k<=2;k++){const v=g[i+k];if(v!=null&&i+k>=0&&i+k<n){s+=v;c++;}}sm[i]=s/c;}
+  // 上り・下りが600m以上続く所を坂として切り出す
+  const cls=Array.from(sm,v=>v>=1.8?1:v<=-1.8?-1:0),segs=[];
+  for(let i=0;i<n;){let k=i;while(k+1<n&&cls[k+1]===cls[i])k++;
+    if(cls[i]!==0&&(k-i+1)*st>=0.6){const a=i*st,b=Math.min(TOTAL,(k+1)*st),gv=(z[Math.min(n-1,k+1)]-z[i])/((b-a)*10);
+      if(Math.abs(gv)>=1.8)segs.push({a,b,type:gv>0?"up":"down",g:gv});}
+    i=k+1;}
+  ECO.z=z;ECO.g=sm;ECO.segs=segs;ECO.state="ok";ECO.fuelT=0;
+}
+const gradeAt=km=>{if(!ECO.g)return 0;const i=Math.max(0,Math.min(ECO.g.length-1,Math.floor(km/ECO.step)));return ECO.g[i];};
+const segAt=km=>ECO.segs.find(s=>s.a<=km&&km<s.b)||null;
+const nextSeg=(km,within)=>ECO.segs.find(s=>s.a>km&&s.a-km<=within)||null;
+function profSl(km){const s=segAt(km);return s?{g:s.g,state:s.type}:{g:gradeAt(km),state:"flat"};}
+// 高速での基準速度：燃費優先ONで決めた速度、なければ区間の設定（坂の名前で決めていた区間は90にして、実際の坂で上下させる）
+const baseSet=zz=>(ECO.B&&zz.v>=80&&zz.cc!=="off")?ECO.B:(isPlannedSlope(zz)?90:parseInt(zz.set,10));
+function plannedSet(zz,km){
+  let v=baseSet(zz);if(zz.cc==="off"||isNaN(v))return v;
+  const s=segAt(km);if(s)v=s.type==="up"?Math.max(80,v-5):Math.min(100,v+5);
+  return v;
+}
+function ecoPlan(z,base,km,tr){
+  if(tr.state==="jam"||tr.state==="slow"||base.v<70||z.cc==="off")return "";
+  const B=baseSet(base),cur=segAt(km),nx=nextSeg(km,1.5);let adv="";
+  const set=plannedSet(base,km);
+  if(cur&&cur.type==="up"){Object.assign(z,{m:"HV",sub:"エンジン"});adv=`上り ${cur.g.toFixed(1)}%・あと${(cur.b-km).toFixed(1)}km → ${set}`;}
+  else if(cur){Object.assign(z,{m:"GL",sub:"坂で加速"});adv=`下り ${(-cur.g).toFixed(1)}%・あと${(cur.b-km).toFixed(1)}km → ${set}`;}
+  else if(nx)adv=`${(nx.a-km).toFixed(1)}km先 ${nx.type==="up"?"上り":"下り"} ${Math.abs(nx.g).toFixed(1)}%（${(nx.b-nx.a).toFixed(1)}km）`;
+  else if(B!==parseInt(base.set,10)&&ECO.B)adv=`燃費優先 → ${B}`;
+  z.set=String(set);z.rg="D";
+  return adv;
+}
+// 燃費優先：確保したい休憩の残りを差し引いても目標に間に合う、一番遅いクルーズ速度
+function chooseB(km,tr,f,now){
+  const tgt=targetDate(now);if(!tgt){ECO.B=null;return;}
+  const avail=(tgt-now)/60e3-Math.max(0,(+SET.restMin||0)-ECO.stopMin);
+  let pick=100;
+  for(const c of[80,85,90,95,100]){ECO.B=c;if(remainMin(km,TOTAL,tr,f)<=avail){pick=c;break;}}
+  ECO.B=pick;
+}
+// この先の予想燃費（30秒ごとに計算し直す）
+function tripFuel(km){
+  if(ECO.state!=="ok")return null;
+  const t=performance.now();if(ECO.fuel&&t-ECO.fuelT<30000&&Math.abs(ECO.fuel.km-km)<2)return ECO.fuel;
+  let L=0,d=0;
+  for(let x=km;x<TOTAL;x+=ECO.step){const zz=zoneAt(x).z;let v=zz.cc==="off"?35:plannedSet(zz,x);if(isNaN(v))v=zz.v;
+    L+=fuelPerKm(v,gradeAt(x))*ECO.step;d+=ECO.step;}
+  ECO.fuel={km,L,kmL:d/Math.max(L,1e-6)};ECO.fuelT=t;return ECO.fuel;
+}
+// 減速ポイント：Dのままアクセルを離した時の減速（空気抵抗＋回生、約0.45m/s²）で、案内地点で目標の速さになる所から知らせる
+const DEC={said:new Set()};
+function decelFor(km,v){
+  if(v==null||isNaN(v))return null;
+  const nj=GUIDE.find(j=>j.km>km+0.005);if(!nj)return null;
+  const d=(nj.km-km)*1000;if(d>2500)return null;
+  const city=zoneAt(km).z.v<70,t=(nj.name||"")+nj.text;
+  let vt=null,what="";
+  if(/Uターン/.test(t)){vt=15;what="Uターン";}
+  else if(city){if(/右折|左折|右方向|左方向/.test(t)){vt=20;what="曲がる所";}}
+  else if(/出口/.test(t)&&/方面/.test(t)){vt=80;what="分岐";}
+  else if(/出口|IC/.test(t)){vt=70;what="出口";}
+  else if(/JCT|右方向|左方向/.test(t)){vt=80;what="分岐";}
+  if(vt==null||v<vt+8)return null;
+  const ms=v/3.6,mt=vt/3.6,lift=(ms*ms-mt*mt)/(2*0.45);
+  if(d>lift+40)return null;
+  const need=(ms*ms-mt*mt)/(2*Math.max(d,1));
+  const rg=need>0.9?"B4":need>0.55?"B2":"D";
+  const key=nj.km.toFixed(3);
+  if(!DEC.said.has(key)){DEC.said.add(key);if(SET.voiceEco)speak("アクセルを離してください");}
+  return{vt,rg,msg:`${what}まで${Math.round(d/10)*10}m アクセルOFF`};
+}
+function trackStop(spd){
+  const t=performance.now();
+  if(ECO.lastFixT){const dt=(t-ECO.lastFixT)/60e3;if(dt<1&&spd!=null&&spd<3){ECO.stopMin+=dt;if(Math.random()<0.1)saveStop();}}
+  ECO.lastFixT=t;
+}
+
 let curKm=0,gpsSpeed=null,hurry=false;
 /* シフト：クルーズ中はD（下りはクルーズが回生で速度を保つ）。下りで設定速度を超えてきたら＝クルーズの回生だけでは抑えきれない時だけBに上げる。
    クルーズを使わない場面は区間の設定を基本に、4%以上の下りならB4 */
@@ -517,13 +685,15 @@ function render(km){
   const now=new Date(nowMs());
   const zi=zoneAt(km),base=zi.z,i=zi.i;
   const tr=traffic(base),f=paceFactor();
-  const sl=slope();
+  if(SET.ecoRest)chooseB(km,tr,f,now);else ECO.B=null;
+  const sl=ECO.state==="ok"?profSl(km):slope();
   let z=Object.assign({},base),adv="";
   if(tr.state==="jam")Object.assign(z,JAM);
   else if(tr.state==="slow")Object.assign(z,SLOW);
   // 区間に入って1.5kmは直前の区間の測定が残るので、計画どおりの指示にする
   const settled=base.f!==undefined&&km-CUM[base.f]>1.5;
-  if(tr.state!=="jam"&&tr.state!=="slow"&&sl&&base.v>=70&&settled){
+  if(ECO.state==="ok")adv=ecoPlan(z,base,km,tr);
+  else if(tr.state!=="jam"&&tr.state!=="slow"&&sl&&base.v>=70&&settled){
     // 区間の想定と実際の坂が違うときは、実際の坂に合わせて指示を差し替える
     const g=Math.abs(sl.g).toFixed(1);
     if(sl.state==="up"&&!/上り/.test(base.name)){
@@ -550,6 +720,8 @@ function render(km){
     const v=w1.gps??w1.prog,d=Math.round(v-setV);
     if(d>7)adv=(adv?adv+"　":"")+`設定より+${d}km/h`;
   }
+  const dc=decelFor(km,gpsSpeed!=null?gpsSpeed:parseInt(z.set,10));
+  if(dc){z.set=String(dc.vt);z.cc="lift";z._rg=dc.rg;adv=dc.msg;}
   $("advice").hidden=!adv;$("advice").textContent=adv;
   $("grade").textContent=sl?`勾配 ${sl.g>=0?"+":"−"}${Math.abs(sl.g).toFixed(1)}%`:"";
   const tb=$("trafficBox");
@@ -562,8 +734,8 @@ function render(km){
   $("zoneRange").textContent=(tr.state==="jam"?"渋滞中 ・ ":"")+(base.f!==undefined?`${WP[base.f][0]} → ${WP[base.t][0]}`:"ゴール直前");
   $("zoneName").textContent=base.name;
   $("set").textContent=z.set;
-  $("setUnit").textContent=z.cc==="off"?"クルーズOFF":z.cc==="acc"?"前車に追従":"クルーズ";
-  const sh=shiftFor(z,sl,tr,w1?(w1.gps??w1.prog):gpsSpeed);
+  $("setUnit").textContent=z.cc==="lift"?"アクセルOFF":z.cc==="off"?"クルーズOFF":z.cc==="acc"?"前車に追従":"クルーズ";
+  let sh=shiftFor(z,sl,tr,w1?(w1.gps??w1.prog):gpsSpeed);if(z._rg)sh={rg:z._rg,why:"減速"};
   $("regen").textContent=sh.rg;$("regenSub").textContent=sh.why||(sh.rg==="D"?"クルーズ任せ":"パドルで設定");
   $("remain").textContent=(TOTAL-km).toFixed(0);
   const nz=i<Z.length-1?Z[i+1]:(i===Z.length-1?FINAL:null);
@@ -587,6 +759,10 @@ function render(km){
   const w30=windowSpeed(30);
   $("pace").textContent=hist.length<2?"実測ペース：GPS受信後に表示":
     `実測ペース ${Math.round(f*100)}%（計画比）`+(tr.v!=null?` ・ 3分平均 ${tr.v.toFixed(0)} km/h`:"")+(w30?` ・ 30分平均 ${w30.prog.toFixed(0)} km/h`:"");
+  {const tf=tripFuel(km),parts=[ECO.state==="ok"?`坂データ あり（坂${ECO.segs.length}か所）`:ECO.state==="loading"?"坂データ 取得中":ECO.state==="fail"?"坂データ 取得できず（GPSの高度で判定）":""];
+   if(ECO.B)parts.push(`燃費優先 基準${ECO.B}km/h（休憩 残り${Math.max(0,Math.round((+SET.restMin||0)-ECO.stopMin))}分を確保）`);
+   if(tf)parts.push(`この先の予想燃費 約${tf.kmL.toFixed(1)}km/L・ガソリン約${tf.L.toFixed(0)}L`);
+   $("pace").textContent+=(parts.filter(Boolean).length?" ・ ":"")+parts.filter(Boolean).join(" ・ ");}
 
   // 休憩
   const ahead=SAKM.filter(s=>s.km>km+0.5);
@@ -691,7 +867,7 @@ showUsage();
 $("menuBtn").addEventListener("click",()=>document.body.classList.add("sheet"));
 $("closeSheet").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute(curPos[0],curPos[1],gpsHeading);});
-for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"]]){
+for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setEcoRest","ecoRest"]]){
   $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
 $("voiceTest").addEventListener("click",()=>speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true));
@@ -1044,7 +1220,7 @@ async function reroute(lat,lon,heading){
   finally{rerouting=false;syncNav();}
 }
 $("startBtn").addEventListener("click",()=>{
-  initCompass();keepAwake();if(SET.voice)speak("ナビを開始します");
+  ECO.stopMin=0;ECO.lastFixT=0;saveStop();DEC.said.clear();initCompass();keepAwake();if(SET.voice)speak("ナビを開始します");
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
   stopPlay();simOffset=0;hist=[];
   setStatus("demo","GPS取得中…");
@@ -1057,7 +1233,7 @@ $("startBtn").addEventListener("click",()=>{
       lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
       if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&(s??0)>5)gpsHeading=p.coords.heading;
       const c=p.coords,alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
-      curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);checkArea(curPos);
+      curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);checkArea(curPos);trackStop(s);
       gpsSpeed=s;addSample(pr.km,s,alt);
       setStatus("ok",`GPS受信中（精度±${Math.round(p.coords.accuracy)}m）`);
       const off=$("offroute");
@@ -1101,6 +1277,7 @@ rebuildRoute(MAN);
 // 再検索で経路を引き直す時に、予定どおりの道を通らせるための本線上の点（元のルート上の距離）
 const VIA=[35,90,200,340,400,445].map(k=>{const p=posAt(k);return{lat:p[0],lon:p[1]};});
 $("zoomReset").addEventListener("click",()=>{userZoom=null;try{localStorage.removeItem("mapZoom");}catch(e){}$("zoomReset").textContent="自動に戻しました（一般道16・高速13）";});
+{const r=$("setRestMin");r.value=SET.restMin;r.addEventListener("change",()=>{SET.restMin=Math.max(0,+r.value||0);saveSet();render(curKm);});}
 $("compassBtn").addEventListener("click",()=>initCompass()); // iPhoneはボタンを押した中でしか許可を聞けない
 {const r=$("setMeY");r.value=SET.meY||0;r.addEventListener("input",()=>{SET.meY=+r.value;saveSet();lay.t=0;});}
 $("inset").addEventListener("click",()=>{insetClosed=insetFor;$("inset").hidden=true;}); // タップで閉じる（次の案内では また出る）
