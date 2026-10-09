@@ -145,6 +145,12 @@ body.sheet .app .jct{display:none}
 .area-pop{position:fixed;z-index:6;right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));background:#fff;color:#202124;border-radius:12px;padding:8px 14px;box-shadow:0 3px 12px rgba(0,0,0,.35);font-weight:700;text-align:right;max-width:60vw}
 .area-pop small{display:block;font-size:12px;color:#5f6368;font-weight:400}
 .area-pop b{display:block;font-size:20px;line-height:1.25}
+.fuel-ask{background:#fff;color:#202124;border-radius:12px;padding:10px 12px;box-shadow:0 3px 12px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:6px;width:min(340px,100%)}
+.fuel-ask b{font-size:14px}.fuel-ask small{font-size:12px;color:#5f6368}
+.fuel-ask .row{display:flex;gap:8px;align-items:center}
+.fuel-ask input{font:700 24px/1.2 var(--num,system-ui);width:4.2em;padding:6px 8px;border:2px solid #1a73e8;border-radius:8px;color:#202124;background:#fff}
+.fuel-ask button{width:auto;padding:10px 14px;border:0;border-radius:8px;background:#1a73e8;color:#fff;font-size:15px}
+.fuel-ask button.x{background:#f1f3f4;color:#202124}
 .nav-toast{background:#fff;color:#202124;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .nav-toast button{width:auto;padding:6px 14px;background:#1a73e8;color:#fff;border:0;border-radius:18px;font-size:14px}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
@@ -202,6 +208,7 @@ body.sheet .app .jct{display:none}
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap"><b id="insetAr"></b><span id="insetTxt"></span></div></div>
   <div class="sapa" id="sapaCard" hidden></div>
+  <div class="fuel-ask" id="fuelAsk" hidden><b>今の燃費（車の平均燃費の表示）</b><div class="row"><input id="fuelIn" type="text" inputmode="decimal" placeholder="16.2" maxlength="5" aria-label="燃費"><span>km/L</span><button id="fuelSave">記録</button><button id="fuelClose" class="x">閉じる</button></div><small id="fuelMsg">入れなくてもかまいません</small></div>
 </div>
 <div class="nav-eco" id="navEco">
   <div class="setv"><small>指定</small><b id="nvSet">--</b><small id="nvCc"></small></div>
@@ -504,11 +511,16 @@ function remainMin(km,to,tr,f){
    3) 燃費優先（設定でONにした時だけ）：確保したい休憩時間を残したうえで、目標到着に間に合う一番遅い（＝燃費の良い）クルーズ速度を選ぶ
    4) 燃費の計算式：車重・空気抵抗・転がり抵抗・坂から燃料を見積もる（GG3W、100km/h平坦で約12km/Lになるよう合わせてある） */
 const CAR={m:2000,crr:0.010,cda:0.85,kwhPerL:1.97,aux:0.5,regen:0.55};
-function fuelPerKm(vkmh,gPct){
-  const v=vkmh/3.6,F=CAR.m*9.81*(CAR.crr+gPct/100)+0.6*CAR.cda*v*v; // N（0.6＝空気の密度/2）
+// 記録から学んだ補正：s＝効率（燃料1Lで走れる仕事の倍率）、k＝空気抵抗の倍率、dist＝学習に使った距離
+let CAL={s:1,k:1,dist:0};try{Object.assign(CAL,JSON.parse(localStorage.getItem("carCal")||"{}"));}catch(e){}
+function fuelPerKmK(vkmh,gPct,k){
+  const v=vkmh/3.6,F=CAR.m*9.81*(CAR.crr+gPct/100)+0.6*CAR.cda*k*v*v; // N（0.6＝空気の密度/2）
   const wh=F/3.6,aux=CAR.aux*1000/Math.max(vkmh,5); // 1kmあたりWh
   return (wh>0?wh+aux:aux+wh*CAR.regen)/1000/CAR.kwhPerL; // 下りで余った分は回生で一部回収
 }
+const fuelPerKm=(v,g)=>fuelPerKmK(v,g,CAL.k)/CAL.s;
+// 下りで回生が始まらない（重力と抵抗がつり合う）速さ。これより遅いと、クルーズが回生ブレーキで速度を抑える＝損
+function vBalance(gPct){const f=CAR.m*9.81*(CAR.crr+gPct/100);return f<0?Math.sqrt(-f/(0.6*CAR.cda*CAL.k))*3.6:0;}
 const ECO={step:0.2,z:null,g:null,segs:[],state:"none",key:"",B:null,stopMin:0,fuelT:0,fuel:null,timer:null};
 try{const v=JSON.parse(localStorage.getItem("ecoStop")||"null");if(v&&v.d===new Date().toDateString())ECO.stopMin=v.m||0;}catch(e){}
 function saveStop(){try{localStorage.setItem("ecoStop",JSON.stringify({d:new Date().toDateString(),m:ECO.stopMin}));}catch(e){}}
@@ -603,7 +615,9 @@ function profSl(km){const s=segAt(km);return s?{g:s.g,state:s.type}:{g:gradeAt(k
 const baseSet=zz=>(ECO.B&&zz.v>=80&&zz.cc!=="off")?ECO.B:(isPlannedSlope(zz)?90:parseInt(zz.set,10));
 function plannedSet(zz,km){
   let v=baseSet(zz);if(zz.cc==="off"||isNaN(v))return v;
-  const s=segAt(km);if(s)v=s.type==="up"?Math.max(80,v-5):Math.min(100,v+5);
+  const s=segAt(km);
+  if(s&&s.type==="up")v=Math.max(80,v-5);
+  else if(s){const vb=Math.ceil(vBalance(s.g)/5)*5;v=Math.min(100,Math.max(v,vb));} // 下り：つり合う速さまで（それ以上は上げても得しない）
   return v;
 }
 function ecoPlan(z,base,km,tr){
@@ -611,7 +625,7 @@ function ecoPlan(z,base,km,tr){
   const B=baseSet(base),cur=segAt(km),nx=nextSeg(km,1.5);let adv="";
   const set=plannedSet(base,km);
   if(cur&&cur.type==="up"){Object.assign(z,{m:"HV",sub:"エンジン"});adv=`上り ${cur.g.toFixed(1)}%・あと${(cur.b-km).toFixed(1)}km → ${set}`;}
-  else if(cur){Object.assign(z,{m:"GL",sub:"坂で加速"});adv=`下り ${(-cur.g).toFixed(1)}%・あと${(cur.b-km).toFixed(1)}km → ${set}`;}
+  else if(cur){Object.assign(z,{m:"GL",sub:"坂で加速"});adv=`下り ${(-cur.g).toFixed(1)}%・あと${(cur.b-km).toFixed(1)}km`+(set!==B?` → ${set}`:" → そのまま");}
   else if(nx)adv=`${(nx.a-km).toFixed(1)}km先 ${nx.type==="up"?"上り":"下り"} ${Math.abs(nx.g).toFixed(1)}%（${(nx.b-nx.a).toFixed(1)}km）`;
   else if(B!==parseInt(base.set,10)&&ECO.B)adv=`燃費優先 → ${B}`;
   z.set=String(set);z.rg="D";
@@ -656,6 +670,55 @@ function decelFor(km,v){
   if(!DEC.said.has(key)){DEC.said.add(key);if(SET.voiceEco)speak("アクセルを離してください");}
   return{vt,rg,msg:`${what}まで${Math.round(d/10)*10}m アクセルOFF`};
 }
+
+/* ---- 燃費の記録（任意）：停車して1分たったら入力カードを出す。走り出したら消える。入れなくてもよい ----
+   車の「平均燃費」（出発時にリセットした値）を入れると、計算式の予想と比べて補正し、この先の予想燃費に反映する */
+const FUEL={log:[],startKm:0,cal:1,stopT:0,lastAskKm:-99,needStart:false,sv:{},sc:{}};
+try{const v=JSON.parse(localStorage.getItem("ecoFuel")||"null");if(v&&Date.now()-(v.t||0)<12*3600e3)Object.assign(FUEL,{log:v.log||[],startKm:v.startKm||0,sv:v.sv||{},sc:v.sc||{},prior:v.prior||null});}catch(e){}
+function fuelStore(){try{localStorage.setItem("ecoFuel",JSON.stringify({t:Date.now(),log:FUEL.log,startKm:FUEL.startKm,sv:FUEL.sv,sc:FUEL.sc,prior:FUEL.prior}));}catch(e){}}
+// 計算式で見た a→b km の予想燃費（km/L）
+function predKmL(a,b){let L=0,d=0;for(let x=a;x<b;x+=ECO.step){const zz=zoneAt(x).z;let v=zz.cc==="off"?35:plannedSet(zz,x);if(isNaN(v))v=zz.v;L+=fuelPerKm(v,gradeAt(x))*ECO.step;d+=ECO.step;}return L>0?d/L:null;}
+function recordSpeed(km,spd){if(spd==null||spd<10)return;const i=Math.floor(km/ECO.step);FUEL.sv[i]=(FUEL.sv[i]||0)+spd;FUEL.sc[i]=(FUEL.sc[i]||0)+1;}
+const actualV=(i,x)=>FUEL.sc[i]?FUEL.sv[i]/FUEL.sc[i]:null;
+// a→b km を実際に走った速さ（記録がない所は計画の速さ）で走った時の燃料（L、補正なし）
+function rawLiters(a,b,k){let L=0;for(let x=a;x<b;x+=ECO.step){const i=Math.floor(x/ECO.step),zz=zoneAt(x).z;let v=actualV(i);if(v==null){v=zz.cc==="off"?35:plannedSet(zz,x);if(isNaN(v))v=zz.v;}L+=fuelPerKmK(v,gradeAt(x),k)*Math.min(ECO.step,b-x);}return L;}
+/* 記録から計算式を補正する。車の平均燃費は出発からの合計なので、記録と記録の間ごとに「実際に使った燃料」を出し、
+   計算式の予想と比べて、効率 s と空気抵抗の倍率 k を合わせる（区間が2つ以上ある時だけ k も動かす）。前の旅までの学習と距離で重み付けして混ぜる */
+function updateCal(){
+  const pts=[{km:FUEL.startKm,L:0}];
+  for(const r of FUEL.log)if(r.km-FUEL.startKm>=5)pts.push({km:r.km,L:(r.km-FUEL.startKm)/r.kmL});
+  const segs=[];for(let j=1;j<pts.length;j++){const d=pts[j].km-pts[j-1].km,A=pts[j].L-pts[j-1].L;if(d>=20&&A>0)segs.push({a:pts[j-1].km,b:pts[j].km,A,d});}
+  const P0=FUEL.prior||(FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0});
+  if(!segs.length){FUEL.cal=CAL.s;return;}
+  const ks=segs.length>=2?[0.7,0.8,0.9,1,1.1,1.2,1.3,1.4]:[P0.k];
+  let best=null;
+  for(const k of ks){const P=segs.map(g=>rawLiters(g.a,g.b,k));
+    let pp=0,pa=0;segs.forEach((g,j)=>{pp+=P[j]*P[j];pa+=P[j]*g.A;});const sFit=pp/pa; // A ≈ P/s
+    const err=segs.reduce((e,g,j)=>e+(g.A-P[j]/sFit)**2,0);if(!best||err<best.err)best={k,s:sFit,err};}
+  const dNew=segs.reduce((a,g)=>a+g.d,0),w=Math.min(P0.dist,600);
+  const s=Math.max(0.6,Math.min(1.6,(P0.s*w+best.s*dNew)/(w+dNew))),k=Math.max(0.7,Math.min(1.4,(P0.k*w+best.k*dNew)/(w+dNew)));
+  FUEL.trip={s,k,dNew};FUEL.cal=s;ECO.fuelT=0;
+  CAL.s=s;CAL.k=k; // 今の旅の値（旅の終わりに学習済みとして距離を足す）
+  try{localStorage.setItem("carCal",JSON.stringify({s,k,dist:P0.dist}));}catch(e){}fuelStore();
+}
+function fuelAskCheck(spd){
+  const box=$("fuelAsk"),t=performance.now();
+  if(spd!=null&&spd<3){
+    if(!FUEL.stopT)FUEL.stopT=t;
+    if(t-FUEL.stopT>60000&&box.hidden&&Math.abs(curKm-FUEL.lastAskKm)>5){
+      FUEL.lastAskKm=curKm;$("fuelIn").value="";$("fuelMsg").textContent="入れなくてもかまいません";box.hidden=false;}
+  }else if(spd!=null&&spd>10){FUEL.stopT=0;if(!box.hidden&&document.activeElement!==$("fuelIn"))box.hidden=true;} // 走り出したら消す
+}
+$("fuelSave").addEventListener("click",()=>{
+  const v=parseFloat(($("fuelIn").value||"").replace(/[,，．]/g,"."));
+  if(!(v>=3&&v<=99)){$("fuelMsg").textContent="3〜99の数字で入れてください";return;}
+  FUEL.log.push({t:Date.now(),km:curKm,kmL:v});fuelStore();
+  const raw=rawLiters(FUEL.startKm,curKm,1),p=raw>0?(curKm-FUEL.startKm)/raw:null,diff=p?Math.round((v/p-1)*100):null;
+  $("fuelMsg").textContent="記録しました"+(diff!=null&&curKm-FUEL.startKm>=20?`（はじめの計算式より${diff>=0?"+":""}${diff}%・次から反映）`:"");
+  updateCal();$("fuelIn").blur();setTimeout(()=>{$("fuelAsk").hidden=true;},2500);render(curKm);
+});
+$("fuelClose").addEventListener("click",()=>{$("fuelIn").blur();$("fuelAsk").hidden=true;});
+$("fuelIn").addEventListener("keydown",e=>{if(e.key==="Enter")$("fuelSave").click();});
 function trackStop(spd){
   const t=performance.now();
   if(ECO.lastFixT){const dt=(t-ECO.lastFixT)/60e3;if(dt<1&&spd!=null&&spd<3){ECO.stopMin+=dt;if(Math.random()<0.1)saveStop();}}
@@ -761,7 +824,8 @@ function render(km){
     `実測ペース ${Math.round(f*100)}%（計画比）`+(tr.v!=null?` ・ 3分平均 ${tr.v.toFixed(0)} km/h`:"")+(w30?` ・ 30分平均 ${w30.prog.toFixed(0)} km/h`:"");
   {const tf=tripFuel(km),parts=[ECO.state==="ok"?`坂データ あり（坂${ECO.segs.length}か所）`:ECO.state==="loading"?"坂データ 取得中":ECO.state==="fail"?"坂データ 取得できず（GPSの高度で判定）":""];
    if(ECO.B)parts.push(`燃費優先 基準${ECO.B}km/h（休憩 残り${Math.max(0,Math.round((+SET.restMin||0)-ECO.stopMin))}分を確保）`);
-   if(tf)parts.push(`この先の予想燃費 約${tf.kmL.toFixed(1)}km/L・ガソリン約${tf.L.toFixed(0)}L`);
+   if(tf)parts.push(`この先の予想燃費 約${tf.kmL.toFixed(1)}km/L・ガソリン約${tf.L.toFixed(0)}L`+((CAL.s!==1||CAL.k!==1)?`（記録で補正：効率×${CAL.s.toFixed(2)}・空気抵抗×${CAL.k.toFixed(2)}）`:""));
+   if(FUEL.log.length){const l=FUEL.log[FUEL.log.length-1];parts.push(`燃費の記録 ${FUEL.log.length}回・最新 ${l.kmL}km/L`);}
    $("pace").textContent+=(parts.filter(Boolean).length?" ・ ":"")+parts.filter(Boolean).join(" ・ ");}
 
   // 休憩
@@ -1220,7 +1284,9 @@ async function reroute(lat,lon,heading){
   finally{rerouting=false;syncNav();}
 }
 $("startBtn").addEventListener("click",()=>{
-  ECO.stopMin=0;ECO.lastFixT=0;saveStop();DEC.said.clear();initCompass();keepAwake();if(SET.voice)speak("ナビを開始します");
+  ECO.stopMin=0;ECO.lastFixT=0;saveStop();DEC.said.clear();
+  if(!FUEL.log.length||Date.now()-FUEL.log[FUEL.log.length-1].t>12*3600e3){if(FUEL.trip){CAL.dist=(FUEL.prior?FUEL.prior.dist:CAL.dist||0)+FUEL.trip.dNew;try{localStorage.setItem("carCal",JSON.stringify(CAL));}catch(e){}FUEL.trip=null;}FUEL.log=[];FUEL.sv={};FUEL.sc={};FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0};FUEL.needStart=true;FUEL.cal=CAL.s;} // 前回の記録が12時間以上前なら新しい旅として始める
+  initCompass();keepAwake();if(SET.voice)speak("ナビを開始します");
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
   stopPlay();simOffset=0;hist=[];
   setStatus("demo","GPS取得中…");
@@ -1234,6 +1300,9 @@ $("startBtn").addEventListener("click",()=>{
       if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&(s??0)>5)gpsHeading=p.coords.heading;
       const c=p.coords,alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
       curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);checkArea(curPos);trackStop(s);
+      if(FUEL.needStart){FUEL.needStart=false;FUEL.startKm=pr.km;fuelStore();}
+      if(offD<0.25)recordSpeed(pr.km,s);
+      fuelAskCheck(s);
       gpsSpeed=s;addSample(pr.km,s,alt);
       setStatus("ok",`GPS受信中（精度±${Math.round(p.coords.accuracy)}m）`);
       const off=$("offroute");
@@ -1274,6 +1343,7 @@ $("playBtn").addEventListener("click",()=>{
 });
 setInterval(()=>render(curKm),20000);
 rebuildRoute(MAN);
+updateCal();
 // 再検索で経路を引き直す時に、予定どおりの道を通らせるための本線上の点（元のルート上の距離）
 const VIA=[35,90,200,340,400,445].map(k=>{const p=posAt(k);return{lat:p[0],lon:p[1]};});
 $("zoomReset").addEventListener("click",()=>{userZoom=null;try{localStorage.removeItem("mapZoom");}catch(e){}$("zoomReset").textContent="自動に戻しました（一般道16・高速13）";});
