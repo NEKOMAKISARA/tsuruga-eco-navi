@@ -208,6 +208,7 @@ body.sheet .app .jct{display:none}
     <label>音声案内（曲がる所・IC・JCT）<input type="checkbox" id="setVoice"></label>
     <label>指定速度・シフトの変化も読み上げ<input type="checkbox" id="setVoiceEco"></label>
     <label>次のSA・PAを表示<input type="checkbox" id="setSapa" checked></label>
+    <button type="button" id="zoomReset">地図の拡大率を自動に戻す</button>
     <button id="voiceTest">音声のテスト</button>
   </section>
   <div class="status">
@@ -588,7 +589,7 @@ function render(km){
   }).join("");
   const nj=GUIDE.find(j=>j.km>km+0.02);
   nextGuideD=nj?nj.km-km:null;
-  $("jctBox").hidden=!nj;
+  $("jctBox").hidden=!nj||(curPos&&offD>0.25);
   if(nj){const d=Math.max(0,nj.km-km);
     $("jctName").textContent=nj.name;$("jctText").textContent=nj.text;$("jctArrow").textContent=arrowOf(nj.text);
     if(d<1){$("jctKm").textContent=Math.round(d*100)*10;$("jctUnit").textContent="m";}
@@ -722,8 +723,9 @@ function initGmap(){
   for(const s of SA)dot(s[1],s[2],"#2e9e44",5,s[0],1);
   const g=WP[WP.length-1];dot(g[1],g[2],"#ff7a6b",7,g[0],2);
   gMe=new google.maps.Marker({position:{lat:p[0],lng:p[1]},map:gmap,zIndex:9,icon:meIcon(0)});
-  gmap.addListener("dragstart",()=>{holdUntil=Date.now()+30000;}); // 手で動かしたら30秒は追いかけない
-  gmap.addListener("zoom_changed",()=>{if(!progMove)holdUntil=Date.now()+30000;});
+  gmap.addListener("dragstart",()=>{if(Date.now()-A.pinchT>1500)holdUntil=Date.now()+30000;}); // 1本指で動かしたら30秒は追いかけない
+  gmap.addListener("zoom_changed",()=>{if(!progMove)setUserZoom(gmap.getZoom());}); // ピンチした拡大率を保存
+  const pin=e=>{if(e.touches&&e.touches.length>1)A.pinchT=Date.now();};$("gmap").addEventListener("touchstart",pin,{passive:true,capture:true});$("gmap").addEventListener("touchmove",pin,{passive:true,capture:true});
   updateMap();
 }
 function fitRot(){
@@ -743,45 +745,102 @@ function initMap(){
 }
 function initLeaflet(){
   if(map||!window.L)return;
-  map=L.map("lmap",{zoomControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false}).setView(posAt(curKm),11);
+  map=L.map("lmap",{zoomControl:false,dragging:false,touchZoom:"center",zoomSnap:0.25,zoomDelta:0.5,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false}).setView(posAt(curKm),11);
   new CachedTiles({minZoom:5,maxZoom:18,attribution:"国土地理院"}).addTo(map);
   // ルートの線は地図画像なしでも出るので、電波がない時も位置関係は分かる
   drawRouteLine();
   for(const s of SA)L.circleMarker([s[1],s[2]],{radius:5,color:"#7fdc6a",weight:2,fillOpacity:.8}).bindTooltip(s[0]).addTo(map);
   const g=WP[WP.length-1];L.circleMarker([g[1],g[2]],{radius:7,color:"#ff7a6b",weight:3,fillOpacity:.9}).bindTooltip(g[0]).addTo(map);
   meMk=L.marker(posAt(curKm),{zIndexOffset:1000,icon:L.divIcon({className:"",iconSize:[34,34],html:'<svg class="me-ar" viewBox="0 0 34 34"><path d="M17 3 L29 30 L17 23 L5 30 Z" fill="#1a73e8" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>'})}).addTo(map);
-  map.on("dragstart zoomstart",()=>{if(!progMove)holdUntil=Date.now()+30000;}); // 手で動かしたら30秒は追いかけない（プログラムでの移動は除く）
+  map.on("zoomend",()=>{if(!progMove)setUserZoom(map.getZoom());}); // ピンチした拡大率を保存（プログラムでの移動は除く）
 }
 // 2点間の方位（北=0、時計回り）
 function bearing(a,b){const r=Math.PI/180,y=Math.sin((b[1]-a[1])*r)*Math.cos(b[0]*r),x=Math.cos(a[0]*r)*Math.sin(b[0]*r)-Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos((b[1]-a[1])*r);return(Math.atan2(y,x)/r+360)%360;}
-let rotAcc=null,gpsHeading=null,offD=0,nextGuideD=null;
-function updateMap(){
-  const p=curPos||posAt(curKm),city=gpsSpeed!=null&&gpsSpeed<60,onRoute=!curPos||offD<0.05;
-  // 一般道（60km/h未満）は拡大して交差点を見やすく、高速は広めに。
-  // 次の案内（曲がる所・IC・JCT）が近づいたら、さらに拡大する（一般道300m・高速1.5km手前から）
-  const zoom=city?16:12;
-  // 進行方向：ルート上ならルートの向き、外れていればGPSの向き
-  const hd=onRoute?bearing(posAt(curKm),posAt(curKm+(city?0.05:0.4))):gpsHeading;
-  if(hd!=null&&!isNaN(hd)){
-    if(rotAcc==null)rotAcc=hd;else rotAcc+=((hd-rotAcc)%360+540)%360-180; // 359°→1°で一回転しないよう差分で足す
-  }
-  const rs=$("rot").style;
+let rotAcc=null,gpsHeading=null,offD=0,nextGuideD=null,compassHd=null;
+/* ---- 地図の拡大率：ピンチで変えた値を保存し、以後はその拡大率で追いかける ---- */
+let userZoom=null;try{const z=parseFloat(localStorage.getItem("mapZoom"));if(z>=5&&z<=20)userZoom=z;}catch(e){}
+function setUserZoom(z){if(!(z>=5&&z<=20))return;userZoom=z;try{localStorage.setItem("mapZoom",String(z));}catch(e){}}
+const isCity=()=>gpsSpeed!=null&&gpsSpeed<60;
+const curZoom=()=>userZoom??(isCity()?16:13);
+/* ---- ルート上にいるか：GPSの誤差で行き来しないよう、80m以内で戻り・150m超で外れとする ---- */
+let onRouteF=true;
+function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
+/* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
+const A={fixT:0,fixKm:0,fixPos:null,spd:0,dispKm:null,dispPos:null,lastT:0,lastDraw:0,lastIcon:0,movePos:null,moveHd:null,pinchT:0};
+function distKm(a,b){const r=Math.PI/180,x=(b[1]-a[1])*r*Math.cos((a[0]+b[0])/2*r),y=(b[0]-a[0])*r;return Math.hypot(x,y)*6371;}
+function destPt(p,hd,km){const r=Math.PI/180,d=km/6371,la=p[0]*r,lo=p[1]*r,h=hd*r;
+  const la2=Math.asin(Math.sin(la)*Math.cos(d)+Math.cos(la)*Math.sin(d)*Math.cos(h));
+  return[la2/r,(lo+Math.atan2(Math.sin(h)*Math.sin(d)*Math.cos(la),Math.cos(d)-Math.sin(la)*Math.sin(la2)))/r];}
+function feedFix(km,pos,spdKmh){
+  A.fixT=performance.now();A.fixKm=km;A.fixPos=pos;A.spd=spdKmh||0;
+  if(A.dispKm==null||Math.abs(A.dispKm-km)>1)A.dispKm=km; // 1km以上飛んだら補間せずに移動
+  if(pos){
+    if(!A.dispPos||distKm(A.dispPos,pos)>1)A.dispPos=pos.slice();
+    if(!A.movePos)A.movePos=pos;else if(distKm(A.movePos,pos)>0.015){A.moveHd=bearing(A.movePos,pos);A.movePos=pos;} // 15m動いたら、その向きを覚える
+  }else A.dispPos=null;
+  updOnRoute();startLoop();
+}
+// 向き：ルート上ならルートの向き。外れていたら、走行中はGPSの向き、低速ではコンパス、それもなければ直前に動いた向き
+function targetHeading(){
+  if(onRouteF&&A.dispKm!=null)return bearing(posAt(Math.max(0,A.dispKm-0.02)),posAt(A.dispKm+(isCity()?0.06:0.35)));
+  if(A.spd>8&&gpsHeading!=null)return gpsHeading;
+  if(compassHd!=null)return compassHd;
+  return A.moveHd; // 何も分からなければ向きを変えない
+}
+let looping=false;
+function startLoop(){if(!looping&&!document.hidden){looping=true;A.lastT=performance.now();requestAnimationFrame(frame);}}
+function frame(now){
+  if(document.hidden){looping=false;return;}
+  requestAnimationFrame(frame);
+  if(now-A.lastDraw<30)return; // 約30fps
+  const dt=Math.min(0.15,(now-A.lastT)/1000);A.lastT=now;A.lastDraw=now;
+  const ahead=Math.min(2.5,(now-A.fixT)/1000)*A.spd/3600; // 前回のGPSから最大2.5秒ぶん先読み
+  const k=1-Math.exp(-dt*5);
+  if(A.dispKm!=null){const tk=Math.min(TOTAL,A.fixKm+(onRouteF?ahead:0));A.dispKm+=(tk-A.dispKm)*k;}
+  const hd=targetHeading();
+  if(hd!=null&&!isNaN(hd)){if(rotAcc==null)rotAcc=hd;else rotAcc+=(((hd-rotAcc)%360+540)%360-180)*(1-Math.exp(-dt*3));} // 359°→1°で一回転しないよう差分で回す
+  let p;
+  if(curPos&&!onRouteF&&A.fixPos){
+    const tp=hd!=null&&A.spd>5?destPt(A.fixPos,hd,ahead):A.fixPos;
+    if(!A.dispPos)A.dispPos=tp.slice();
+    A.dispPos[0]+=(tp[0]-A.dispPos[0])*k;A.dispPos[1]+=(tp[1]-A.dispPos[1])*k;p=A.dispPos;
+  }else p=posAt(A.dispKm??curKm);
+  drawFrame(p);
+}
+function drawFrame(p){
+  const zoom=curZoom(),hd=((rotAcc||0)%360+360)%360,rs=$("rot").style;
   if(vectorMode){rs.setProperty("--rot","0deg");rs.setProperty("--tilt","0deg");}
-  else{rs.setProperty("--rot",(-(rotAcc||0))+"deg");rs.setProperty("--tilt","40deg");}
-  // 現在地を画面の下寄りに置き、前方を広く見せる（ルート上の少し先を中心に）
-  // 縦長の画面ほど先を広く（画面の高さに合わせて先の距離を伸ばす）
-  const c=onRoute?posAt(curKm+({16:0.12,12:2.5})[zoom]*Math.max(1,innerHeight/420)):p;
+  else{rs.setProperty("--rot",(-hd)+"deg");rs.setProperty("--tilt","40deg");}
+  // 現在地を画面の下寄りに：画面の高さの28%ぶん進行方向の先を中心にする
+  const m=$("map"),h=m.clientHeight||600,w=m.clientWidth||400;
+  const kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,zoom)/1000; // 1pxあたりのkm
+  let c=destPt(p,hd,h*0.28*kpp*(vectorMode?1.3:1));
+  if(vectorMode&&w>h)c=destPt(c,hd-90,w*0.12*kpp); // 横向きは現在地を右寄りに（中心を左へずらす）
   if(gmap&&gMe){
-    gMe.setPosition({lat:p[0],lng:p[1]});gMe.setIcon(meIcon(rotAcc||0));
+    gMe.setPosition({lat:p[0],lng:p[1]});
+    const t=performance.now();if(t-A.lastIcon>200){A.lastIcon=t;gMe.setIcon(meIcon(hd));}
     if(Date.now()>holdUntil){progMove=true;
-      if(vectorMode)gmap.moveCamera({center:{lat:c[0],lng:c[1]},zoom,heading:((rotAcc||0)%360+360)%360,tilt:45});
-      else{if(gmap.getZoom()!==zoom)gmap.setZoom(zoom);gmap.setCenter({lat:c[0],lng:c[1]});}
+      if(vectorMode)gmap.moveCamera({center:{lat:c[0],lng:c[1]},zoom,heading:hd,tilt:45});
+      else{const zi=Math.round(zoom);if(gmap.getZoom()!==zi)gmap.setZoom(zi);gmap.setCenter({lat:c[0],lng:c[1]});}
       progMove=false;}
     return;
   }
   if(!map)return;
-  meMk.setLatLng(p);{const e=meMk.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${rotAcc||0}deg)`;}
+  meMk.setLatLng(p);{const e=meMk.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${hd}deg)`;}
   if(Date.now()>holdUntil){progMove=true;map.setView(c,zoom,{animate:false});progMove=false;}
+}
+function updateMap(){updOnRoute();if(A.dispKm==null)A.dispKm=curKm;startLoop();}
+/* ---- コンパス（止まっている時の向き用）。横向きでは画面の回転ぶんを足す ---- */
+function initCompass(){
+  const on=e=>{let h=e.webkitCompassHeading;if((h==null||isNaN(h))&&e.absolute&&e.alpha!=null)h=360-e.alpha;if(h==null||isNaN(h))return;
+    const ang=screen.orientation&&typeof screen.orientation.angle==="number"?screen.orientation.angle:(window.orientation||0);
+    compassHd=((h+ang)%360+360)%360;};
+  try{
+    if(typeof DeviceOrientationEvent!=="undefined"&&typeof DeviceOrientationEvent.requestPermission==="function")
+      DeviceOrientationEvent.requestPermission().then(r=>{if(r==="granted")addEventListener("deviceorientation",on);}).catch(()=>{});
+    else if("ondeviceorientationabsolute" in window)addEventListener("deviceorientationabsolute",on);
+    else addEventListener("deviceorientation",on);
+  }catch(e){}
 }
 const land=matchMedia("(orientation:landscape) and (max-height:500px), (orientation:landscape) and (min-width:1000px)");
 function syncMap(){initMap();fitRot();if(map)map.invalidateSize();updateMap();}
@@ -807,7 +866,7 @@ function syncNav(){
   const has=!$("jctBox").hidden;
   $("nvAr").textContent=has?T("jctArrow"):"⚑";
   $("nvDist").innerHTML=has?`${T("jctKm")}<small>${T("jctUnit")}</small>`:"";
-  $("nvName").textContent=has?T("jctName"):"";$("nvTxt").textContent=has?T("jctText"):"まもなく目的地";
+  $("nvName").textContent=has?T("jctName"):"";$("nvTxt").textContent=has?T("jctText"):(curPos&&offD>0.25)?"ルートから外れています":"まもなく目的地";
   $("navTop").classList.toggle("soon",$("jctBox").classList.contains("soon"));
   $("nvSet").textContent=T("set");$("nvCc").textContent=T("setUnit");
   $("nvSpd").textContent=T("spd");$("nvShift").textContent=T("regen");$("nvShiftSub").textContent=T("regenSub");
@@ -820,7 +879,7 @@ function syncNav(){
   $("rerouteBtn").hidden=!(off&&curPos&&!rerouting);
   // 曲がる所・IC・JCTが近い時は拡大ポップアップ、高速走行中は次のSA・PA
   const city=gpsSpeed!=null&&gpsSpeed<60,nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
-  const showInset=nj&&d<(city?0.3:1.0);
+  const showInset=nj&&!off&&onRouteF&&d<(city?0.3:1.0);
   $("inset").hidden=!showInset;
   if(showInset)updateInset(nj,d);
   const zi=zoneAt(curKm),hw=zi.z.v>=70&&zi.i<Z.length;
@@ -834,37 +893,41 @@ function syncNav(){
   if(SET.voiceEco){const e=T("set")+"|"+T("regen");
     if(lastEcoSay&&e!==lastEcoSay)speak(`指定速度${T("set")}、シフト${T("regen")}`);lastEcoSay=e;}
 }
-/* ---- 拡大ポップアップ：対象地点を近づく向きが上になるよう拡大表示（メインの地図とは別の小さな地図） ---- */
+/* ---- 拡大ポップアップ：今の位置から分岐の先までが収まる拡大率で、近づく向きを上にして表示 ---- */
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="";
 function updateInset(nj,d){
-  // 高速の分岐はゆるやかに分かれるので、少し引いて分岐の先を中心に（一般道は交差点を大きく）
-  const city=gpsSpeed!=null&&gpsSpeed<60,z=city?17:15,from=posAt(Math.max(0,nj.km-0.15)),hd=bearing(from,posAt(nj.km)),at=posAt(nj.km+(city?0.02:0.25));
+  const city=isCity(),k0=Math.min(A.dispKm??curKm,nj.km-0.01),k1=nj.km+(city?0.04:0.2);
+  const from=posAt(Math.max(0,Math.min(k0,nj.km-0.05))),hd=bearing(from,posAt(nj.km));
+  const ctr=posAt((k0+k1)/2),hpx=($("inset").querySelector(".inset-map")||{}).clientHeight||160;
+  const spanM=(k1-k0)*1000+(city?40:150);
+  let z=Math.log2(156543.03*Math.cos(ctr[0]*Math.PI/180)*hpx*0.75/spanM);
+  z=Math.max(city?15:13,Math.min(city?19:18,z));
   $("insetAr").textContent=arrowOf(nj.text);
   $("insetTxt").textContent=(d<1?Math.round(d*100)*10+"m ":d.toFixed(1)+"km ")+(nj.name?nj.name+"：":"")+nj.text;
-  const p=curPos||posAt(curKm),key=nj.km.toFixed(3);
+  const p=onRouteF?posAt(A.dispKm??curKm):(curPos||posAt(curKm)),key=nj.km.toFixed(3)+"|"+ROUTE.length;
   if(gmap&&window.google){
     $("insetG").hidden=false;$("insetL").hidden=true;
     if(!iMap){
-      const o={center:{lat:at[0],lng:at[1]},zoom:z,disableDefaultUI:true,gestureHandling:"none",clickableIcons:false,keyboardShortcuts:false};
+      const o={center:{lat:ctr[0],lng:ctr[1]},zoom:Math.round(z),disableDefaultUI:true,gestureHandling:"none",clickableIcons:false,keyboardShortcuts:false};
       if(GMAPS_ID)Object.assign(o,{mapId:GMAPS_ID,heading:hd,tilt:0});
       iMap=new google.maps.Map($("insetG"),o);usageBump("gmap");
       iMe=new google.maps.Marker({map:iMap,zIndex:9,icon:meIcon(0)});
     }
     if(key!==iKey){iKey=key;iLines.forEach(l=>l.setMap(null));const path=ROUTE.map(r=>({lat:r[0],lng:r[1]}));
-      iLines=[new google.maps.Polyline({path,strokeColor:"#fff",strokeWeight:12,map:iMap}),new google.maps.Polyline({path,strokeColor:"#1a73e8",strokeWeight:8,map:iMap})];
-      if(GMAPS_ID)iMap.moveCamera({center:{lat:at[0],lng:at[1]},zoom:z,heading:hd});else{iMap.setCenter({lat:at[0],lng:at[1]});iMap.setZoom(z);}
-      $("insetRot").style.setProperty("--irot",GMAPS_ID?"0deg":(-hd)+"deg");}
-    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(rotAcc||0));
+      iLines=[new google.maps.Polyline({path,strokeColor:"#fff",strokeWeight:12,map:iMap}),new google.maps.Polyline({path,strokeColor:"#1a73e8",strokeWeight:8,map:iMap})];}
+    if(GMAPS_ID){iMap.moveCamera({center:{lat:ctr[0],lng:ctr[1]},zoom:z,heading:hd});$("insetRot").style.setProperty("--irot","0deg");}
+    else{iMap.setCenter({lat:ctr[0],lng:ctr[1]});iMap.setZoom(Math.floor(z));$("insetRot").style.setProperty("--irot",(-hd)+"deg");}
+    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(((rotAcc||0)%360+360)%360));
     return;
   }
   if(!window.L)return;
   $("insetG").hidden=true;$("insetL").hidden=false;
-  if(!iL){iL=L.map("insetL",{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false});
+  if(!iL){iL=L.map("insetL",{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,zoomSnap:0});
     new CachedTiles({maxZoom:18}).addTo(iL);
     iMe=L.marker(p,{icon:L.divIcon({className:"",iconSize:[28,28],html:'<svg class="me-ar" style="width:28px;height:28px" viewBox="0 0 34 34"><path d="M17 3 L29 30 L17 23 L5 30 Z" fill="#1a73e8" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>'})}).addTo(iL);}
   if(key!==iKey){iKey=key;iLines.forEach(l=>l.remove());
-    iLines=[L.polyline(ROUTE,{color:"#fff",weight:12}),L.polyline(ROUTE,{color:"#1a73e8",weight:8})];iLines.forEach(l=>l.addTo(iL));
-    iL.invalidateSize();iL.setView(at,Math.min(z,17),{animate:false});$("insetRot").style.setProperty("--irot",(-hd)+"deg");}
+    iLines=[L.polyline(ROUTE,{color:"#fff",weight:12}),L.polyline(ROUTE,{color:"#1a73e8",weight:8})];iLines.forEach(l=>l.addTo(iL));iL.invalidateSize();}
+  iL.setView(ctr,Math.min(z,18),{animate:false});$("insetRot").style.setProperty("--irot",(-hd)+"deg");
   iMe.setLatLng(p);{const e=iMe.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${rotAcc||0}deg)`;}
 }
 function arrowOf(t){
@@ -882,7 +945,7 @@ $("target").addEventListener("change",()=>{try{localStorage.setItem("ecoTarget",
 
 let wake=null;
 async function keepAwake(){try{if("wakeLock" in navigator&&document.visibilityState==="visible")wake=await navigator.wakeLock.request("screen");}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(wake!==null&&document.visibilityState==="visible")keepAwake();});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){startLoop();if(wake!==null)keepAwake();}});
 
 let lastFix=null;
 /* ---- 再検索：ルートから250m以上外れた状態が4回続いたら、今の位置から敦賀ICまでを引き直す（予定の本線を経由） ---- */
@@ -911,7 +974,7 @@ async function reroute(lat,lon,heading){
   finally{rerouting=false;syncNav();}
 }
 $("startBtn").addEventListener("click",()=>{
-  keepAwake();if(SET.voice)speak("ナビを開始します");
+  initCompass();keepAwake();if(SET.voice)speak("ナビを開始します");
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
   stopPlay();simOffset=0;hist=[];
   setStatus("demo","GPS取得中…");
@@ -924,7 +987,7 @@ $("startBtn").addEventListener("click",()=>{
       lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
       if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&(s??0)>5)gpsHeading=p.coords.heading;
       const c=p.coords,alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
-      curPos=[c.latitude,c.longitude];
+      curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);
       gpsSpeed=s;addSample(pr.km,s,alt);
       setStatus("ok",`GPS受信中（精度±${Math.round(p.coords.accuracy)}m）`);
       const off=$("offroute");
@@ -940,7 +1003,7 @@ $("startBtn").addEventListener("click",()=>{
 });
 
 /* ---- デモ：1ステップ＝20秒ぶん進める ---- */
-$("sim").addEventListener("input",e=>{const km=+e.target.value;$("simKm").textContent=km.toFixed(0)+" km";hist=[];gpsSpeed=null;curPos=null;demoKm=null;render(km);});
+$("sim").addEventListener("input",e=>{const km=+e.target.value;$("simKm").textContent=km.toFixed(0)+" km";hist=[];gpsSpeed=null;curPos=null;demoKm=null;feedFix(km,null,0);render(km);});
 // デモの高度：上り区間は+3%、下り区間は−3.5%、それ以外は平坦（±3mのぶれ付き）
 let demoAlt=100,demoKm=null; // スライダーは0.5km刻みで丸まるので、デモの位置は別に持つ
 let timer=null;
@@ -958,7 +1021,7 @@ $("playBtn").addEventListener("click",()=>{
       demoAlt+=gr*dk*10;addSample(km,v,demoAlt+(Math.random()-0.5)*6);
     }
     if(km>=TOTAL)stopPlay();
-    curPos=null;demoKm=km;
+    feedFix(km,null,(km-pos)/0.25*3600);curPos=null;demoKm=km;
     $("sim").value=km;$("simKm").textContent=km.toFixed(1)+" km";
     gpsSpeed=v;render(km);
   },250);
@@ -967,6 +1030,7 @@ setInterval(()=>render(curKm),20000);
 rebuildRoute(MAN);
 // 再検索で経路を引き直す時に、予定どおりの道を通らせるための本線上の点（元のルート上の距離）
 const VIA=[35,90,200,340,400,445].map(k=>{const p=posAt(k);return{lat:p[0],lon:p[1]};});
+$("zoomReset").addEventListener("click",()=>{userZoom=null;try{localStorage.removeItem("mapZoom");}catch(e){}$("zoomReset").textContent="自動に戻しました（一般道16・高速13）";});
 render(0);syncMap();
 </script>
 </body></html>
