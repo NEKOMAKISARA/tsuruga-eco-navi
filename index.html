@@ -142,6 +142,9 @@ body.sheet .app .jct{display:none}
 .nav-top .dist small{font-size:16px;margin-left:2px}
 .nav-top .txt{font-size:17px;font-weight:700;line-height:1.35;min-width:0}
 .nav-top .nm{display:block;font-size:12px;font-weight:400;opacity:.85}
+.area-pop{position:fixed;z-index:6;right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));background:#fff;color:#202124;border-radius:12px;padding:8px 14px;box-shadow:0 3px 12px rgba(0,0,0,.35);font-weight:700;text-align:right;max-width:60vw}
+.area-pop small{display:block;font-size:12px;color:#5f6368;font-weight:400}
+.area-pop b{display:block;font-size:20px;line-height:1.25}
 .nav-toast{background:#fff;color:#202124;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .nav-toast button{width:auto;padding:6px 14px;background:#1a73e8;color:#fff;border:0;border-radius:18px;font-size:14px}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
@@ -193,6 +196,7 @@ body.sheet .app .jct{display:none}
 </style>
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
+<div class="area-pop" id="areaPop" hidden><small id="areaPref"></small><b id="areaCity"></b></div>
 <div class="nav-stack" id="navStack">
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
@@ -214,6 +218,7 @@ body.sheet .app .jct{display:none}
     <label>音声案内（曲がる所・IC・JCT）<input type="checkbox" id="setVoice"></label>
     <label>指定速度・シフトの変化も読み上げ<input type="checkbox" id="setVoiceEco"></label>
     <label>次のSA・PAを表示<input type="checkbox" id="setSapa" checked></label>
+    <label>市区町村に入った時に表示（音声案内ONなら読み上げ）<input type="checkbox" id="setArea" checked></label>
     <button type="button" id="zoomReset">地図の拡大率を自動に戻す</button>
     <button type="button" id="compassBtn">コンパス（向き）の使用を許可</button>
     <label>現在地の上下位置<input type="range" id="setMeY" min="-200" max="100" step="10"></label>
@@ -354,7 +359,7 @@ let ROUTE=[[35.69868,139.41418],[35.69885,139.4141],[35.69898,139.41442],[35.698
 const R=6371;
 const $=id=>document.getElementById(id);
 /* ---- 設定（この端末に保存） ---- */
-const SET={voice:false,voiceEco:false,sapa:true,meY:0};
+const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}catch(e){}
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 function xy(lat,lon){const r=Math.PI/180;return[R*lon*r*Math.cos(35.3*r),R*lat*r];}
@@ -686,7 +691,7 @@ showUsage();
 $("menuBtn").addEventListener("click",()=>document.body.classList.add("sheet"));
 $("closeSheet").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute(curPos[0],curPos[1],gpsHeading);});
-for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"]]){
+for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"]]){
   $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
 $("voiceTest").addEventListener("click",()=>speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true));
@@ -784,16 +789,18 @@ function feedFix(km,pos,spdKmh){
   if(A.dispKm==null||Math.abs(A.dispKm-km)>1)A.dispKm=km; // 1km以上飛んだら補間せずに移動
   if(pos){
     if(!A.dispPos||distKm(A.dispPos,pos)>1)A.dispPos=pos.slice();
-    if(!A.movePos)A.movePos=pos;else if(distKm(A.movePos,pos)>0.015){A.moveHd=bearing(A.movePos,pos);A.movePos=pos;} // 15m動いたら、その向きを覚える
+    if(!A.movePos)A.movePos=pos;else if(distKm(A.movePos,pos)>0.015){if(A.spd>8)A.moveHd=bearing(A.movePos,pos);A.movePos=pos;} // 走行中に15m動いたら、その向きを覚える（停車中のぶれは無視）
   }else A.dispPos=null;
   updOnRoute();startLoop();
 }
 // 向き：ルート上ならルートの向き。外れていたら、走行中はGPSの向き、低速ではコンパス、それもなければ直前に動いた向き
 function targetHeading(){
+  // 止まっている・ノロノロの時は向きを変えない（GPSのぶれやコンパスの誤差で地図が回るため）
+  if(A.spd<8&&rotAcc!=null)return null;
   if(onRouteF&&A.dispKm!=null)return bearing(posAt(Math.max(0,A.dispKm-0.02)),posAt(A.dispKm+(isCity()?0.06:0.35)));
   if(A.spd>8&&gpsHeading!=null)return gpsHeading;
-  if(compassHd!=null)return compassHd;
-  return A.moveHd; // 何も分からなければ向きを変えない
+  if(A.moveHd!=null)return A.moveHd;
+  return rotAcc==null?compassHd:null; // コンパスは、まだ一度も向きが分からない時（出発前）だけ使う // 何も分からなければ向きを変えない
 }
 let looping=false;
 function startLoop(){if(!looping&&!document.hidden){looping=true;A.lastT=performance.now();requestAnimationFrame(frame);}}
@@ -846,6 +853,44 @@ function layoutNow(){
   for(const id of["navEco","navBottom"]){const e=$(id);if(e&&!e.hidden){const r=e.getBoundingClientRect();if(r.height)bottom=Math.min(bottom,r.top);}}
   const ty=Math.max(h*0.45,Math.min(h*0.85,bottom-mr.top-55+(+SET.meY||0)));
   lay={t,h,w,ty};return lay;
+}
+
+/* ---- 市区町村に入った時の案内：国土地理院の住所検索（無料・キー不要）で今いる市区町村を調べる ----
+   走行中、前回調べた所から500m以上動いて20秒以上たったら1回調べる。市が変わったら右上に10秒表示し、音声案内ONなら読み上げる */
+window.GSI=window.GSI||{};
+const AREA={cur:null,lastQ:null,lastT:0,busy:false,muni:false,timer:null};
+function loadMuni(){
+  if(AREA.muni)return;AREA.muni="loading";
+  const sc=document.createElement("script");sc.src="https://maps.gsi.go.jp/js/muni.js";
+  sc.onload=()=>{AREA.muni=true;};sc.onerror=()=>{AREA.muni=false;};document.head.appendChild(sc);
+}
+function muniName(code){
+  const M=window.GSI&&GSI.MUNI_ARRAY;if(!M||!code)return null;
+  const v=M[code]||M[String(+code)];if(!v)return null;
+  const f=v.split(",");return{pref:f[1],city:(f[3]||"").split("　")[0]}; // 政令市の区は省いて市まで
+}
+async function checkArea(pos){
+  if(!SET.area||!pos||AREA.busy)return;
+  const t=Date.now();
+  if(AREA.lastQ&&(t-AREA.lastT<20000||distKm(AREA.lastQ,pos)<0.5))return;
+  loadMuni();if(AREA.muni!==true)return;
+  AREA.busy=true;AREA.lastQ=pos;AREA.lastT=t;
+  try{
+    const r=await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${pos[0].toFixed(6)}&lon=${pos[1].toFixed(6)}`);
+    const j=await r.json(),m=muniName(j&&j.results&&j.results.muniCd);
+    if(m){const key=m.pref+m.city;
+      if(AREA.cur&&AREA.cur!==key)showArea(m);
+      AREA.cur=key;}
+  }catch(e){}
+  finally{AREA.busy=false;}
+}
+function showArea(m){
+  $("areaPref").textContent=m.pref;$("areaCity").textContent=m.city;
+  // 縦向きは緑の案内の下、横向きは右上
+  const land=innerWidth>innerHeight,nt=$("navStack").getBoundingClientRect();
+  $("areaPop").style.top=land?"":(nt.bottom+8)+"px";
+  $("areaPop").hidden=false;clearTimeout(AREA.timer);AREA.timer=setTimeout(()=>{$("areaPop").hidden=true;},10000);
+  if(SET.voice)speak(`${m.pref}${m.city}に入りました`);
 }
 function updateMap(){updOnRoute();if(A.dispKm==null)A.dispKm=curKm;startLoop();}
 /* ---- コンパス（止まっている時の向き用）。横向きでは画面の回転ぶんを足す ---- */
@@ -1012,7 +1057,7 @@ $("startBtn").addEventListener("click",()=>{
       lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
       if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&(s??0)>5)gpsHeading=p.coords.heading;
       const c=p.coords,alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
-      curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);
+      curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);checkArea(curPos);
       gpsSpeed=s;addSample(pr.km,s,alt);
       setStatus("ok",`GPS受信中（精度±${Math.round(p.coords.accuracy)}m）`);
       const off=$("offroute");
