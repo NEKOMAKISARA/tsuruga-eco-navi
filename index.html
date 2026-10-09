@@ -90,6 +90,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 .advice{margin:0;font-size:14px;color:var(--hv)}
 .mapbox{display:none}
 #map{height:100%;background:var(--panel)}
+#gmap,#lmap{height:100%}
 .alert{background:var(--panel);border:1px solid var(--warn);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:13px}
 /* 横（iPhone横置き）：左に今の指示を固定、右に時間・休憩をスクロール */
 @media (orientation:landscape) and (max-height:500px), (orientation:landscape) and (min-width:1000px){
@@ -153,7 +154,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
   </section>
  </div>
  <div class="col">
-  <div class="mapbox"><div id="map"></div></div>
+  <div class="mapbox"><div id="map"><div id="gmap"></div><div id="lmap" hidden></div></div></div>
   <div class="time">
     <div class="t"><small>現在</small><b id="clock">--:--</b></div>
     <div class="t"><small>予想到着</small><b id="eta">--:--</b></div>
@@ -179,6 +180,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 
   <button class="primary" id="startBtn">ナビ開始（GPS・画面スリープ防止）</button>
   <button id="saveMapBtn">地図をオフライン用に保存</button>
+  <button id="gkeyBtn">Googleマップのキー</button>
 
   <div class="demo">
     <label for="sim"><span>デモ：ルート上の位置</span><span id="simKm">0 km</span></label>
@@ -496,6 +498,12 @@ function posAt(km){
 }
 let map=null,meMk=null,curPos=null,holdUntil=0,routeLines=[],progMove=false;
 function drawRouteLine(){
+  if(gmap){
+    gLines.forEach(l=>l.setMap(null));const path=ROUTE.map(r=>({lat:r[0],lng:r[1]}));
+    gLines=[new google.maps.Polyline({path,strokeColor:"#fff",strokeWeight:10,strokeOpacity:.95,map:gmap}),
+            new google.maps.Polyline({path,strokeColor:"#1a73e8",strokeWeight:7,strokeOpacity:.95,map:gmap})];
+    return;
+  }
   if(!map)return;routeLines.forEach(l=>l.remove());
   routeLines=[L.polyline(ROUTE,{color:"#fff",weight:10,opacity:.95}),L.polyline(ROUTE,{color:"#1a73e8",weight:7,opacity:.95})];
   routeLines.forEach(l=>l.addTo(map));
@@ -534,6 +542,11 @@ function routeTiles(){
   }
   return[...set];
 }
+$("gkeyBtn").addEventListener("click",()=>{
+  const v=prompt("Google Maps APIキー（空にすると国土地理院の地図）",GMAPS_KEY);if(v===null)return;
+  try{if(v.trim())localStorage.setItem("gmapsKey",v.trim());else localStorage.removeItem("gmapsKey");}catch(e){}
+  location.reload();
+});
 let saving=false;
 $("saveMapBtn").addEventListener("click",async()=>{
   if(saving)return;const btn=$("saveMapBtn");
@@ -546,9 +559,43 @@ $("saveMapBtn").addEventListener("click",async()=>{
   saving=false;
   btn.textContent=fail?`保存できなかった地図が${fail}枚あります（もう一度押すと続きを保存）`:`地図を保存済み（${list.length}枚）`;
 });
+/* ---- Googleマップ（使えない時は国土地理院の地図に切り替え） ----
+   キーは nekomakisara.github.io からだけ使えるよう制限し、1日の地図読み込み数に上限を付けて無料枠内に収める */
+let GMAPS_KEY="";try{GMAPS_KEY=localStorage.getItem("gmapsKey")||"";}catch(e){} // キーはページに書かず、端末ごとに入力して保存
+let gmap=null,gMe=null,gLines=[],gState="none"; // none|loading|ok|fail
+function loadGmaps(){
+  if(gState!=="none")return;gState="loading";
+  const fail=()=>{if(gState==="ok"&&gmap)return;gState="fail";gmap=null;$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();};
+  window.gm_authFailure=()=>{gmap=null;gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();};
+  window.onGmaps=()=>{gState="ok";initGmap();};
+  const sc=document.createElement("script");
+  sc.src=`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&v=weekly&language=ja&region=JP&loading=async&callback=onGmaps`;
+  sc.async=true;sc.onerror=fail;document.head.appendChild(sc);
+  setTimeout(()=>{if(gState==="loading")fail();},12000);
+}
+function initGmap(){
+  const p=posAt(curKm);
+  gmap=new google.maps.Map($("gmap"),{center:{lat:p[0],lng:p[1]},zoom:12,disableDefaultUI:true,gestureHandling:"greedy",clickableIcons:false,
+    // 案内に関係ない店・駅などは消す
+    styles:[{featureType:"poi",stylers:[{visibility:"off"}]},{featureType:"transit",stylers:[{visibility:"off"}]},{featureType:"administrative.land_parcel",stylers:[{visibility:"off"}]}]});
+  drawRouteLine();
+  const dot=(lat,lng,color,scale,title,z)=>new google.maps.Marker({position:{lat,lng},map:gmap,title,zIndex:z,
+    icon:{path:google.maps.SymbolPath.CIRCLE,scale,fillColor:color,fillOpacity:1,strokeColor:"#fff",strokeWeight:2}});
+  for(const s of SA)dot(s[1],s[2],"#2e9e44",5,s[0],1);
+  const g=WP[WP.length-1];dot(g[1],g[2],"#ff7a6b",7,g[0],2);
+  gMe=dot(p[0],p[1],"#e8222e",10,"現在地",9);
+  gmap.addListener("dragstart",()=>{holdUntil=Date.now()+30000;}); // 手で動かしたら30秒は追いかけない
+  gmap.addListener("zoom_changed",()=>{if(!progMove)holdUntil=Date.now()+30000;});
+  updateMap();
+}
 function initMap(){
+  if(gState!=="none")return;
+  if(GMAPS_KEY)loadGmaps();
+  else{gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();}
+}
+function initLeaflet(){
   if(map||!window.L)return;
-  map=L.map("map",{zoomControl:false}).setView(posAt(curKm),11);
+  map=L.map("lmap",{zoomControl:false}).setView(posAt(curKm),11);
   new CachedTiles({minZoom:5,maxZoom:18,attribution:"国土地理院"}).addTo(map);
   // ルートの線は地図画像なしでも出るので、電波がない時も位置関係は分かる
   drawRouteLine();
@@ -558,14 +605,20 @@ function initMap(){
   map.on("dragstart zoomstart",()=>{if(!progMove)holdUntil=Date.now()+30000;}); // 手で動かしたら30秒は追いかけない（プログラムでの移動は除く）
 }
 function updateMap(){
-  if(!map)return;
-  const p=curPos||posAt(curKm);meMk.setLatLng(p);
+  const p=curPos||posAt(curKm);
   // 一般道（60km/h未満）は拡大して交差点を見やすく、高速は広めに
   const zoom=gpsSpeed!=null&&gpsSpeed<60?16:12;
+  if(gmap&&gMe){
+    gMe.setPosition({lat:p[0],lng:p[1]});
+    if(Date.now()>holdUntil){progMove=true;if(gmap.getZoom()!==zoom)gmap.setZoom(zoom);gmap.setCenter({lat:p[0],lng:p[1]});progMove=false;}
+    return;
+  }
+  if(!map)return;
+  meMk.setLatLng(p);
   if(Date.now()>holdUntil){progMove=true;map.setView(p,zoom,{animate:false});progMove=false;}
 }
 const land=matchMedia("(orientation:landscape) and (max-height:500px), (orientation:landscape) and (min-width:1000px)");
-function syncMap(){if(!land.matches)return;initMap();if(map){map.invalidateSize();updateMap();}}
+function syncMap(){if(!land.matches)return;initMap();if(map)map.invalidateSize();updateMap();}
 if(land.addEventListener)land.addEventListener("change",syncMap);else land.addListener(syncMap);
 
 function arrowOf(t){
