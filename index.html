@@ -122,6 +122,11 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 #rot{transform:translate(-50%,-50%) perspective(900px) rotateX(var(--tilt,0deg)) rotate(var(--rot,0deg))}
 #mapNote{left:auto;top:auto;right:8px;bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px)}
 .app{display:none}
+/* 詳細画面は余白込みで画面幅に収める（余白のぶん左がはみ出していた） */
+.app,.app *{box-sizing:border-box}
+body.sheet .app{overflow-x:hidden}
+.app>*{min-width:0;max-width:100%}
+.settings label input[type=range]{flex:1;min-width:0;max-width:60%}
 body.sheet .app{display:flex;position:fixed;z-index:20;top:0;right:0;bottom:0;width:min(440px,100%);max-width:none;overflow:auto;
   background:var(--bg);box-shadow:-4px 0 20px rgba(0,0,0,.4);padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 24px 16px}
 body.sheet .app .jct{display:none}
