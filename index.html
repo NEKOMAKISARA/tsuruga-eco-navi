@@ -633,7 +633,7 @@ $("saveMapBtn").addEventListener("click",async()=>{
 });
 /* ---- Googleマップ（使えない時は国土地理院の地図に切り替え） ----
    キーは nekomakisara.github.io からだけ使えるよう制限し、1日の地図読み込み数に上限を付けて無料枠内に収める */
-let GMAPS_KEY="",GMAPS_ID="";try{GMAPS_KEY=localStorage.getItem("gmapsKey")||"";GMAPS_ID=localStorage.getItem("gmapsMapId")||"";}catch(e){} // キーはページに書かず、端末ごとに入力して保存
+let GMAPS_KEY="",GMAPS_ID="";try{GMAPS_KEY=localStorage.getItem("gmapsKey")||"";GMAPS_ID=localStorage.getItem("gmapsMapId")||"1b3406553b8c8a4d7396b3b3";}catch(e){} // キーはページに書かず、端末ごとに入力して保存
 let gmap=null,gMe=null,gLines=[],gState="none",vectorMode=false;
 const meIcon=h=>({path:google.maps.SymbolPath.FORWARD_CLOSED_ARROW,scale:7,rotation:h,fillColor:"#1a73e8",fillOpacity:1,strokeColor:"#fff",strokeWeight:2,anchor:new google.maps.Point(0,2.5)}); // none|loading|ok|fail
 function loadGmaps(){
