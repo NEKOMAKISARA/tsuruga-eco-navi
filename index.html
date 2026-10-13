@@ -154,6 +154,8 @@ body.sheet .app .jct{display:none}
 .fuel-ask input{font:700 24px/1.2 var(--num,system-ui);width:4.2em;padding:6px 8px;border:2px solid #1a73e8;border-radius:8px;color:#202124;background:#fff}
 .fuel-ask button{width:auto;padding:10px 14px;border:0;border-radius:8px;background:#1a73e8;color:#fff;font-size:15px}
 .fuel-ask button.x{background:#f1f3f4;color:#202124}
+.upd-bar{position:fixed;z-index:30;left:50%;transform:translateX(-50%);top:calc(max(8px,env(safe-area-inset-top)) + 4px);background:#1a73e8;color:#fff;border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;width:auto;box-shadow:0 3px 12px rgba(0,0,0,.35)}
+.build{color:var(--muted);font-size:12px}
 .nav-toast{background:#fff;color:#202124;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .nav-toast button{width:auto;padding:6px 14px;background:#1a73e8;color:#fff;border:0;border-radius:18px;font-size:14px}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
@@ -291,6 +293,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 </style>
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
+<button class="upd-bar" id="updBar" hidden></button>
 <div class="area-pop" id="areaPop" hidden><small id="areaPref"></small><b id="areaCity"></b></div>
 <!-- 目的地を決める：検索・地図の長押し -->
 <div class="plan" id="plan">
@@ -325,6 +328,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 <div class="app">
  <div class="col">
   <button id="closeSheet">閉じる</button>
+  <small class="build" id="buildTag"></small>
   <button id="endNav">案内を終了</button>
   <button id="rerouteSheet">今の位置から再検索</button>
   <div class="usage" id="usage"></div>
@@ -1153,6 +1157,12 @@ function updSnap(){
 }
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
+/* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
+const BUILD="2026-10-13 18:30";
+async function checkUpdate(){
+  try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
+    if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
+}
 const GPSI={prev:null,iv:null,v:null,age:0,fps:null,fc:0,ft:0,err:""};
 const A={fixT:0,fixKm:0,fixPos:null,spd:0,dispKm:null,dispPos:null,lastT:0,lastDraw:0,lastIcon:0,movePos:null,moveHd:null,pinchT:0};
 function distKm(a,b){const r=Math.PI/180,x=(b[1]-a[1])*r*Math.cos((a[0]+b[0])/2*r),y=(b[0]-a[0])*r;return Math.hypot(x,y)*6371;}
@@ -1484,7 +1494,7 @@ $("pvTargetClear").addEventListener("click",()=>setTarget(""));
 
 let wake=null;
 async function keepAwake(){try{if("wakeLock" in navigator&&document.visibilityState==="visible")wake=await navigator.wakeLock.request("screen");}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){A.resumeT=performance.now();startLoop();if(wake!==null)keepAwake();}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){A.resumeT=performance.now();checkUpdate();startLoop();if(wake!==null)keepAwake();}});
 
 /* ===================== 目的地・経路検索 ===================== */
 function decodeShape(s){let i=0,la=0,lo=0;const out=[];
@@ -2108,5 +2118,7 @@ applyMapMode();syncMap();startGps();
 if(MODE==="preview"&&DEST){showPreview();setTimeout(()=>slideTo([DEST.lat,DEST.lon],16),500);}
 if(MODE==="nav")render(0);
 if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{if(!SAS.length)loadSA();});
+
+$("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",()=>{location.replace(location.pathname+"?v="+Date.now());});setTimeout(checkUpdate,3000);
 </script>
 </body></html>
