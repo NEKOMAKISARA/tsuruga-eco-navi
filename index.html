@@ -167,6 +167,20 @@ body.sheet .app .jct{display:none}
 .setv b{display:block;font-family:var(--num);font-size:30px;line-height:1.1}
 .setv small{display:block;font-size:11px;opacity:.9}
 /* 曲がる所・IC・JCTの拡大ポップアップ */
+/* 高速の案内標識風の看板（出口・JCTの2km手前から） */
+.hsign{background:#0b7a3e;border-radius:10px;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,.4);width:min(300px,78vw);color:#fff;font-family:var(--jp,system-ui)}
+.hsign .in{border:3px solid #fff;border-radius:6px;padding:8px 10px 8px}
+.hsign .r{display:flex;align-items:center;gap:6px;min-width:0}
+.hsign .ex{background:#fff;color:#0b7a3e;font-weight:900;font-size:14px;padding:0 7px;border-radius:3px;flex-shrink:0}
+.hsign .no{border:2px solid #fff;font-weight:800;font-size:15px;padding:0 5px;border-radius:3px;flex-shrink:0}
+.hsign .nm{font-size:14px;font-weight:700;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hsign .ds{font-size:26px;font-weight:800;letter-spacing:.05em;line-height:1.2;margin-top:4px;word-break:keep-all;overflow-wrap:anywhere}
+.hsign .ds.sm{font-size:20px}
+.hsign .bt{display:flex;align-items:center;gap:8px;margin-top:6px}
+.hsign .sh{background:#fff;color:#0b7a3e;font-weight:900;font-size:13px;padding:0 6px;border-radius:10px/9px;outline:2px solid #fff;border:2px solid #0b7a3e}
+.hsign .km{font-size:22px;font-weight:800;margin-left:auto;font-variant-numeric:tabular-nums}.hsign .km small{font-size:13px}
+.hsign .ar{font-size:36px;font-weight:900;line-height:1}
+.hsign .kmr{display:none;align-items:center;gap:6px;flex-shrink:0}.hsign .kmr .km{font-size:18px}.hsign .kmr .ar{font-size:24px}
 .inset{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(240px,60vw)}
 .inset-map{position:relative;height:170px;overflow:hidden}
 #insetRot{position:absolute;left:50%;top:60%;width:560px;height:560px;transform:translate(-50%,-50%) rotate(var(--irot,0deg))}
@@ -238,6 +252,9 @@ body.sheet .app .jct{display:none}
   .nav-eco{left:auto;right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom))}
   #mapNote{bottom:auto;top:8px}
   .inset{width:100%}.inset-map{height:150px}.sapa{width:100%}
+  .hsign{width:100%;padding:4px}.hsign .ds{font-size:18px;margin-top:2px}.hsign .ds.sm{font-size:16px}.hsign .in{padding:4px 8px}
+  .hsign .bt{display:none}.hsign .kmr{display:flex}
+  body.hsg .inset-map{height:100px}body.hsg .inset-cap{display:none}
 }
 /* ===== 目的地を決める画面：検索欄・候補・経路の確認 ===== */
 .mapbox{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -310,6 +327,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 <div class="nav-stack" id="navStack">
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
+  <div class="hsign" id="hSign" hidden></div>
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap"><b id="insetAr"></b><span id="insetTxt"></span></div></div>
   <div class="detour" id="detCard" hidden></div>
   <div class="jamc" id="jamCard" hidden></div>
@@ -487,7 +505,7 @@ function buildGeom(){
 }
 // 案内・SA・高速の線・時間の補正を作り直す（ルートや道路の情報が変わるたびに呼ぶ）
 function buildIndex(){
-  GUIDE=MANS.map(m=>({name:m[6]||"",text:m[2],ty:m[3],stop:m[5]==="stop",km:m[4]!=null&&RCUM[m[4]]!=null?RCUM[m[4]]:project(m[0],m[1]).km})).sort((a,b)=>a.km-b.km);
+  GUIDE=MANS.map(m=>({name:m[6]||"",sig:m[7]||null,text:m[2],ty:m[3],stop:m[5]==="stop",km:m[4]!=null&&RCUM[m[4]]!=null?RCUM[m[4]]:project(m[0],m[1]).km})).sort((a,b)=>a.km-b.km);
   SAKM=SAS.map(s=>{const q=project(s.lat,s.lon);return{name:s.name,lat:s.lat,lon:s.lon,km:q.km,d:q.d,f:""};}).filter(s=>s.d<0.5).sort((a,b)=>a.km-b.km);
   if(STOP){const g=GUIDE.find(x=>x.stop);STOP.km=g?g.km:null;}
   // トンネル（300m以上）ごとに、中にある案内（分岐・出口）を順番に。出てすぐ（300m以内）の案内も含める
@@ -1159,7 +1177,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 01:15";
+const BUILD="2026-10-14 01:30";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1402,7 +1420,21 @@ function syncNav(){
   if(tun&&MODE==="nav"){const key="tun@"+tun.a.toFixed(2);
     if(!spoken.has(key)&&tun.a-curKm<=(hw?1:0.3)&&tun.a>curKm){spoken.add(key);
       speak(`この先のトンネル内で、分岐が${tun.g.length}か所あります。`+tun.g.map(g=>`${g.ord}つ目、${g.text}`).join("。"));}}
-  $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&next.length&&$("tunCard").hidden);
+  // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）
+  const showSign=navOn&&nj&&!off&&onRouteF&&hw&&JCT_TY.includes(nj.ty)&&d>0&&d<=2.2&&(nj.name||nj.sig)&&$("tunCard").hidden;
+  $("hSign").hidden=!showSign;document.body.classList.toggle("hsg",!!showSign);
+  if(showSign){
+    const g=nj.sig||{},jct=g.jct!=null?g.jct:/JCT|ジャンクション/.test(nj.name),ar=arrowOf(nj.text,nj.ty);
+    const dest=jct?((g.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(g.tw||[]).join("・")||nj.text):((g.tw||[]).join("・")||nj.text.replace(/^出口\s*/,"").replace(/（.*?）/g,"").replace(/方面$/,"")||"出口");
+    const sub=jct&&(g.br||[]).some(x=>!/^[A-Z]{1,2}\d/.test(x))?(g.tw||[]).join("・"):"";
+    const shields=(g.br||[]).filter(x=>/^[A-Z]{1,2}\d|^R\d|^国道/.test(x)).slice(0,2).map(x=>`<span class="sh">${esc(x)}</span>`).join("");
+    const kmT=d<1?`${Math.round(d*100)*10}<small>m</small>`:`${d.toFixed(1)}<small>km</small>`;
+    const h=`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="nm">${esc(nj.name||"")}</span><span class="kmr"><span class="km">${kmT}</span><b class="ar">${ar}</b></span></div>`+
+      `<div class="ds${dest.length>8?" sm":""}">${esc(dest)}</div>${sub?`<div style="font-size:13px;opacity:.9">${esc(sub)}</div>`:""}`+
+      `<div class="bt">${shields}<span class="km">${kmT}</span><b class="ar">${ar}</b></div></div>`;
+    if(h!==signHtml){signHtml=h;$("hSign").innerHTML=h;}
+  }
+  $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&!showSign&&next.length&&$("tunCard").hidden);
   // 次の渋滞（30km先まで）：どこから・長さ・通過にかかる時間。2km手前で1回読む
   const jm=GINFO&&Date.now()-GINFO.t<30*60e3?JAMS.find(j=>j.b>curKm&&j.a-curKm<30):null;
   $("jamCard").hidden=!jm;
@@ -1439,6 +1471,7 @@ $("detBtn").addEventListener("click",()=>{if(!checking)navCheck(true);});
 $("detCard").addEventListener("click",e=>{const b=e.target.closest("button[data-a]");if(!b)return;if(b.dataset.a==="go")takeDetour();else{DETOUR=null;detHtml="";syncNav();}});
 $("sapaCard").addEventListener("click",e=>{const b=e.target.closest("button[data-n]");if(b)toggleStop(SAKM.find(x=>x.name===b.dataset.n&&x.km>curKm-0.5));});
 /* ---- 拡大ポップアップ：今の位置から分岐の先までが収まる拡大率で、近づく向きを上にして表示 ---- */
+let signHtml="";
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
 function updateInset(nj,d){
   const city=isCity(),k0=Math.min(A.dispKm??curKm,nj.km-0.01),k1=nj.km+(city?0.04:0.2);
@@ -1595,7 +1628,7 @@ function signText(m,all,i){
   const num=nums.length?`（${nums[0]}）`:""; // 読み上げでは括弧の中を読まない
   const text=jct?[br.slice(0,2).join("・"),dir].filter(Boolean).join(" ")||"分岐"
                 :["出口",dir].filter(Boolean).join(" ")+num;
-  return{name,text:text.trim()};
+  return{name,text:text.trim(),sig:{num:nums[0]||"",tw:tw.slice(0,3),br:br.slice(0,2),jct}};
 }
 function parseTrip(d){
   let sh=[];const mans=[],ms=[],legs=d.trip.legs;
@@ -1605,14 +1638,14 @@ function parseTrip(d){
     for(const m of leg.maneuvers){
       ms.push({b:m.begin_shape_index+off,e:m.end_shape_index+off,hw:!!m.highway,v:m.time>0?m.length/m.time*3600:30});
       if(m.type>=1&&m.type<=8&&m.type!==4&&m.type!==5&&m.type!==6)continue; // 出発・道なり・名前が変わるだけ、は案内しない
-      let t=cleanIns(m.instruction),nm="";
+      let t=cleanIns(m.instruction),nm="",sig=null;
       const sg=signText(m,leg.maneuvers,leg.maneuvers.indexOf(m));
-      if(sg){t=sg.text;nm=sg.name;}
+      if(sg){t=sg.text;nm=sg.name;sig=sg.sig;}
       else if((m.type===20||m.type===21)&&!/^(左|右)方向/.test(t))t=(m.type===21?"左":"右")+"方向、"+t; // 出口は左右を書き足す
       if(m.type>=4&&m.type<=6){
         if(!last){mans.push([...s[m.begin_shape_index],(STOP?STOP.name:"経由地")+"（立ち寄り）",m.type,m.begin_shape_index+off,"stop"]);continue;}
         t=m.type===5?"目的地（右側）":m.type===6?"目的地（左側）":"目的地";}
-      mans.push([...s[m.begin_shape_index],t,m.type,m.begin_shape_index+off,null,nm]);
+      mans.push([...s[m.begin_shape_index],t,m.type,m.begin_shape_index+off,null,nm,sig]);
     }
   });
   return{route:sh,mans,ms,time:d.trip.summary.time,len:d.trip.summary.length,toll:!!d.trip.summary.has_toll};
@@ -1892,7 +1925,7 @@ async function loadJct(){
         const t=x.m[2],num=best.tags.ref||((t.match(/([0-9A-Za-z\-]+)番出口/)||[])[1])||"";
         let rest=t.replace(/^(左|右)方向、?/,"").replace(/[0-9A-Za-z\-]+番出口、?/,"").replace(/^[、 ]+|[、 ]+$/g,"").replace(/、その先/,"　");
         const text=(jct?(rest||"分岐"):("出口"+(rest?" "+rest:"")))+(num?`（${num}）`:"");
-        if(name||num){x.m[6]=name;x.m[2]=text;changed=true;}
+        if(name||num){x.m[6]=name;x.m[2]=text;x.m[7]=Object.assign({tw:[],br:[]},x.m[7]||{},{num,jct});changed=true;}
       }
       if(changed){buildIndex();saveRoute();render(curKm);}
       return;
