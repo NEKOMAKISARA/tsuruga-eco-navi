@@ -309,6 +309,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
     <label>指定速度の変化も読み上げ<input type="checkbox" id="setVoiceEco"></label>
     <label>次のSA・PAを表示<input type="checkbox" id="setSapa" checked></label>
     <label>市区町村に入った時に表示<input type="checkbox" id="setArea" checked></label>
+    <label>交通状況を地図に表示<input type="checkbox" id="setTraffic" checked></label>
     <label>燃費優先<input type="checkbox" id="setEcoRest"></label>
     <label>確保する休憩（合計・分）<input type="number" id="setRestMin" min="0" max="240" step="5" inputmode="numeric" style="width:5.5em"></label>
     <label>高速の基準速度（km/h）<input type="number" id="setCruise" min="60" max="120" step="5" inputmode="numeric" style="width:5.5em"></label>
@@ -381,7 +382,7 @@ const R=6371;
 const $=id=>document.getElementById(id);
 const VAL="https://valhalla1.openstreetmap.de"; // 経路・道路の種類・標高（無料・キー不要）
 /* ---- 設定（この端末に保存） ---- */
-const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30};
+const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30,traffic:true};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}catch(e){}
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 let XLAT=35.3; // 平面に直す時の基準の緯度（ルートの平均）
@@ -973,8 +974,8 @@ const openSheet=()=>document.body.classList.add("sheet");
 $("menuBtn").addEventListener("click",openSheet);$("menuBtn2").addEventListener("click",openSheet);
 $("closeSheet").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute();});
-for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setEcoRest","ecoRest"]]){
-  $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
+for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setEcoRest","ecoRest"],["setTraffic","traffic"]]){
+  $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="traffic")applyTraffic();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
 $("voiceTest").addEventListener("click",()=>speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true));
 let saving=false;
@@ -1013,7 +1014,7 @@ function initGmap(){
   else Object.assign(opt,{gestureHandling:"greedy",keyboardShortcuts:false,
     styles:[{featureType:"poi",stylers:[{visibility:"off"}]},{featureType:"transit",stylers:[{visibility:"off"}]},{featureType:"administrative.land_parcel",stylers:[{visibility:"off"}]}]});
   gmap=new google.maps.Map($("gmap"),opt);vectorMode=!!GMAPS_ID;document.body.classList.toggle("vec",vectorMode);fitRot();
-  drawRouteLine();drawMarks();
+  drawRouteLine();drawMarks();applyTraffic();
   gMe=new google.maps.Marker({position:{lat:p[0],lng:p[1]},map:gmap,zIndex:9,icon:meIcon(0),visible:!!curPos});
   gmap.addListener("dragstart",()=>{if(Date.now()-A.pinchT>1500)holdUntil=Date.now()+30000;}); // 1本指で動かしたら30秒は追いかけない
   gmap.addListener("zoom_changed",()=>{if(!progMove&&MODE==="nav")setUserZoom(gmap.getZoom());}); // ピンチした拡大率を保存
@@ -1022,6 +1023,13 @@ function initGmap(){
   gOv=new google.maps.OverlayView();gOv.onAdd=gOv.draw=gOv.onRemove=()=>{};gOv.setMap(gmap);
   gmap.addListener("contextmenu",e=>{if(MODE!=="nav")pickPoint(e.latLng.lat(),e.latLng.lng());}); // パソコンの右クリック
   applyMapMode();
+}
+// Googleマップの交通状況（道路の混み具合の色）。地図の読み込みに含まれるので、追加の料金はかからない
+let gTraffic=null;
+function applyTraffic(){
+  if(!gmap||!window.google)return;
+  if(SET.traffic){if(!gTraffic)gTraffic=new google.maps.TrafficLayer({autoRefresh:true});gTraffic.setMap(gmap);}
+  else if(gTraffic)gTraffic.setMap(null);
 }
 function fitRot(){
   const m=$("map"),w=m.clientWidth,h=m.clientHeight;if(!w)return;
