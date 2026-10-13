@@ -157,6 +157,7 @@ body.sheet .app .jct{display:none}
 /* 指定速度：標識と見間違えないよう、丸や赤は使わず青いカードに */
 .road{align-self:flex-end;background:#fff;color:#3c4043;border-radius:10px;padding:6px 10px;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:nowrap}
 .road.hw{background:#0f7d45;color:#fff}
+.road.dr{background:#f29900;color:#fff} /* GPSが途切れて推定位置で案内している間 */
 .setv{background:#1a73e8;color:#fff;border-radius:12px;padding:4px 12px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);min-width:70px}
 .setv b{display:block;font-family:var(--num);font-size:30px;line-height:1.1}
 .setv small{display:block;font-size:11px;opacity:.9}
@@ -265,6 +266,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="fuel-ask" id="fuelAsk" hidden><b>今の燃費（車の平均燃費の表示）</b><div class="row"><input id="fuelIn" type="text" inputmode="decimal" placeholder="16.2" maxlength="5" aria-label="燃費"><span>km/L</span><button id="fuelSave">記録</button><button id="fuelClose" class="x">閉じる</button></div><small id="fuelMsg">入れなくてもかまいません</small></div>
 </div>
 <div class="nav-eco" id="navEco">
+  <div class="road dr" id="nvDr" hidden>推定</div>
   <div class="road" id="nvRoad">一般道</div>
   <div class="setv" id="nvSetBox"><small>指定</small><b id="nvSet">--</b><small id="nvCc"></small></div>
   <div class="spd"><b id="nvSpd">--</b><small>km/h</small></div>
@@ -1079,7 +1081,7 @@ function frame(now){
   requestAnimationFrame(frame);
   if(now-A.lastDraw<30)return; // 約30fps
   const dt=Math.min(0.15,(now-A.lastT)/1000);A.lastT=now;A.lastDraw=now;
-  const ahead=Math.min(2.5,(now-A.fixT)/1000)*A.spd/3600; // 前回のGPSから最大2.5秒ぶん先読み
+  const ahead=drAhead(now); // 前回のGPSから先読み（ふだんは最大2.5秒、GPSが途切れた時は推定位置）
   const k=1-Math.exp(-dt*5);
   const hd=targetHeading();
   if(hd!=null&&!isNaN(hd)){if(rotAcc==null)rotAcc=hd;else rotAcc+=(((hd-rotAcc)%360+540)%360-180)*(1-Math.exp(-dt*3));} // 359°→1°で一回転しないよう差分で回す
@@ -1248,6 +1250,7 @@ function syncNav(){
   $("inset").hidden=!showInset;
   insetFor=showInset?nj.km:null;
   if(showInset)updateInset(nj,d);
+  $("nvDr").hidden=!drOn();
   $("nvRoad").textContent=hw?"高速":"一般道";$("nvRoad").classList.toggle("hw",hw);
   if(curPos&&hwOn!=null&&hwSaid!==hwOn&&!timer){if(hwSaid!=null&&SET.voice)speak(hwOn?"高速道路に入りました":"一般道に入りました");hwSaid=hwOn;}
   const next=SAKM.filter(x=>x.km>curKm+0.3).slice(0,3);
@@ -1593,10 +1596,19 @@ function onGpsErr(e){
   if(e&&e.code===1){gpsWatch!=null&&navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;setStatus("bad","位置情報が許可されていません");
     const off=$("offroute");off.hidden=false;off.textContent="位置情報が許可されていません。iPhoneの「設定 → プライバシー → 位置情報サービス → Safari」で許可してください。";}
 }
+/* ---- GPSが途切れた時（トンネル等）：ルートの上を最後の速さで進めた「推定位置」で案内を続ける（最大10分）。
+   GPSが戻ったら本当の位置に合わせる ---- */
+const DR={goodT:0};
+function drOn(){const t=performance.now()-A.fixT;return MODE==="nav"&&!!curPos&&!timer&&onRouteF&&A.spd>=10&&t>3000&&t<600000;}
+function drAhead(now){const sec=(now-A.fixT)/1000;return(sec<=2.5?sec:drOn()?Math.min(sec,600):2.5)*A.spd/3600;}
+setInterval(()=>{if(drOn())render(Math.min(TOTAL,A.fixKm+drAhead(performance.now())));},1000); // 推定位置で案内の距離・音声を進める
 function onFix(p){
   stopPlay();
   const c=p.coords;let s=c.speed!=null&&c.speed>=0?c.speed*3.6:null;
   lastFixT=Date.now();
+  // トンネルの中などで来る誤差の大きい位置（基地局等、100m超）は、5分以内に良い位置があれば使わない（位置が飛んで「ルート外れ」になるため）
+  if(MODE==="nav"&&hasRoute()&&c.accuracy>100&&DR.goodT&&Date.now()-DR.goodT<300000){setStatus("bad",`GPSが弱い（精度±${Math.round(c.accuracy)}m）`);return;}
+  if(c.accuracy<=100)DR.goodT=Date.now();
   if(c.heading!=null&&!isNaN(c.heading)&&(s??0)>5)gpsHeading=c.heading;
   setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m）`);
   if(MODE!=="nav"||!hasRoute()){
