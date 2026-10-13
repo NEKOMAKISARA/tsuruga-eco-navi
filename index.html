@@ -175,6 +175,14 @@ body.sheet .app .jct{display:none}
 .sapa button+button{border-top:1px solid rgba(255,255,255,.35)}
 .sapa .kd{flex-shrink:0;background:#fff;color:#0f7d45;border-radius:4px;font:700 12px/1 var(--num);padding:4px 5px}
 .sapa .yr{flex-shrink:0;font-size:11px;font-weight:700;border:1.5px solid currentColor;border-radius:4px;padding:1px 4px}
+/* 次の渋滞（赤）・混雑（オレンジ） */
+.jamc{display:flex;gap:8px;align-items:baseline;background:#d93025;color:#fff;border-radius:12px;padding:6px 12px;box-shadow:0 2px 10px rgba(0,0,0,.3);width:min(250px,62vw);font-size:14px;font-weight:700}
+.jamc.slow{background:#e37400}.jamc .k{margin-left:auto;font:700 18px var(--num)}
+/* 迂回案 */
+.detour{display:flex;gap:8px;align-items:center;background:#fff;color:#202124;border-radius:12px;padding:8px 10px;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(330px,100%)}
+.detour div{flex:1;min-width:0}.detour b{display:block;font-size:15px}.detour small{color:#5f6368;font-size:12px}
+.detour button{width:auto;padding:8px 12px;border:0;border-radius:18px;background:#1a73e8;color:#fff;font-size:14px}
+.detour button.x{background:#f1f3f4;color:#202124;padding:8px 10px}
 /* トンネル内の分岐：灰色の看板 */
 .sapa.tun{background:#3c4043;box-shadow:inset 0 0 0 3px #3c4043,inset 0 0 0 5px #fff,0 3px 12px rgba(0,0,0,.35)}
 .sapa .th{font-size:12px;font-weight:700;opacity:.9;padding:2px 4px 4px}
@@ -236,6 +244,15 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 .pv-sum{font-size:15px;color:#3c4043}
 .pv-sum b{font-family:var(--num);font-size:26px;color:#188038}
 .pv-sum small{display:block;font-size:13px;color:#5f6368}
+.pv-pref{display:flex;gap:6px;margin-bottom:6px}
+.pv-pref button{width:auto;flex:1;padding:6px 8px;border:1px solid #dadce0;background:#fff;color:#3c4043;border-radius:16px;font-size:13px}
+.pv-pref button.on{background:#e8f0fe;border-color:#1a73e8;color:#1a73e8}
+.pv-main b{font-family:var(--num);font-size:26px;color:#188038}
+.pv-opts{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:30vh;overflow:auto}
+.pv-opts button{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:baseline;text-align:left;border:1px solid #dadce0;background:#fff;color:#3c4043;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:400}
+.pv-opts button b{font:700 18px var(--num);color:#202124}.pv-opts button small{grid-column:2;color:#5f6368;font-size:12px}
+.pv-opts button.on{border-color:#1a73e8;background:#e8f0fe}
+.pv-note{display:block;color:#b3261e;font-size:12px;margin-top:4px}
 .pv-target{display:flex;align-items:center;gap:8px;font-size:14px;color:#5f6368}
 .pv-target input{font:700 18px var(--num);color:#202124;background:#f1f3f4;border:0;border-radius:8px;padding:4px 8px}
 .pv-target button{width:auto;padding:6px 12px;background:#f1f3f4;color:#202124;border:0;border-radius:16px;font-size:13px}
@@ -268,6 +285,8 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap"><b id="insetAr"></b><span id="insetTxt"></span></div></div>
+  <div class="detour" id="detCard" hidden></div>
+  <div class="jamc" id="jamCard" hidden></div>
   <div class="sapa tun" id="tunCard" hidden></div>
   <div class="sapa" id="sapaCard" hidden></div>
   <div class="fuel-ask" id="fuelAsk" hidden><b>今の燃費（車の平均燃費の表示）</b><div class="row"><input id="fuelIn" type="text" inputmode="decimal" placeholder="16.2" maxlength="5" aria-label="燃費"><span>km/L</span><button id="fuelSave">記録</button><button id="fuelClose" class="x">閉じる</button></div><small id="fuelMsg">入れなくてもかまいません</small></div>
@@ -293,6 +312,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
     <label>燃費優先<input type="checkbox" id="setEcoRest"></label>
     <label>確保する休憩（合計・分）<input type="number" id="setRestMin" min="0" max="240" step="5" inputmode="numeric" style="width:5.5em"></label>
     <label>高速の基準速度（km/h）<input type="number" id="setCruise" min="60" max="120" step="5" inputmode="numeric" style="width:5.5em"></label>
+    <label>Googleの経路（料金・渋滞）1日の上限<input type="number" id="setGCap" min="0" max="200" step="5" inputmode="numeric" style="width:5.5em"></label>
     <button type="button" id="zoomReset">地図の拡大率を自動に戻す</button>
     <button type="button" id="compassBtn">コンパス（向き）の使用を許可</button>
     <label>現在地の上下位置<input type="range" id="setMeY" min="-200" max="100" step="10"></label>
@@ -361,7 +381,7 @@ const R=6371;
 const $=id=>document.getElementById(id);
 const VAL="https://valhalla1.openstreetmap.de"; // 経路・道路の種類・標高（無料・キー不要）
 /* ---- 設定（この端末に保存） ---- */
-const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90};
+const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}catch(e){}
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 let XLAT=35.3; // 平面に直す時の基準の緯度（ルートの平均）
@@ -440,6 +460,7 @@ function buildIndex(){
   TUN=[];for(const a of ATTR){if(!a.tun)continue;const p=TUN[TUN.length-1];if(p&&a.a-p.b<0.05)p.b=a.b;else TUN.push({a:a.a,b:a.b});}
   TUN=TUN.filter(t=>t.b-t.a>=0.3);
   for(const t of TUN){t.g=GUIDE.filter(g=>g.km>=t.a-0.05&&g.km<=t.b+0.3);t.g.forEach((g,i)=>{g.tun=t;g.ord=i+1;});}
+  mapJams();
   calcGenK();initHW();
   $("sim").max=TOTAL.toFixed(1);
 }
@@ -774,7 +795,7 @@ function render(km){
     }
   }
   // 目標に遅れそうなときだけクルーズ設定を上げる（遅れ5分まで+5、それ以上+10、制限速度まで）。余裕が5分戻るまで続ける
-  const rem=remainMin(km,TOTAL,tr,f),eta=new Date(now.getTime()+rem*60e3);
+  const rem=remainMin(km,TOTAL,tr,f)+jamDelayAhead(km,tr.state==="jam"||tr.state==="slow"),eta=new Date(now.getTime()+rem*60e3);
   const tgt=targetDate(now),slack=tgt?(tgt-eta)/60e3:null;
   if(slack==null||slack>5)hurry=false;else if(slack<0)hurry=true;
   if(hw&&cc==="cruise"&&hurry&&tr.state==="flow"){
@@ -866,9 +887,12 @@ function routeRuns(){
 function routePolys(gm,target,w){
   if(gm){const P=pts=>pts.map(r=>({lat:r[0],lng:r[1]}));
     return[new google.maps.Polyline({path:P(ROUTE),strokeColor:"#fff",strokeWeight:w+3,strokeOpacity:.95,map:target}),
-      ...routeRuns().map(r=>new google.maps.Polyline({path:P(r.pts),strokeColor:r.hw?HW_COLOR:RD_COLOR,strokeWeight:w,strokeOpacity:.95,map:target}))];}
-  return[L.polyline(ROUTE,{color:"#fff",weight:w+3,opacity:.95}),...routeRuns().map(r=>L.polyline(r.pts,{color:r.hw?HW_COLOR:RD_COLOR,weight:w,opacity:.95}))].map(l=>l.addTo(target));
+      ...routeRuns().map(r=>new google.maps.Polyline({path:P(r.pts),strokeColor:r.hw?HW_COLOR:RD_COLOR,strokeWeight:w,strokeOpacity:.95,map:target})),
+      ...JAMS.map(j=>new google.maps.Polyline({path:P(ptsBetween(j.a,j.b)),strokeColor:jamColor(j),strokeWeight:w,strokeOpacity:1,map:target}))];}
+  return[L.polyline(ROUTE,{color:"#fff",weight:w+3,opacity:.95}),...routeRuns().map(r=>L.polyline(r.pts,{color:r.hw?HW_COLOR:RD_COLOR,weight:w,opacity:.95})),
+    ...JAMS.map(j=>L.polyline(ptsBetween(j.a,j.b),{color:jamColor(j),weight:w,opacity:1}))].map(l=>l.addTo(target));
 }
+const jamColor=j=>j.speed==="TRAFFIC_JAM"?"#d93025":"#f29900";
 function drawRouteLine(){
   if(gmap){gLines.forEach(l=>l.setMap(null));gLines=hasRoute()?routePolys(true,gmap,7):[];return;}
   if(!map)return;routeLines.forEach(l=>l.remove());routeLines=hasRoute()?routePolys(false,map,7):[];
@@ -941,9 +965,9 @@ $("fullBtn").addEventListener("click",async()=>{
 });
 document.addEventListener("fullscreenchange",()=>{$("fullBtn").textContent=document.fullscreenElement?"全画面を終了":"全画面";});
 /* ---- API使用量（この端末で今日使った分。Google側の実数ではない） ---- */
-function usageGet(){const t=new Date().toDateString();let u={};try{u=JSON.parse(localStorage.getItem("apiUsage")||"{}");}catch(e){}return u.d===t?Object.assign({geo:0},u):{d:t,gmap:0,route:0,geo:0};}
+function usageGet(){const t=new Date().toDateString();let u={};try{u=JSON.parse(localStorage.getItem("apiUsage")||"{}");}catch(e){}return u.d===t?Object.assign({geo:0,groute:0},u):{d:t,gmap:0,route:0,geo:0,groute:0};}
 function usageBump(k){const u=usageGet();u[k]=(u[k]||0)+1;try{localStorage.setItem("apiUsage",JSON.stringify(u));}catch(e){}showUsage();}
-function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回　経路検索 <b>${u.route}</b>回`;}
+function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回<br>Googleの経路（料金・渋滞） <b>${u.groute}</b> / ${SET.gCap}回　経路検索 <b>${u.route}</b>回`;}
 showUsage();
 const openSheet=()=>document.body.classList.add("sheet");
 $("menuBtn").addEventListener("click",openSheet);$("menuBtn2").addEventListener("click",openSheet);
@@ -1147,7 +1171,7 @@ function layoutNow(){
 // 目的地へ地図をスライド：上の検索欄と下の経路カードの間の真ん中に来るようにずらす
 function slideTo(p,z){
   const cur=gmap?gmap.getZoom():map?map.getZoom():15;z=z||cur;
-  const top=($("plan").getBoundingClientRect().bottom||60),bot=innerHeight-260; // 経路カードの高さぶん
+  const pr=$("preview").getBoundingClientRect(),top=($("plan").getBoundingClientRect().bottom||60),bot=pr.height?pr.top:innerHeight-260; // 経路カードの上まで
   const off=innerHeight/2-(top+bot)/2,kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,z)/1000;
   const c=destPt(p,180,off*kpp);
   if(gmap){if(gmap.getZoom()!==z)gmap.setZoom(z);gmap.panTo({lat:c[0],lng:c[1]});}
@@ -1280,6 +1304,18 @@ function syncNav(){
     if(!spoken.has(key)&&tun.a-curKm<=(hw?1:0.3)&&tun.a>curKm){spoken.add(key);
       speak(`この先のトンネル内で、分岐が${tun.g.length}か所あります。`+tun.g.map(g=>`${g.ord}つ目、${g.text}`).join("。"));}}
   $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&next.length&&$("tunCard").hidden);
+  // 次の渋滞（30km先まで）：どこから・長さ・通過にかかる時間。2km手前で1回読む
+  const jm=GINFO&&Date.now()-GINFO.t<30*60e3?JAMS.find(j=>j.b>curKm&&j.a-curKm<30):null;
+  $("jamCard").hidden=!jm;
+  if(jm){const inJ=jm.a<=curKm,len=jm.b-Math.max(jm.a,curKm),pm=jm.passMin*len/(jm.b-jm.a);
+    $("jamCard").className="jamc"+(jm.speed==="TRAFFIC_JAM"?"":" slow");
+    $("jamCard").innerHTML=`<b>${jm.speed==="TRAFFIC_JAM"?"渋滞":"混雑"}</b><span>${inJ?"ここから":fmtKm(jm.a-curKm)+"先"} ${fmtKm(len)}</span><span class="k">約${Math.max(1,Math.round(pm))}分</span>`;
+    const key="jam@"+jm.a.toFixed(1);if(!inJ&&jm.a-curKm<=2&&!spoken.has(key)){spoken.add(key);
+      speak(`${fmtSay(jm.a-curKm)}から${jm.speed==="TRAFFIC_JAM"?"渋滞":"混雑"}、${fmtKm(len).replace("km","キロ").replace("m","メートル")}、通過に約${Math.max(1,Math.round(pm))}分`);}}
+  // 迂回案：何分早いか・到着・料金の差。「迂回する」で切り替え
+  $("detCard").hidden=!DETOUR;
+  if(DETOUR){const h=`<div><b>迂回すると${Math.round(DETOUR.save)}分早い</b><small>${hm(DETOUR.eta)}着${DETOUR.dy==null?"":" ・ 料金"+(Math.abs(DETOUR.dy)<1?"同じ":(DETOUR.dy>0?"+":"−")+yen(Math.abs(DETOUR.dy)))}</small></div><button type="button" data-a="go">迂回する</button><button type="button" data-a="x" class="x">×</button>`;
+    if(h!==detHtml){detHtml=h;$("detCard").innerHTML=h;}}
   if(!$("sapaCard").hidden){
     const h=next.map(x=>{const on=STOP&&STOP.name===x.name,d=x.km-curKm;
       return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n">${esc(saShort(x.name))}</span>${on?'<span class="yr">寄る</span>':""}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
@@ -1292,10 +1328,11 @@ function syncNav(){
     else if(t-ecoCand.t>8000&&e!==lastEcoSay){if(lastEcoSay)speak(`指定速度${T("set")}`);lastEcoSay=e;}}
 }
 // SA・PAの看板：種類（SA/PA）と、上り・下りやSA/PAを除いた名前
-let sapaHtml="",tunHtml="";
+let sapaHtml="",tunHtml="",detHtml="";
 const fmtKm=d=>d<1?Math.round(d*10)*100+"m":(d<10?d.toFixed(1):d.toFixed(0))+"km";
 const saKind=n=>/SA|ＳＡ|サービスエリア/.test(n)?"SA":"PA";
 const saShort=n=>n.replace(/[\s　]*[（(](上り|下り|内回り|外回り|[東西南北]行き?)[)）]/g,"").replace(/[\s　]*(SA|PA|ＳＡ|ＰＡ|サービスエリア|パーキングエリア)$/,"").trim()||n;
+$("detCard").addEventListener("click",e=>{const b=e.target.closest("button[data-a]");if(!b)return;if(b.dataset.a==="go")takeDetour();else{DETOUR=null;detHtml="";syncNav();}});
 $("sapaCard").addEventListener("click",e=>{const b=e.target.closest("button[data-n]");if(b)toggleStop(SAKM.find(x=>x.name===b.dataset.n&&x.km>curKm-0.5));});
 /* ---- 拡大ポップアップ：今の位置から分岐の先までが収まる拡大率で、近づく向きを上にして表示 ---- */
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
@@ -1432,17 +1469,123 @@ function parseTrip(d){
   });
   return{route:sh,mans,ms,time:d.trip.summary.time,len:d.trip.summary.length,toll:!!d.trip.summary.has_toll};
 }
-async function fetchTrip(from,heading){
+// opt.vias：なぞる経由点（Googleの経路を同じ道で案内するため）、opt.alt：迂回案の数。ルートの選び方は設定（高速優先／有料道路を使わない）
+async function fetchTrips(from,heading,opt={}){
   const start={lat:from[0],lon:from[1],type:"break"};if(heading!=null&&!isNaN(heading))start.heading=Math.round(heading),start.heading_tolerance=60;
   const go=async filt=>{
     // 立ち寄り先（SA・PA）は本線ではなく中の道に合わせる（本線に合わせると素通りするため）
     const st=STOP?[{lat:STOP.lat,lon:STOP.lon,type:"break",...(filt?{search_filter:{max_road_class:"unclassified"}}:{})}]:[];
-    const q={locations:[start,...st,{lat:DEST.lat,lon:DEST.lon,type:"break"}],costing:"auto",directions_options:{language:"ja-JP",units:"km"}};
+    const q={locations:[start,...(opt.vias||[]),...st,{lat:DEST.lat,lon:DEST.lon,type:"break"}],costing:"auto",
+      costing_options:{auto:SET.pref==="notoll"?{use_tolls:0}:{use_highways:1}},directions_options:{language:"ja-JP",units:"km"}};
+    if(opt.alt&&!STOP&&!(opt.vias||[]).length)q.alternates=opt.alt;
     const r=await fetch(VAL+"/route?json="+encodeURIComponent(JSON.stringify(q)));
     if(!r.ok){let m="";try{m=(await r.json()).error||"";}catch(e){}throw new Error(m||r.status);}
-    usageBump("route");return parseTrip(await r.json());
+    usageBump("route");const d=await r.json();
+    return[parseTrip(d),...(d.alternates||[]).map(a=>parseTrip(a))];
   };
   try{return await go(true);}catch(e){if(!STOP)throw e;return go(false);}
+}
+const fetchTrip=async(from,heading,opt)=>(await fetchTrips(from,heading,opt))[0];
+// 別の経路（Google）の線の上に経由点を置く：一定間隔で、まっすぐな所に（分岐の近くに置くとIC・SAでUターンするため）。向きも付けて反対車線に乗らないように
+// 公開のValhallaは1回10地点までなので、経由点は8つまで
+function followVias(path){
+  const c=[0];for(let i=1;i<path.length;i++)c[i]=c[i-1]+distKm(path[i-1],path[i]);
+  const T=c[c.length-1],L=Math.max(3,T/9),out=[];
+  const at=k=>{let lo=0,hi=c.length-1;if(k<=0)return path[0];if(k>=T)return path[hi];while(hi-lo>1){const m=(lo+hi)>>1;if(c[m]<k)lo=m;else hi=m;}const t=(k-c[lo])/(c[hi]-c[lo]||1);return[path[lo][0]+t*(path[hi][0]-path[lo][0]),path[lo][1]+t*(path[hi][1]-path[lo][1])];};
+  const angd=(a,b)=>Math.abs(((a-b)%360+540)%360-180);
+  for(let k=L;k<T-L*0.6&&out.length<8;k+=L)
+    for(let d=0;d<1.5;d+=0.1){const kk=k+d;if(kk>T-1)break;
+      const h1=bearing(at(kk-0.15),at(kk)),h2=bearing(at(kk),at(kk+0.15));
+      if(angd(h1,h2)<10){const q=at(kk);out.push({lat:q[0],lon:q[1],type:"through",heading:Math.round(h2),heading_tolerance:30});break;}}
+  return out;
+}
+/* ===================== 料金・渋滞・迂回案（Google Routes） =====================
+   GoogleのRoute（Routes API）で、渋滞を考えた経路を最大3本、ETCの料金と渋滞の区間付きで受け取る。
+   選んだ経路の上に経由点を置いてValhallaに引き直させ、案内（曲がる所・高速の判定・トンネル等）はValhallaの仕組みのまま使う。
+   料金と渋滞の区間を頼むと Compute Routes Enterprise（月1,000回まで無料）になるので、端末で1日の回数に上限を付ける */
+let OPTS=[],OPT_I=0,GINFO=null,JAMRAW=[],JAMS=[],DETOUR=null,gErr="",gCheckT=0;
+const gAvail=()=>typeof google!=="undefined"&&google.maps&&typeof google.maps.importLibrary==="function"&&(usageGet().groute||0)<(+SET.gCap||0);
+async function gRoutes(from){
+  const {Route}=await google.maps.importLibrary("routes");
+  const req={origin:{lat:from[0],lng:from[1]},destination:{lat:DEST.lat,lng:DEST.lon},travelMode:"DRIVING",routingPreference:"TRAFFIC_AWARE",
+    computeAlternativeRoutes:!STOP,extraComputations:["TOLLS","TRAFFIC_ON_POLYLINE"],
+    routeModifiers:{tollPasses:["JP_ETC"],avoidTolls:SET.pref==="notoll"},language:"ja",region:"JP",
+    fields:["path","distanceMeters","durationMillis","staticDurationMillis","routeLabels","travelAdvisory"]};
+  if(STOP)req.intermediates=[{location:{lat:STOP.lat,lng:STOP.lon}}];
+  usageBump("groute");
+  const {routes}=await Route.computeRoutes(req);
+  return(routes||[]).map(gNorm).filter(r=>r.path.length>1);
+}
+const num=v=>typeof v==="function"?v():+v;
+function gNorm(r){
+  const path=(r.path||[]).map(p=>[num(p.lat),num(p.lng)]);
+  const ta=r.travelAdvisory||{},ti=ta.tollInfo;let yen=0,tollKnown=true;
+  if(ti){const pr=(ti.estimatedPrices||ti.estimatedPrice||[]).find(m=>(m.currencyCode||"JPY")==="JPY");if(pr)yen=Number(pr.units||0)+Number(pr.nanos||0)/1e9;else tollKnown=false;} // 有料道路だが料金が分からない
+  const iv=(ta.speedReadingIntervals&&ta.speedReadingIntervals.length?ta.speedReadingIntervals:(r.legs||[]).flatMap(l=>(l.travelAdvisory&&l.travelAdvisory.speedReadingIntervals)||[]));
+  const jams=iv.filter(x=>String(x.speed)!=="NORMAL").map(x=>({i0:x.startPolylinePointIndex||0,i1:x.endPolylinePointIndex??path.length-1,speed:String(x.speed)}));
+  const durMin=(r.durationMillis||0)/60000;
+  return{src:"g",path,dist:(r.distanceMeters||0)/1000,durMin,staticMin:(r.staticDurationMillis||r.durationMillis||0)/60000,yen,tollKnown,jams};
+}
+// 渋滞の区間：Googleの線の上の始まり・終わりの点と、遅れ（渋滞を考えた時間−考えない時間を、長さと程度で分ける）
+function gJamList(o){
+  const c=[0];for(let i=1;i<o.path.length;i++)c[i]=c[i-1]+distKm(o.path[i-1],o.path[i]);
+  const delay=Math.max(0,o.durMin-o.staticMin),n=o.path.length-1;
+  const js=o.jams.map(j=>{const i0=Math.min(n,j.i0),i1=Math.min(n,j.i1);return{p0:o.path[i0],p1:o.path[i1],len:c[i1]-c[i0],speed:j.speed};}).filter(j=>j.len>0.05);
+  const w=j=>j.len*(j.speed==="TRAFFIC_JAM"?3:1),W=js.reduce((a,j)=>a+w(j),0)||1;
+  js.forEach(j=>j.delay=delay*w(j)/W);
+  return js;
+}
+// 今のルートの上に渋滞を置き直す（近い区間はまとめる）。通過にかかる時間＝ふだんの時間＋遅れ
+function mapJams(){
+  JAMS=[];if(!hasRoute())return;
+  for(const j of JAMRAW){const q0=project(...j.p0),q1=project(...j.p1);if(q0.d>0.2||q1.d>0.2||q1.km<=q0.km+0.05)continue;
+    const p=JAMS[JAMS.length-1];
+    if(p&&q0.km-p.b<0.3){p.b=q1.km;p.delay+=j.delay;if(j.speed==="TRAFFIC_JAM")p.speed=j.speed;}
+    else JAMS.push({a:q0.km,b:q1.km,speed:j.speed,delay:j.delay});}
+  JAMS.forEach(j=>j.passMin=driveMin(j.a,j.b)+j.delay);
+}
+// この先の渋滞の遅れ（分）。Googleの情報が30分より古ければ使わない。今いる渋滞は実測で見ているので除く
+function jamDelayAhead(km,inJam){
+  if(!GINFO||Date.now()-GINFO.t>30*60e3)return 0;
+  let m=0;for(const j of JAMS){if(j.b<=km)continue;if(inJam&&j.a<=km)continue;m+=j.delay*(j.b-Math.max(j.a,km))/(j.b-j.a);}
+  return m;
+}
+const yen=v=>"¥"+Math.round(v).toLocaleString("ja-JP");
+// 選んだ経路を案内する経路にする：Googleの経路はValhallaになぞらせる
+async function pickOpt(i,from,hd,keepSA){
+  const op=OPTS[i];if(!op)return;OPT_I=i;
+  if(!op.trip)op.trip=await fetchTrip(from,hd,{vias:followVias(op.path)});
+  setRoute(op.trip,keepSA);applyG(op);
+}
+function applyG(op){
+  if(op&&op.src==="g"){
+    GINFO={t:Date.now(),durMin:op.durMin,staticMin:op.staticMin,yen:op.yen,tollKnown:op.tollKnown};JAMRAW=gJamList(op);
+    // なぞった経路がGoogleの経路からずれていないか（Googleの点の9割が100m以内）
+    let n=0,c=0;for(let i=0;i<op.path.length;i+=Math.max(1,op.path.length/60|0)){c++;if(project(...op.path[i]).d<0.1)n++;}GINFO.same=c?n/c>=0.9:true;
+  }else{GINFO=null;JAMRAW=[];}
+  mapJams();drawRouteLine();saveRoute();
+}
+// 案内中：5分ごとにGoogleで渋滞を取り直し、今のルートより5分以上早い迂回案があれば知らせる
+setInterval(()=>{if(MODE==="nav"&&!timer&&curPos&&hasRoute()&&!rerouting&&!arrived&&gAvail()&&Date.now()-gCheckT>5*60e3)navCheck();},30000);
+async function navCheck(){
+  gCheckT=Date.now();
+  let gs;try{gs=await gRoutes(curPos);gErr="";}catch(e){gErr=e&&e.message||"取得できません";return;}
+  const ov=g=>{let n=0,c=0;for(let i=0;i<g.path.length;i+=Math.max(1,g.path.length/60|0)){c++;if(project(...g.path[i],curKm-0.5,TOTAL).d<0.1)n++;}return c?n/c:0;};
+  const sc=gs.map(g=>({g,ov:ov(g)})),cur=sc.find(x=>x.ov>=0.9);
+  if(cur){GINFO={t:Date.now(),durMin:cur.g.durMin,staticMin:cur.g.staticMin,yen:cur.g.yen,tollKnown:cur.g.tollKnown,same:true};JAMRAW=gJamList(cur.g);mapJams();drawRouteLine();saveRoute();}
+  const base=cur?cur.g.durMin:remainMin(curKm,TOTAL,traffic(onHighway()),paceFactor())+jamDelayAhead(curKm,false);
+  const best=sc.filter(x=>x!==cur&&x.ov<0.9).sort((a,b)=>a.g.durMin-b.g.durMin)[0];
+  if(!STOP&&best&&base-best.g.durMin>=5){
+    const first=!DETOUR;
+    DETOUR={g:best.g,save:base-best.g.durMin,dy:cur&&cur.g.tollKnown&&best.g.tollKnown?best.g.yen-cur.g.yen:null,eta:new Date(Date.now()+best.g.durMin*60e3)};detHtml="";
+    if(first)speak(`迂回すると、約${Math.round(DETOUR.save)}分早く着きます`);
+  }else{DETOUR=null;detHtml="";}
+  render(curKm);
+}
+async function takeDetour(){
+  if(!DETOUR)return;const g=DETOUR.g;DETOUR=null;detHtml="";
+  OPTS=[g];const ok=await reroute(true,{vias:followVias(g.path),g});
+  if(ok)speak("迂回ルートにしました");
 }
 // ルートを入れ替える（新しい目的地・再検索の両方）。SA・PAは再検索では前のものを使い回す
 function setRoute(t,keepSA){
@@ -1459,8 +1602,15 @@ async function planRoute(){
   try{
     const o=await getOrigin();if(seq!==planSeq)return;
     if(!o){showPreview("現在地が分かりません（位置情報を許可してください）");return;}
-    const t=await fetchTrip(o,(gpsSpeed??0)>8?gpsHeading:null);if(seq!==planSeq)return;
-    setRoute(t);curKm=0;showPreview();
+    const hd=(gpsSpeed??0)>8?gpsHeading:null;let opts=[];gErr="";
+    if(gAvail()){try{opts=await gRoutes(o);}catch(e){gErr=e&&e.message||"取得できません";}}
+    else if(typeof google!=="undefined"&&google.maps&&(usageGet().groute||0)>=(+SET.gCap||0))gErr="今日の上限に達しました";
+    if(seq!==planSeq)return;
+    if(!opts.length)opts=(await fetchTrips(o,hd,{alt:2})).map(t=>({src:"v",trip:t,dist:t.len,durMin:t.time/60}));
+    if(seq!==planSeq)return;
+    OPTS=opts;await pickOpt(0,o,hd);if(seq!==planSeq)return;
+    curKm=0;showPreview();
+    if(DEST)setTimeout(()=>slideTo([DEST.lat,DEST.lon]),50); // 迂回案の一覧でカードが高くなるので、目的地をカードの上に寄せ直す
   }catch(e){if(seq===planSeq)showPreview("経路が見つかりませんでした"+(e&&e.message?`（${e.message}）`:""));}
 }
 function showPreview(msg){
@@ -1468,16 +1618,36 @@ function showPreview(msg){
   $("pvName").textContent=DEST.name;$("pvAddr").textContent=DEST.addr||"";
   if(msg){$("pvSum").innerHTML=esc(msg);return;}
   if(!hasRoute())return;
-  const m=driveMin(0,TOTAL),now=new Date(),eta=new Date(now.getTime()+m*60e3),tg=targetDate(now);
+  const now=new Date(),tg=targetDate(now),sel=OPTS[OPT_I];
   const hwKm=ATTR.reduce((a,s)=>a+(s.hw?s.b-s.a:0),0);
-  $("pvSum").innerHTML=`<b>${hm(eta)}</b> 着 ・ ${fmtDur(m)} ・ ${TOTAL.toFixed(TOTAL<10?1:0)} km`+
-    `<small>${hwKm>1?`高速 ${hwKm.toFixed(0)} km`:"高速なし"}${RT.toll?" ・ 有料道路あり":""}${tg?` ・ 目標まで ${fmtMin((tg-eta)/60e3)}`:""}</small>`;
+  // 到着の見積もり：Googleの渋滞を考えた時間があればそれ、なければこのナビの見積もり
+  const minOf=o=>o.src==="g"?o.durMin:o===sel?driveMin(0,TOTAL):o.durMin;
+  const m=sel?minOf(sel):driveMin(0,TOTAL),eta=new Date(now.getTime()+m*60e3);
+  const tollTxt=o=>o.src!=="g"?"":o.tollKnown?(o.yen>0?yen(o.yen):"無料"):"料金不明";
+  const jamTxt=o=>o.src==="g"&&o.jams.length?`渋滞${gJamList(o).length}か所 +${Math.round(Math.max(0,o.durMin-o.staticMin))}分`:"";
+  let h=`<div class="pv-pref"><button type="button" data-p="fast" class="${SET.pref!=="notoll"?"on":""}">高速優先</button><button type="button" data-p="notoll" class="${SET.pref==="notoll"?"on":""}">有料道路を使わない</button></div>`;
+  h+=`<div class="pv-main"><b>${hm(eta)}</b> 着 ・ ${fmtDur(m)} ・ ${TOTAL.toFixed(TOTAL<10?1:0)} km${sel&&sel.src==="g"?" ・ "+tollTxt(sel):""}</div>`+
+    `<small>${[hwKm>1?`高速 ${hwKm.toFixed(0)} km`:"高速なし",sel&&sel.src!=="g"&&RT.toll?"有料道路あり":"",sel&&jamTxt(sel),tg?`目標まで ${fmtMin((tg-eta)/60e3)}`:"",GINFO&&GINFO.same===false?"料金・時間は目安（Googleの経路と少し違う）":""].filter(Boolean).join(" ・ ")}</small>`;
+  if(OPTS.length>1){
+    h+=`<div class="pv-opts">`+OPTS.map((o,i)=>{const om=minOf(o),dm=om-m,dy=o.src==="g"&&sel&&sel.src==="g"&&o.tollKnown&&sel.tollKnown?o.yen-sel.yen:null;
+      const diff=i===OPT_I?"選択中":[Math.abs(dm)<1?"同じくらい":`${Math.round(Math.abs(dm))}分${dm>0?"遅い":"早い"}`,dy==null||Math.abs(dy)<1?"":`${yen(Math.abs(dy))}${dy>0?"高い":"安い"}`].filter(Boolean).join("・");
+      return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
+  }
+  if(gErr)h+=`<small class="pv-note">料金・渋滞：${esc(gErr)}</small>`;
+  $("pvSum").innerHTML=h;
   $("pvGo").disabled=false;
 }
 $("pvCancel").addEventListener("click",()=>{planSeq++;clearRoute();});
+$("pvSum").addEventListener("click",async e=>{
+  const p=e.target.closest("button[data-p]");if(p){if(SET.pref!==p.dataset.p){SET.pref=p.dataset.p;saveSet();planRoute();}return;}
+  const b=e.target.closest("button[data-i]");if(!b||+b.dataset.i===OPT_I)return;
+  const i=+b.dataset.i,seq=++planSeq;$("pvGo").disabled=true;
+  try{const o=curPos||[ROUTE[0][0],ROUTE[0][1]];await pickOpt(i,o,null);if(seq===planSeq){curKm=0;showPreview();}}
+  catch(e){if(seq===planSeq)showPreview("経路が見つかりませんでした");}
+});
 $("pvGo").addEventListener("click",()=>{if(hasRoute())startNav();});
 function clearRoute(){
-  ROUTE=[];MANS=[];ATTR=[];SAS=[];DEST=null;STOP=null;buildGeom();buildIndex();ECO.key="";ECO.state="none";ECO.z=ECO.g=null;ECO.segs=[];
+  ROUTE=[];MANS=[];ATTR=[];SAS=[];DEST=null;STOP=null;OPTS=[];GINFO=null;JAMRAW=[];JAMS=[];DETOUR=null;buildGeom();buildIndex();ECO.key="";ECO.state="none";ECO.z=ECO.g=null;ECO.segs=[];
   MODE="browse";applyMapMode();drawRouteLine();drawMarks();saveRoute();stopPlay();
   try{wake&&wake.release();}catch(e){}wake=null;
   document.body.classList.remove("sheet");
@@ -1572,26 +1742,27 @@ async function loadSA(retry){
 /* ---- ルートの保存：ページを開き直しても、案内中ならそのまま続ける ---- */
 function saveRoute(){
   try{if(!DEST){localStorage.removeItem("navRoute");return;}
-    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT}));}catch(e){}
+    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT}));}catch(e){}
 }
 function restoreRoute(){
   try{const v=JSON.parse(localStorage.getItem("navRoute")||"null");if(!v||!v.dest||Date.now()-v.t>12*3600e3)return;
-    DEST=v.dest;STOP=v.stop||null;
+    DEST=v.dest;STOP=v.stop||null;GINFO=v.ginfo||null;JAMRAW=v.jamraw||[];
     if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
     MODE=v.mode==="nav"&&hasRoute()?"nav":"preview";
   }catch(e){}
 }
 /* ---- 再検索：ルートから外れた時にボタンで、今の位置から目的地までを引き直す ---- */
 let rerouting=false,lastReroute=0,rerouteMsg="";
-async function reroute(force){
+async function reroute(force,opt){
   if(rerouting||(!force&&Date.now()-lastReroute<5000)||!DEST||!hasRoute())return false;
   const from=curPos||posAt(curKm);if(!from)return false;
   // 向き：ルートの上ならルートの向き（本線の逆方向に引かれないように）、外れていればGPSの向き
   const hd=onRouteF?bearing(posAt(Math.max(0,curKm-0.05)),posAt(curKm+0.05)):(gpsSpeed??0)>5?gpsHeading:A.moveHd;
   rerouting=true;lastReroute=Date.now();syncNav();
   try{
-    const t=await fetchTrip(from,hd);
-    setRoute(t,true);rerouteMsg="";trackKm=null;const pr=projectTrack(from[0],from[1],Date.now());offD=curPos?pr.d:0;
+    const t=await fetchTrip(from,hd,opt&&opt.vias?{vias:opt.vias}:{});
+    setRoute(t,true);if(opt&&opt.g){OPT_I=0;OPTS[0].trip=t;applyG(opt.g);}else gCheckT=Math.min(gCheckT,Date.now()-4*60e3); // 再検索の1分後に渋滞を取り直す
+    rerouteMsg="";trackKm=null;const pr=projectTrack(from[0],from[1],Date.now());offD=curPos?pr.d:0;
     if(timer){demoKm=pr.km;$("sim").value=pr.km;}
     feedFix(pr.km,curPos,A.spd); // 地図の追従位置も新しいルートに合わせる
     render(pr.km);return true;
@@ -1721,6 +1892,7 @@ setInterval(()=>render(curKm),20000);
 updateCal();
 $("zoomReset").addEventListener("click",()=>{userZoom=null;try{localStorage.removeItem("mapZoom");}catch(e){}$("zoomReset").textContent="自動に戻しました（一般道16・高速13）";});
 {const r=$("setRestMin");r.value=SET.restMin;r.addEventListener("change",()=>{SET.restMin=Math.max(0,+r.value||0);saveSet();render(curKm);});}
+{const r=$("setGCap");r.value=SET.gCap;r.addEventListener("change",()=>{SET.gCap=Math.max(0,Math.min(200,Math.round(+r.value||0)));r.value=SET.gCap;saveSet();showUsage();});}
 {const r=$("setCruise");r.value=SET.cruise;r.addEventListener("change",()=>{SET.cruise=Math.max(60,Math.min(120,+r.value||90));r.value=SET.cruise;saveSet();if(MODE==="preview")showPreview();render(curKm);});}
 $("compassBtn").addEventListener("click",()=>initCompass()); // iPhoneはボタンを押した中でしか許可を聞けない
 {const r=$("setMeY");r.value=SET.meY||0;r.addEventListener("input",()=>{SET.meY=+r.value;saveSet();lay.t=0;});}
