@@ -259,6 +259,11 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 .pv-opts button{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:baseline;text-align:left;border:1px solid #dadce0;background:#fff;color:#3c4043;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:400}
 .pv-opts button b{font:700 18px var(--num);color:#202124}.pv-opts button small{grid-column:2;color:#5f6368;font-size:12px}
 .pv-opts button.on{border-color:#1a73e8;background:#e8f0fe}
+.wxmk{display:flex!important;color:#202124;align-items:center;justify-content:center;background:rgba(255,255,255,.9);border:2px solid #1a73e8;border-radius:50%;font-size:17px;line-height:1}
+.pv-wx{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;scrollbar-width:none}.pv-wx::-webkit-scrollbar{display:none}
+.pv-wx span{flex-shrink:0;display:flex;flex-direction:column;align-items:center;background:#f1f3f4;border-radius:8px;padding:4px 8px;font-size:13px;white-space:nowrap}
+.pv-wx span.wet{background:#e8f0fe}.pv-wx span.dst{background:#fce8e6}.pv-wx small{font-size:11px;color:#5f6368}.pv-wx b{font-family:var(--num);font-size:12px;color:#3c4043}
+.sapa .w{flex-shrink:0;font-size:13px;white-space:nowrap}
 .pv-note{display:block;color:#b3261e;font-size:12px;margin-top:4px}
 .pv-target{display:flex;align-items:center;gap:8px;font-size:14px;color:#5f6368}
 .pv-target input{font:700 18px var(--num);color:#202124;background:#f1f3f4;border:0;border-radius:8px;padding:4px 8px}
@@ -908,6 +913,7 @@ function drawRouteLine(){
 }
 // 目的地とSA・PAの印
 function drawMarks(){
+  setTimeout(()=>{wxDrawn="";drawWx();},0); // 地図が切り替わった時も天気の印を描き直す
   if(destMk){destMk.setMap?destMk.setMap(null):destMk.remove();destMk=null;}
   saMks.forEach(m=>m.setMap?m.setMap(null):m.remove());saMks=[];
   if(gmap){
@@ -1289,7 +1295,8 @@ function syncNav(){
   $("nvSpd").textContent=T("spd");
   $("nvEta").textContent=T("eta");
   const tg=$("target").value;$("nvSlack").textContent=tg?`目標${tg}・余裕 ${T("slack")}`:"";$("nvSlack").hidden=!tg;
-  $("nvRemain").textContent="残り "+T("remain")+" km";
+  ensureWX();if(Math.floor(Date.now()/300e3)!==wxTick){wxTick=Math.floor(Date.now()/300e3);drawWx();}
+  {const w=wxAt(TOTAL,etaAt(TOTAL));$("nvRemain").textContent="残り "+T("remain")+" km"+(w?" ・ 着 "+wxTxt(w):"");}
   $("navBottom").style.setProperty("--sc",getComputedStyle($("slackBox")).getPropertyValue("--sc").trim()||"#188038");
   // 重ねて出す一言：ルート外れ＞渋滞＞坂・遅れなど
   const off=!$("offroute").hidden,tr=!$("trafficBox").hidden,ad=!$("advice").hidden;
@@ -1342,7 +1349,7 @@ function syncNav(){
     if(h!==detHtml){detHtml=h;$("detCard").innerHTML=h;}}
   if(!$("sapaCard").hidden){
     const h=next.map(x=>{const on=STOP&&STOP.name===x.name,d=x.km-curKm;
-      return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n">${esc(saShort(x.name))}</span>${on?'<span class="yr">寄る</span>':""}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
+      return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n">${esc(saShort(x.name))}</span>${on?'<span class="yr">寄る</span>':""}${(w=>w?`<span class="w">${wxTxt(w)}</span>`:"")(wxAt(x.km,etaAt(x.km)))}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
     if(h!==sapaHtml){sapaHtml=h;$("sapaCard").innerHTML=h;} // 毎回作り直すとタッチが外れるので、変わった時だけ
   }
   voiceGuide(nj,d,city);
@@ -1352,7 +1359,7 @@ function syncNav(){
     else if(t-ecoCand.t>8000&&e!==lastEcoSay){if(lastEcoSay)speak(`指定速度${T("set")}`);lastEcoSay=e;}}
 }
 // SA・PAの看板：種類（SA/PA）と、上り・下りやSA/PAを除いた名前
-let sapaHtml="",tunHtml="",detHtml="";
+let sapaHtml="",tunHtml="",detHtml="",wxTick=0;
 const fmtKm=d=>d<1?Math.round(d*10)*100+"m":(d<10?d.toFixed(1):d.toFixed(0))+"km";
 const saKind=n=>/SA|ＳＡ|サービスエリア/.test(n)?"SA":"PA";
 const saShort=n=>n.replace(/[\s　]*[（(](上り|下り|内回り|外回り|[東西南北]行き?)[)）]/g,"").replace(/[\s　]*(SA|PA|ＳＡ|ＰＡ|サービスエリア|パーキングエリア)$/,"").trim()||n;
@@ -1630,7 +1637,7 @@ function setRoute(t,keepSA){
   buildGeom();
   ATTR=t.ms.map(m=>({a:RCUM[m.b]||0,b:RCUM[m.e]??TOTAL,hw:m.hw,lim:null,v:m.v})).filter(s=>s.b>s.a);
   buildIndex();spoken.clear();DEC.said.clear();hist=[];arrived=false;A.dispKm=null;
-  drawRouteLine();drawMarks();saveRoute();scheduleElev();
+  drawRouteLine();drawMarks();saveRoute();scheduleElev();wxDrawn="";drawWx();
   loadAttr().then(()=>{if(!SAS.length)loadSA();});
 }
 let planSeq=0;
@@ -1671,6 +1678,9 @@ function showPreview(msg){
       return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
   }
   if(gErr)h+=`<small class="pv-note">料金・渋滞：${esc(gErr)}</small>`;
+  ensureWX();
+  {const it=SAKM.map(x=>({n:saShort(x.name),km:x.km})).concat([{n:"目的地",km:TOTAL,dst:true}]).map(x=>({...x,w:wxAt(x.km,etaAt(x.km))})).filter(x=>x.w);
+    if(it.length)h+=`<div class="pv-wx">`+it.map(x=>`<span class="${x.dst?"dst":wxWet(x.w)?"wet":""}"><small>${esc(x.n)}</small><b>${hm(new Date(etaAt(x.km)))}</b>${wxTxt(x.w,x.dst)}</span>`).join("")+`</div>`;}
   $("pvSum").innerHTML=h;
   $("pvGo").disabled=false;
 }
@@ -1685,7 +1695,7 @@ $("pvSum").addEventListener("click",async e=>{
 $("pvGo").addEventListener("click",()=>{if(hasRoute())startNav();});
 function clearRoute(){
   ROUTE=[];MANS=[];ATTR=[];SAS=[];DEST=null;STOP=null;OPTS=[];GINFO=null;JAMRAW=[];JAMS=[];DETOUR=null;buildGeom();buildIndex();ECO.key="";ECO.state="none";ECO.z=ECO.g=null;ECO.segs=[];
-  MODE="browse";applyMapMode();drawRouteLine();drawMarks();saveRoute();stopPlay();
+  MODE="browse";applyMapMode();drawRouteLine();drawMarks();saveRoute();stopPlay();wxDrawn="";drawWx();
   try{wake&&wake.release();}catch(e){}wake=null;
   document.body.classList.remove("sheet");
 }
@@ -1771,7 +1781,7 @@ async function loadSA(retry){
         if(got.some(g=>g.base===x.base&&Math.abs(g.km-x.km)<3))continue;
         got.push(x);
       }
-      SAS=got.map(({name,lat,lon})=>({name,lat,lon}));buildIndex();drawMarks();saveRoute();render(curKm);return;
+      SAS=got.map(({name,lat,lon})=>({name,lat,lon}));buildIndex();drawMarks();saveRoute();render(curKm);if(MODE==="preview"&&!$("pvGo").disabled)showPreview();return;
     }catch(e){}
   }
   if(!retry)setTimeout(()=>{if(key===routeKey()&&!SAS.length)loadSA(true);},120000); // どこも取れなかったら2分後にもう1回だけ
@@ -1787,6 +1797,56 @@ function restoreRoute(){
     if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
     MODE=v.mode==="nav"&&hasRoute()?"nav":"preview";
   }catch(e){}
+}
+/* ---- 天気：Open-Meteo（キー不要・無料、日本は気象庁のデータ）。ルート上の点の1時間ごとの予報を1回でまとめて取り、着く時刻の天気を出す ---- */
+let WX={key:"",t:0,pts:[]},wxBusy=false,wxFail=0,wxMks=[],wxDrawn="";
+const WXC=c=>c==null?null:c>=95?["⛈","雷雨"]:c>=85?["🌨","雪"]:c>=80?["🌦","にわか雨"]:c>=71?["❄","雪"]:c>=61?["🌧","雨"]:c>=51?["🌦","霧雨"]:c>=45?["🌫","霧"]:c>=3?["☁","くもり"]:c>=1?["🌤","晴れ"]:["☀","晴れ"];
+const wxWet=w=>w&&(w.code>=51&&w.code!==45&&w.code!==48||w.pr>=0.5);
+const wxSnow=w=>w&&(w.code>=71&&w.code<=77||w.code===85||w.code===86);
+function ensureWX(){
+  const key=routeKey();if(!key||wxBusy||Date.now()-wxFail<5*60e3)return;
+  if(WX.key===key&&Date.now()-WX.t<60*60e3)return; // 1時間たったら取り直す
+  loadWX(key);
+}
+async function loadWX(key){
+  wxBusy=true;
+  try{
+    const step=Math.max(10,TOTAL/40),kms=[];for(let k=0;k<TOTAL;k+=step)kms.push(k);kms.push(TOTAL);
+    const ps=kms.map(k=>k>=TOTAL&&DEST?[DEST.lat,DEST.lon]:posAt(k));
+    const u="https://api.open-meteo.com/v1/forecast?latitude="+ps.map(p=>p[0].toFixed(3)).join(",")+"&longitude="+ps.map(p=>p[1].toFixed(3)).join(",")+
+      "&hourly=weather_code,temperature_2m,precipitation,precipitation_probability,is_day&timezone=Asia%2FTokyo&forecast_days=3&timeformat=unixtime";
+    const r=await fetch(u);if(!r.ok)throw new Error(r.status);
+    let d=await r.json();if(!Array.isArray(d))d=[d];
+    if(key!==routeKey())return;
+    WX={key,t:Date.now(),pts:kms.map((km,i)=>{const h=(d[i]||{}).hourly||{};return{km,lat:ps[i][0],lon:ps[i][1],time:h.time||[],code:h.weather_code||[],temp:h.temperature_2m||[],pr:h.precipitation||[],pop:h.precipitation_probability||[],day:h.is_day||[]};})};
+    wxDrawn="";drawWx();
+    if(MODE==="preview"&&!$("pvGo").disabled)showPreview();
+  }catch(e){wxFail=Date.now();}
+  finally{wxBusy=false;}
+}
+// kmの地点に、時刻tに着いた時の天気（いちばん近い点の、いちばん近い1時間）
+function wxAt(km,t){
+  if(WX.key!==routeKey()||!WX.pts.length)return null;
+  const p=WX.pts.reduce((a,b)=>Math.abs(b.km-km)<Math.abs(a.km-km)?b:a);
+  if(!p.time.length)return null;
+  const i=Math.round((t/1000-p.time[0])/3600);if(i<0||i>=p.time.length||p.code[i]==null)return null;
+  return{code:p.code[i],temp:p.temp[i],pr:p.pr[i]||0,pop:p.pop[i],night:p.day[i]===0};
+}
+const etaAt=km=>nowMs()+driveMin(MODE==="nav"?curKm:0,km)*60e3;
+const wxTxt=(w,full)=>{const c=WXC(w&&w.code);if(!c)return"";return(w.night&&w.code<3?"🌙":c[0])+(full?c[1]:"")+(w.temp!=null?Math.round(w.temp)+"℃":"")+(full&&w.pop>0&&wxWet(w)?" "+w.pop+"%":"");};
+// 着く時刻に雨・雪の所を、ルートの上に印で出す（近すぎる印はまとめる）
+function drawWx(){
+  const marks=[];
+  if(hasRoute()&&WX.key===routeKey()){let last=-1e9;
+    for(const p of WX.pts){if(MODE==="nav"&&p.km<curKm)continue;const w=wxAt(p.km,etaAt(p.km));if(!wxWet(w)||p.km-last<15)continue;last=p.km;
+      const q=p.km>=TOTAL&&DEST?[DEST.lat,DEST.lon]:posAt(p.km);marks.push([q[0],q[1],WXC(w.code)[0],WXC(w.code)[1]]);}}
+  const sig=marks.map(m=>m.join()).join("|");if(sig===wxDrawn&&wxMks.length===marks.length)return;wxDrawn=sig;
+  wxMks.forEach(m=>m.setMap?m.setMap(null):m.remove());wxMks=[];
+  for(const [lat,lon,ic,nm] of marks){
+    if(gmap)wxMks.push(new google.maps.Marker({position:{lat,lng:lon},map:gmap,title:nm,zIndex:0,label:{text:ic,fontSize:"18px"},
+      icon:{path:google.maps.SymbolPath.CIRCLE,scale:14,fillColor:"#fff",fillOpacity:.9,strokeColor:"#1a73e8",strokeWeight:2}}));
+    else if(map)wxMks.push(L.marker([lat,lon],{interactive:false,icon:L.divIcon({className:"wxmk",html:ic,iconSize:[30,30]})}).addTo(map));
+  }
 }
 /* ---- 再検索：ルートから外れた時にボタンで、今の位置から目的地までを引き直す ---- */
 let rerouting=false,lastReroute=0,rerouteMsg="";
