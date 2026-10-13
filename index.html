@@ -571,12 +571,24 @@ function paceFactor(){
   if(act<10)return 1;
   return Math.max(0.6,Math.min(1.3,plan/act));
 }
+// 渋滞の判定は本線の上だけ：ランプ（IC・JCTの出入口）・料金所の前後500m・SA/PAの前後・ルートから外れている時は判定しない
+// （そこでゆっくり走るのは当たり前なので「渋滞」と出さない）
+function jamZone(km){
+  if(curPos&&offD>0.05)return true;
+  const a=attrAt(km);if(a&&a.ramp)return true;
+  if(TOLLS.some(t=>Math.abs(t-km)<0.5))return true;
+  if(SAKM.some(x=>x.km-km<0.6&&km-x.km<0.4))return true;
+  return false;
+}
 function traffic(hw){
   const w=windowSpeed(3);
   if(!w)return{state:"none"};
   const v=w.gps!=null?Math.min(w.gps,w.prog*1.2):w.prog;
   if(w.dist<0.3)return{state:"stop",v:0};
-  if(!hw)return{state:"none",v};
+  if(!hw||jamZone(curKm))return{state:"none",v};
+  // 本線を3分続けて遅い時だけ（直近3分の間にランプ・料金所を通っていたら判定しない）
+  const t0=nowMs(),wk=hist.filter(h=>t0-h.t<=3*60e3).map(h=>h.km);
+  if(wk.length&&wk.some(k=>jamZone(k)))return{state:"none",v};
   if(v<40)return{state:"jam",v};
   if(v<65)return{state:"slow",v};
   return{state:"flow",v};
@@ -1190,7 +1202,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 03:20";
+const BUILD="2026-10-14 08:00";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
