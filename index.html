@@ -182,10 +182,13 @@ body.sheet .app .jct{display:none}
 .jamc{display:flex;gap:8px;align-items:baseline;background:#d93025;color:#fff;border-radius:12px;padding:6px 12px;box-shadow:0 2px 10px rgba(0,0,0,.3);width:min(250px,62vw);font-size:14px;font-weight:700}
 .jamc.slow{background:#e37400}.jamc .k{margin-left:auto;font:700 18px var(--num)}
 /* 迂回案 */
-.detour{display:flex;gap:8px;align-items:center;background:#fff;color:#202124;border-radius:12px;padding:8px 10px;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(330px,100%)}
-.detour div{flex:1;min-width:0}.detour b{display:block;font-size:15px}.detour small{color:#5f6368;font-size:12px}
-.detour button{width:auto;padding:8px 12px;border:0;border-radius:18px;background:#1a73e8;color:#fff;font-size:14px}
-.detour button.x{background:#f1f3f4;color:#202124;padding:8px 10px}
+.detour{display:flex;flex-direction:column;gap:4px;background:#fff;color:#202124;border-radius:12px;padding:8px 12px;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(330px,100%)}
+.detour .dr{display:flex;gap:10px;align-items:baseline}
+.detour .l{width:4em;font-size:13px;color:#5f6368}.detour .dr.go .l{color:#1a73e8;font-weight:700}
+.detour b{font:700 18px var(--num)}.detour small{color:#5f6368;font-size:13px}
+.detour .db{display:flex;gap:8px;margin-top:4px}
+.detour button{flex:1;padding:8px 12px;border:0;border-radius:18px;background:#1a73e8;color:#fff;font-size:14px}
+.detour button.x{background:#f1f3f4;color:#202124}
 /* トンネル内の分岐：灰色の看板 */
 .sapa.tun{background:#3c4043;box-shadow:inset 0 0 0 3px #3c4043,inset 0 0 0 5px #fff,0 3px 12px rgba(0,0,0,.35)}
 .sapa .th{font-size:12px;font-weight:700;opacity:.9;padding:2px 4px 4px}
@@ -212,6 +215,7 @@ body.sheet .app .jct{display:none}
 .nav-bottom .meta{display:flex;flex-direction:column;font-size:13px;color:#5f6368;flex:1;min-width:0}
 .nav-bottom .meta #nvSlack{font-weight:700;color:var(--sc,#188038)}
 .nav-bottom button{width:44px;height:44px;padding:0;border-radius:50%;background:#f1f3f4;color:#202124;border:0;font-size:22px}
+.nav-bottom button.det{width:auto;padding:0 14px;border-radius:22px;font-size:15px;color:#1a73e8}
 .me-ar{width:34px;height:34px}
 @media (min-width:1000px) and (min-height:600px){
   .nav-top .ar{font-size:56px}.nav-top .dist{font-size:40px}.nav-top .txt{font-size:22px}
@@ -300,7 +304,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="setv" id="nvSetBox"><small>指定</small><b id="nvSet">--</b><small id="nvCc"></small></div>
   <div class="spd"><b id="nvSpd">--</b><small>km/h</small></div>
 </div>
-<div class="nav-bottom" id="navBottom"><div class="eta"><b id="nvEta">--:--</b><small>着</small></div><div class="meta"><span id="nvSlack"></span><span id="nvRemain">--</span></div><button id="menuBtn" aria-label="詳細">≡</button></div>
+<div class="nav-bottom" id="navBottom"><div class="eta"><b id="nvEta">--:--</b><small>着</small></div><div class="meta"><span id="nvSlack"></span><span id="nvRemain">--</span></div><button id="detBtn" class="det" aria-label="迂回を探す">迂回</button><button id="menuBtn" aria-label="詳細">≡</button></div>
 <div class="sheet-bg" id="sheetBg"></div>
 <div class="app">
  <div class="col">
@@ -1289,8 +1293,11 @@ function syncNav(){
   $("navBottom").style.setProperty("--sc",getComputedStyle($("slackBox")).getPropertyValue("--sc").trim()||"#188038");
   // 重ねて出す一言：ルート外れ＞渋滞＞坂・遅れなど
   const off=!$("offroute").hidden,tr=!$("trafficBox").hidden,ad=!$("advice").hidden;
-  $("nvToast").hidden=!(off||tr||ad);
-  $("nvToastTxt").textContent=off?T("offroute"):tr?T("trafficBox"):ad?T("advice"):"";
+  const nt=NOTE&&Date.now()-NOTE.t<5000?NOTE.msg:"";
+  $("nvToast").hidden=!(off||nt||tr||ad);
+  $("nvToastTxt").textContent=off?T("offroute"):nt?nt:tr?T("trafficBox"):ad?T("advice"):"";
+  $("detBtn").hidden=!(typeof google!=="undefined"&&google.maps&&typeof google.maps.importLibrary==="function");
+  $("detBtn").textContent=checking?"…":"迂回";
   $("rerouteBtn").hidden=!(off&&curPos&&!rerouting);
   // 曲がる所・IC・JCTが近い時は拡大ポップアップ、高速走行中は次のSA・PA
   const city=isCity(),nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
@@ -1325,9 +1332,13 @@ function syncNav(){
     $("jamCard").innerHTML=`<b>${jm.speed==="TRAFFIC_JAM"?"渋滞":"混雑"}</b><span>${inJ?"ここから":fmtKm(jm.a-curKm)+"先"} ${fmtKm(len)}</span><span class="k">約${Math.max(1,Math.round(pm))}分</span>`;
     const key="jam@"+jm.a.toFixed(1);if(!inJ&&jm.a-curKm<=2&&!spoken.has(key)){spoken.add(key);
       speak(`${fmtSay(jm.a-curKm)}から${jm.speed==="TRAFFIC_JAM"?"渋滞":"混雑"}、${fmtKm(len).replace("km","キロ").replace("m","メートル")}、通過に約${Math.max(1,Math.round(pm))}分`);}}
-  // 迂回案：何分早いか・到着・料金の差。「迂回する」で切り替え
+  // 迂回案：このまま（到着・渋滞の遅れ）と迂回（到着・早い/遅い・料金の差）を並べる。3分たったら消す
+  if(DETOUR&&Date.now()-DETOUR.t>180000){DETOUR=null;detHtml="";}
   $("detCard").hidden=!DETOUR;
-  if(DETOUR){const h=`<div><b>迂回すると${Math.round(DETOUR.save)}分早い</b><small>${hm(DETOUR.eta)}着${DETOUR.dy==null?"":" ・ 料金"+(Math.abs(DETOUR.dy)<1?"同じ":(DETOUR.dy>0?"+":"−")+yen(Math.abs(DETOUR.dy)))}</small></div><button type="button" data-a="go">迂回する</button><button type="button" data-a="x" class="x">×</button>`;
+  if(DETOUR){const D=DETOUR,sv=Math.round(D.save);
+    const h=`<div class="dr"><span class="l">このまま</span><b>${hm(D.stay.eta)}着</b><small>${D.stay.delay>=1?"渋滞で+"+Math.round(D.stay.delay)+"分":"渋滞なし"}</small></div>`+
+      `<div class="dr go"><span class="l">迂回</span><b>${hm(D.eta)}着</b><small>${Math.abs(sv)<1?"同じくらい":sv>0?sv+"分早い":-sv+"分遅い"}${D.dy==null?"":" ・ 料金"+(Math.abs(D.dy)<1?"同じ":(D.dy>0?"+":"−")+yen(Math.abs(D.dy)))}</small></div>`+
+      `<div class="db"><button type="button" data-a="go">迂回する</button><button type="button" data-a="x" class="x">このまま</button></div>`;
     if(h!==detHtml){detHtml=h;$("detCard").innerHTML=h;}}
   if(!$("sapaCard").hidden){
     const h=next.map(x=>{const on=STOP&&STOP.name===x.name,d=x.km-curKm;
@@ -1345,6 +1356,7 @@ let sapaHtml="",tunHtml="",detHtml="";
 const fmtKm=d=>d<1?Math.round(d*10)*100+"m":(d<10?d.toFixed(1):d.toFixed(0))+"km";
 const saKind=n=>/SA|ＳＡ|サービスエリア/.test(n)?"SA":"PA";
 const saShort=n=>n.replace(/[\s　]*[（(](上り|下り|内回り|外回り|[東西南北]行き?)[)）]/g,"").replace(/[\s　]*(SA|PA|ＳＡ|ＰＡ|サービスエリア|パーキングエリア)$/,"").trim()||n;
+$("detBtn").addEventListener("click",()=>{if(!checking)navCheck(true);});
 $("detCard").addEventListener("click",e=>{const b=e.target.closest("button[data-a]");if(!b)return;if(b.dataset.a==="go")takeDetour();else{DETOUR=null;detHtml="";syncNav();}});
 $("sapaCard").addEventListener("click",e=>{const b=e.target.closest("button[data-n]");if(b)toggleStop(SAKM.find(x=>x.name===b.dataset.n&&x.km>curKm-0.5));});
 /* ---- 拡大ポップアップ：今の位置から分岐の先までが収まる拡大率で、近づく向きを上にして表示 ---- */
@@ -1578,32 +1590,29 @@ function applyG(op){
   }else{GINFO=null;JAMRAW=[];}
   mapJams();drawRouteLine();saveRoute();
 }
-// 案内中：Googleで渋滞を取り直し、今のルートより5分以上早い迂回案があれば知らせる。
-// 間隔は「到着までの残り時間÷今日の残り回数」（5〜20分。2回は次の経路検索用に残す）で、1日の上限に収まるようにする。
-// 3分以上止まっている（SAで休憩など）・到着まで10分を切った・トンネル内（推定位置）の時は取りに行かない
-function gInterval(){
-  const left=(+SET.gCap||0)-(usageGet().groute||0)-2;if(left<=0)return Infinity;
-  return Math.max(5,Math.min(20,driveMin(curKm,TOTAL)/left))*60e3;
-}
-setInterval(()=>{
-  if(MODE!=="nav"||timer||!curPos||!hasRoute()||rerouting||arrived||!gAvail()||drOn())return;
-  if(FUEL.stopT&&performance.now()-FUEL.stopT>180000)return;
-  if(driveMin(curKm,TOTAL)<10)return;
-  if(Date.now()-gCheckT>gInterval())navCheck();
-},30000);
-async function navCheck(){
-  gCheckT=Date.now();
-  let gs;try{gs=await gRoutes(curPos);gErr="";}catch(e){gErr=e&&e.message||"取得できません";return;}
+// 案内中にGoogleを使うのは「迂回」ボタンを押した時だけ（ふだんの渋滞は地図の交通状況の色と、高速の看板で見る）。
+// Googleが渋滞を考えて出した一番早い別ルートを、今のルートと並べて出し、どちらにするかは運転手が決める
+let checking=false,NOTE=null;
+function note(msg){NOTE={msg,t:Date.now()};syncNav();setTimeout(()=>{if(NOTE&&Date.now()-NOTE.t>=4900){NOTE=null;syncNav();}},5000);}
+async function navCheck(manual){
+  if(checking)return;
+  if(!gAvail()){if(manual)note((usageGet().groute||0)>=(+SET.gCap||0)?"今日のGoogleの上限に達しました":"Googleが使えません");return;}
+  if(STOP){if(manual)note("立ち寄り中は迂回案を探せません");return;}
+  gCheckT=Date.now();checking=true;syncNav();
+  let gs;try{gs=await gRoutes(curPos||posAt(curKm));gErr="";}catch(e){gErr=e&&e.message||"取得できません";checking=false;if(manual)note("迂回案を取得できませんでした");syncNav();return;}
+  checking=false;
   const ov=g=>{let n=0,c=0;for(let i=0;i<g.path.length;i+=Math.max(1,g.path.length/60|0)){c++;if(project(...g.path[i],curKm-0.5,TOTAL).d<0.1)n++;}return c?n/c:0;};
   const sc=gs.map(g=>({g,ov:ov(g)})),cur=sc.find(x=>x.ov>=0.9);
   if(cur){GINFO={t:Date.now(),durMin:cur.g.durMin,staticMin:cur.g.staticMin,yen:cur.g.yen,tollKnown:cur.g.tollKnown,same:true};JAMRAW=gJamList(cur.g);mapJams();drawRouteLine();saveRoute();}
+  // このまま：Googleの時間（なければこのナビの見積もり）と、渋滞による遅れ
   const base=cur?cur.g.durMin:remainMin(curKm,TOTAL,traffic(onHighway()),paceFactor())+jamDelayAhead(curKm,false);
+  const delay=cur?Math.max(0,cur.g.durMin-cur.g.staticMin):jamDelayAhead(curKm,false);
+  const stay={eta:new Date(Date.now()+base*60e3),delay};
   const best=sc.filter(x=>x!==cur&&x.ov<0.9).sort((a,b)=>a.g.durMin-b.g.durMin)[0];
-  if(!STOP&&best&&base-best.g.durMin>=5){
-    const first=!DETOUR;
-    DETOUR={g:best.g,save:base-best.g.durMin,dy:cur&&cur.g.tollKnown&&best.g.tollKnown?best.g.yen-cur.g.yen:null,eta:new Date(Date.now()+best.g.durMin*60e3)};detHtml="";
-    if(first)speak(`迂回すると、約${Math.round(DETOUR.save)}分早く着きます`);
-  }else{DETOUR=null;detHtml="";}
+  if(best){
+    DETOUR={g:best.g,stay,save:base-best.g.durMin,dy:cur&&cur.g.tollKnown&&best.g.tollKnown?best.g.yen-cur.g.yen:null,eta:new Date(Date.now()+best.g.durMin*60e3),t:Date.now()};detHtml="";
+    speak(Math.abs(DETOUR.save)<1?"迂回しても、到着はほぼ同じです":DETOUR.save>0?`迂回すると、約${Math.round(DETOUR.save)}分早く着きます`:`迂回すると、約${Math.round(-DETOUR.save)}分遅くなります`);
+  }else{DETOUR=null;detHtml="";note(`迂回ルートなし（このまま${hm(stay.eta)}着${delay>=1?"・渋滞で+"+Math.round(delay)+"分":""}）`);}
   render(curKm);
 }
 async function takeDetour(){
@@ -1785,7 +1794,7 @@ async function reroute(force,opt){
   rerouting=true;lastReroute=Date.now();syncNav();
   try{
     const t=await fetchTrip(from,hd,opt&&opt.vias?{vias:opt.vias}:{});
-    setRoute(t,true);if(opt&&opt.g){OPT_I=0;OPTS[0].trip=t;applyG(opt.g);}else gCheckT=Math.min(gCheckT,Date.now()-4*60e3); // 再検索の1分後に渋滞を取り直す
+    setRoute(t,true);if(opt&&opt.g){OPT_I=0;OPTS[0].trip=t;applyG(opt.g);}
     rerouteMsg="";trackKm=null;const pr=projectTrack(from[0],from[1],Date.now());offD=curPos?pr.d:0;
     if(timer){demoKm=pr.km;$("sim").value=pr.km;}
     feedFix(pr.km,curPos,A.spd); // 地図の追従位置も新しいルートに合わせる
