@@ -1159,7 +1159,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-13 18:40";
+const BUILD="2026-10-14 00:35";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -2051,7 +2051,7 @@ function onFix(p){
   try{onFix0(p);}catch(e){showErr("GPSの処理",e);}
 }
 function onFix0(p){
-  stopPlay();
+  if(timer){lastFixT=Date.now();return;} // デモ走行中は本物のGPSを使わない（家で再生してもデモが止まらないように）
   const c=p.coords;let s=c.speed!=null&&c.speed>=0?c.speed*3.6:null;
   lastFixT=Date.now();
   { // GPSの更新間隔と、位置どうしから出した速さ（表示の確認用・速度が来ない時の代わり）
