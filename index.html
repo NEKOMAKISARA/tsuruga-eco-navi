@@ -175,6 +175,12 @@ body.sheet .app .jct{display:none}
 .sapa button+button{border-top:1px solid rgba(255,255,255,.35)}
 .sapa .kd{flex-shrink:0;background:#fff;color:#0f7d45;border-radius:4px;font:700 12px/1 var(--num);padding:4px 5px}
 .sapa .yr{flex-shrink:0;font-size:11px;font-weight:700;border:1.5px solid currentColor;border-radius:4px;padding:1px 4px}
+/* トンネル内の分岐：灰色の看板 */
+.sapa.tun{background:#3c4043;box-shadow:inset 0 0 0 3px #3c4043,inset 0 0 0 5px #fff,0 3px 12px rgba(0,0,0,.35)}
+.sapa .th{font-size:12px;font-weight:700;opacity:.9;padding:2px 4px 4px}
+.sapa .tr{display:flex;gap:8px;align-items:center;padding:5px 4px;border-top:1px solid rgba(255,255,255,.35)}
+.sapa.tun .kd{color:#3c4043}.sapa .ta{font-size:22px;line-height:1;flex-shrink:0}
+.sapa.tun .n{font-size:14px;white-space:normal;line-height:1.3}.sapa.tun .k{font-size:16px}
 .sapa button.on{background:#fff;color:#0f7d45}.sapa button.on .kd{background:#0f7d45;color:#fff}
 .sapa .n{flex:1;min-width:0;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sapa .k{font:700 20px/1 var(--num);white-space:nowrap}.sapa .k small{font-size:12px;margin-left:1px}
@@ -262,6 +268,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap"><b id="insetAr"></b><span id="insetTxt"></span></div></div>
+  <div class="sapa tun" id="tunCard" hidden></div>
   <div class="sapa" id="sapaCard" hidden></div>
   <div class="fuel-ask" id="fuelAsk" hidden><b>今の燃費（車の平均燃費の表示）</b><div class="row"><input id="fuelIn" type="text" inputmode="decimal" placeholder="16.2" maxlength="5" aria-label="燃費"><span>km/L</span><button id="fuelSave">記録</button><button id="fuelClose" class="x">閉じる</button></div><small id="fuelMsg">入れなくてもかまいません</small></div>
 </div>
@@ -364,7 +371,7 @@ function xy(lat,lon){const r=Math.PI/180;return[R*lon*r*Math.cos(XLAT*r),R*lat*r
    ROUTE：経路の点、MANS：案内[緯度,経度,文,種類,点の番号]、ATTR：道路の区間{a,b(km),hw(高速),lim(制限速度),v(想定速度)}、SAS：沿線のSA・PA */
 let STOP=null; // 立ち寄り先のSA・PA {name,lat,lon,km}
 let ROUTE=[],MANS=[],ATTR=[],SAS=[],DEST=null,RT={time:0,len:0,toll:false};
-let P=[],RCUM=[0],TOTAL=0,SAKM=[],GUIDE=[],GENK=1;
+let P=[],RCUM=[0],TOTAL=0,SAKM=[],GUIDE=[],GENK=1,TUN=[];
 let MODE="browse"; // browse＝目的地を決める／preview＝経路を確認／nav＝案内中
 const hasRoute=()=>ROUTE.length>1&&TOTAL>0;
 
@@ -429,6 +436,10 @@ function buildIndex(){
   GUIDE=MANS.map(m=>({name:"",text:m[2],ty:m[3],stop:m[5]==="stop",km:m[4]!=null&&RCUM[m[4]]!=null?RCUM[m[4]]:project(m[0],m[1]).km})).sort((a,b)=>a.km-b.km);
   SAKM=SAS.map(s=>{const q=project(s.lat,s.lon);return{name:s.name,lat:s.lat,lon:s.lon,km:q.km,d:q.d,f:""};}).filter(s=>s.d<0.5).sort((a,b)=>a.km-b.km);
   if(STOP){const g=GUIDE.find(x=>x.stop);STOP.km=g?g.km:null;}
+  // トンネル（300m以上）ごとに、中にある案内（分岐・出口）を順番に。出てすぐ（300m以内）の案内も含める
+  TUN=[];for(const a of ATTR){if(!a.tun)continue;const p=TUN[TUN.length-1];if(p&&a.a-p.b<0.05)p.b=a.b;else TUN.push({a:a.a,b:a.b});}
+  TUN=TUN.filter(t=>t.b-t.a>=0.3);
+  for(const t of TUN){t.g=GUIDE.filter(g=>g.km>=t.a-0.05&&g.km<=t.b+0.3);t.g.forEach((g,i)=>{g.tun=t;g.ord=i+1;});}
   calcGenK();initHW();
   $("sim").max=TOTAL.toFixed(1);
 }
@@ -635,7 +646,7 @@ const gradeAt=km=>{if(!ECO.g)return 0;const i=Math.max(0,Math.min(ECO.g.length-1
 const segAt=km=>ECO.segs.find(s=>s.a<=km&&km<s.b)||null;
 const nextSeg=(km,within)=>ECO.segs.find(s=>s.a>km&&s.a-km<=within)||null;
 function profSl(km){const s=segAt(km);return s?{g:s.g,state:s.type}:{g:gradeAt(km),state:"flat"};}
-// 高速の指定速度：基準速度（燃費優先ONならその速度）を制限速度までにし、坂で上下させる。ランプ等の60以下はクルーズを使わない
+// 高速の指定速度：基準速度（燃費優先ONならその速度）を制限速度までにし、坂で上下させる。ランプ等の40以下はクルーズを使わない
 function plannedSet(km){
   const at=attrAt(km),lim=at.lim||80;
   let v=Math.min(lim,ECO.B||SET.cruise);
@@ -749,13 +760,13 @@ function render(km){
   const tr=traffic(hw),f=paceFactor();
   if(SET.ecoRest&&hw)chooseB(km,tr,f,now);else if(!SET.ecoRest)ECO.B=null;
   const sl=ECO.state==="ok"?profSl(km):slope();
-  // 指定速度は高速だけ。渋滞は40（クルーズOFF）、流れ遅めは80（前車に追従）、ランプ等の60以下はクルーズOFF
+  // 指定速度は高速だけ。渋滞は40（クルーズOFF）、流れ遅めは80（前車に追従）、ランプ等の40以下はクルーズOFF（首都高の60はクルーズ）
   let set=null,cc="",adv="";
   const lim=at.lim||80;
   if(hw){
     if(tr.state==="jam"){set=Math.min(40,lim);cc="off";}
     else if(tr.state==="slow"){set=Math.min(80,lim);cc="acc";}
-    else if(at.hw&&lim<=60){set=lim;cc="off";}
+    else if(at.hw&&lim<=40){set=lim;cc="off";}
     else{
       set=plannedSet(km);cc="cruise";
       if(ECO.state==="ok")adv=ecoAdvice(km,set);
@@ -1217,9 +1228,10 @@ function fmtSay(km){return km>=1?`${km.toFixed(km<10?1:0).replace(/\.0$/,"")}キ
 function voiceGuide(nj,d,city){
   if(!nj||MODE!=="nav")return;
   const ths=city?[0.3,0.08]:[2,1,0.3]; // 一般道は300m・80m手前、高速は2km・1km・300m手前
-  for(const th of ths){const key=nj.km.toFixed(2)+"@"+th;
-    if(d<=th&&!spoken.has(key)){ths.filter(x=>x>=th).forEach(x=>spoken.add(nj.km.toFixed(2)+"@"+x));
-      speak((th<=0.08?"まもなく、":fmtSay(d))+(nj.name?nj.name+"、":"")+nj.text);break;}}
+  const th=ths.filter(x=>d<=x).pop();if(th==null)return;
+  const key=nj.km.toFixed(2)+"@"+th;if(spoken.has(key))return;
+  ths.filter(x=>x>=th).forEach(x=>spoken.add(nj.km.toFixed(2)+"@"+x));
+  speak((th<=0.08||d<0.05?"まもなく、":fmtSay(d))+(nj.name?nj.name+"、":"")+nj.text);
 }
 function syncNav(){
   const T=id=>$(id).textContent;
@@ -1227,7 +1239,7 @@ function syncNav(){
   const has=!$("jctBox").hidden;
   $("nvAr").textContent=arrived?"⚑":has?T("jctArrow"):"⚑";
   $("nvDist").innerHTML=!arrived&&has?`${T("jctKm")}<small>${T("jctUnit")}</small>`:"";
-  $("nvName").textContent=!arrived&&has?T("jctName"):"";
+  {const g=GUIDE.find(j=>j.km>curKm+0.02);$("nvName").textContent=!arrived&&has?(g&&g.tun?`トンネル内 ${g.ord}/${g.tun.g.length}`:T("jctName")):"";}
   $("nvTxt").textContent=arrived?"目的地に到着しました":has?T("jctText"):(curPos&&offD>0.25)?"ルートから外れています":"まもなく目的地";
   $("navTop").classList.toggle("soon",$("jctBox").classList.contains("soon"));
   const hw=onHighway();
@@ -1245,7 +1257,7 @@ function syncNav(){
   $("rerouteBtn").hidden=!(off&&curPos&&!rerouting);
   // 曲がる所・IC・JCTが近い時は拡大ポップアップ、高速走行中は次のSA・PA
   const city=isCity(),nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
-  const navOn=(curPos&&performance.now()-A.fixT<15000)||!!timer;
+  const navOn=(curPos&&performance.now()-A.fixT<15000)||!!timer||drOn(); // GPSが途切れて推定位置で走っている間も出す
   const showInset=navOn&&nj&&!off&&onRouteF&&d>0&&d<(city?0.3:1.0)&&insetClosed!==nj.km;
   $("inset").hidden=!showInset;
   insetFor=showInset?nj.km:null;
@@ -1255,7 +1267,19 @@ function syncNav(){
   if(curPos&&hwOn!=null&&hwSaid!==hwOn&&!timer){if(hwSaid!=null&&SET.voice)speak(hwOn?"高速道路に入りました":"一般道に入りました");hwSaid=hwOn;}
   const next=SAKM.filter(x=>x.km>curKm+0.3).slice(0,3);
   if(STOP&&!next.some(x=>x.name===STOP.name)){const st=SAKM.find(x=>x.name===STOP.name&&x.km>curKm);if(st)next.push(st);}
-  $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&next.length);
+  const tun=TUN.find(t=>t.b>curKm&&curKm>=t.a-(hw?2:0.6)&&t.g.some(g=>g.km>curKm+0.02));
+  $("tunCard").hidden=!tun;
+  if(!$("tunCard").hidden){
+    const rest=tun.g.filter(g=>g.km>curKm+0.02),inT=curKm>=tun.a;
+    const h=`<div class="th">${inT?"トンネル内の分岐":`この先${fmtKm(tun.a-curKm)} トンネル内の分岐`} ${tun.g.length}か所</div>`+
+      rest.map(g=>`<div class="tr"><b class="kd">${g.ord}</b><b class="ta">${arrowOf(g.text,g.ty)}</b><span class="n">${esc(g.text)}</span><span class="k">${fmtKm(g.km-curKm)}</span></div>`).join("");
+    if(h!==tunHtml){tunHtml=h;$("tunCard").innerHTML=h;}
+  }
+  // 入口の1km手前（高速）・300m手前（一般道）で、中の分岐をまとめて読む
+  if(tun&&MODE==="nav"){const key="tun@"+tun.a.toFixed(2);
+    if(!spoken.has(key)&&tun.a-curKm<=(hw?1:0.3)&&tun.a>curKm){spoken.add(key);
+      speak(`この先のトンネル内で、分岐が${tun.g.length}か所あります。`+tun.g.map(g=>`${g.ord}つ目、${g.text}`).join("。"));}}
+  $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&next.length&&$("tunCard").hidden);
   if(!$("sapaCard").hidden){
     const h=next.map(x=>{const on=STOP&&STOP.name===x.name,d=x.km-curKm;
       return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n">${esc(saShort(x.name))}</span>${on?'<span class="yr">寄る</span>':""}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
@@ -1268,7 +1292,8 @@ function syncNav(){
     else if(t-ecoCand.t>8000&&e!==lastEcoSay){if(lastEcoSay)speak(`指定速度${T("set")}`);lastEcoSay=e;}}
 }
 // SA・PAの看板：種類（SA/PA）と、上り・下りやSA/PAを除いた名前
-let sapaHtml="";
+let sapaHtml="",tunHtml="";
+const fmtKm=d=>d<1?Math.round(d*10)*100+"m":(d<10?d.toFixed(1):d.toFixed(0))+"km";
 const saKind=n=>/SA|ＳＡ|サービスエリア/.test(n)?"SA":"PA";
 const saShort=n=>n.replace(/[\s　]*[（(](上り|下り|内回り|外回り|[東西南北]行き?)[)）]/g,"").replace(/[\s　]*(SA|PA|ＳＡ|ＰＡ|サービスエリア|パーキングエリア)$/,"").trim()||n;
 $("sapaCard").addEventListener("click",e=>{const b=e.target.closest("button[data-n]");if(b)toggleStop(SAKM.find(x=>x.name===b.dataset.n&&x.km>curKm-0.5));});
@@ -1461,7 +1486,7 @@ function startNav(){
   MODE="nav";applyMapMode();document.body.classList.remove("sheet");
   ECO.stopMin=0;ECO.lastFixT=0;saveStop();DEC.said.clear();spoken.clear();arrived=false;
   if(!FUEL.log.length||Date.now()-FUEL.log[FUEL.log.length-1].t>12*3600e3){if(FUEL.trip){CAL.dist=(FUEL.prior?FUEL.prior.dist:CAL.dist||0)+FUEL.trip.dNew;try{localStorage.setItem("carCal",JSON.stringify(CAL));}catch(e){}FUEL.trip=null;}FUEL.log=[];FUEL.sv={};FUEL.sc={};FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0};FUEL.needStart=true;FUEL.cal=CAL.s;} // 前回の記録が12時間以上前なら新しい旅として始める
-  initCompass();keepAwake();if(SET.voice)speak("案内を開始します");
+  initCompass();initMotion();keepAwake();if(SET.voice)speak("案内を開始します");
   simOffset=0;hist=[];trackKm=null;hwOn=hwSaid=null;hwIn=hwOut=0;holdUntil=0;rotAcc=null;
   if(curPos){const pr=projectTrack(curPos[0],curPos[1],Date.now());offD=pr.d;feedFix(pr.km,curPos,gpsSpeed);render(pr.km);}else render(0);
   saveRoute();
@@ -1483,17 +1508,17 @@ async function loadAttr(){
     for(let a=0;a<TOTAL-0.01;a+=60){
       const b=Math.min(TOTAL,a+60);
       const q={encoded_polyline:encPoly(ptsBetween(a,b)),shape_match:"edge_walk",costing:"auto",
-        filters:{attributes:["edge.road_class","edge.use","edge.speed_limit","edge.speed","edge.length"],action:"include"}};
+        filters:{attributes:["edge.road_class","edge.use","edge.speed_limit","edge.speed","edge.length","edge.tunnel"],action:"include"}};
       const r=await fetch(VAL+"/trace_attributes?json="+encodeURIComponent(JSON.stringify(q)));
       if(!r.ok)throw new Error(r.status);
       const es=(await r.json()).edges||[],tot=es.reduce((s,e)=>s+(e.length||0),0);if(!tot)throw new Error("empty");
       let x=a;for(const e of es){const L=(e.length||0)/tot*(b-a),lim=+e.speed_limit;
-        out.push({a:x,b:x+L,hw:e.road_class==="motorway",lim:lim>0&&lim<200?lim:null,v:e.speed||30});x+=L;}
+        out.push({a:x,b:x+L,hw:e.road_class==="motorway",lim:lim>0&&lim<200?lim:null,v:e.speed||30,tun:!!e.tunnel});x+=L;}
       if(key!==routeKey())return;
       await new Promise(r=>setTimeout(r,300));
     }
     // 同じ種類・制限速度が続く所はまとめる
-    const m=[];for(const s of out){const p=m[m.length-1];if(p&&p.hw===s.hw&&p.lim===s.lim&&Math.abs(p.v-s.v)<1){p.b=s.b;}else m.push(Object.assign({},s));}
+    const m=[];for(const s of out){const p=m[m.length-1];if(p&&p.hw===s.hw&&p.lim===s.lim&&p.tun===s.tun&&Math.abs(p.v-s.v)<1){p.b=s.b;}else m.push(Object.assign({},s));}
     ATTR=m;buildIndex();drawRouteLine();saveRoute();scheduleElev();
     if(MODE==="preview")showPreview();render(curKm);
   }catch(e){} // 取れない時は経路検索の「高速かどうか」で代用（制限速度なし＝80）
@@ -1598,9 +1623,41 @@ function onGpsErr(e){
 }
 /* ---- GPSが途切れた時（トンネル等）：ルートの上を最後の速さで進めた「推定位置」で案内を続ける（最大10分）。
    GPSが戻ったら本当の位置に合わせる ---- */
-const DR={goodT:0};
-function drOn(){const t=performance.now()-A.fixT;return MODE==="nav"&&!!curPos&&!timer&&onRouteF&&A.spd>=10&&t>3000&&t<600000;}
-function drAhead(now){const sec=(now-A.fixT)/1000;return(sec<=2.5?sec:drOn()?Math.min(sec,600):2.5)*A.spd/3600;}
+const DR={goodT:0,ext:0,t:0,stopped:false};
+function drOn(){const t=performance.now()-A.fixT;return MODE==="nav"&&!!curPos&&!timer&&onRouteF&&(A.spd>=10||MOT.ok)&&t>3000&&t<600000;}
+// 最後のGPSから進んだ距離（km）。GPSが途切れている間は、止まっている時は進めず、走っている時は最後の速さで進める
+// （渋滞で一度止まった後は、速さが分からないので25km/hで）
+function drAhead(now){
+  const sec=(now-A.fixT)/1000;
+  if(sec<=2.5||!drOn()){DR.ext=Math.min(sec,2.5)*A.spd/3600;DR.t=now;DR.stopped=false;return DR.ext;}
+  const dt=Math.max(0,Math.min(1,(now-DR.t)/1000));DR.t=now;
+  if(MOT.still)DR.stopped=true;
+  const v=MOT.still?0:DR.stopped||A.spd<10?Math.min(Math.max(A.spd,10),25):A.spd;
+  DR.ext+=dt*v/3600;return DR.ext;
+}
+/* ---- 加速度センサー：揺れの大きさ（2秒間のばらつき）で停車を見分ける。しきい値はGPSで止まっている時・走っている時の揺れから学ぶ ---- */
+const MOT={ok:false,on:false,buf:[],sd:null,still:false,stillT:0,moveT:0,thr:0.05,sS:[],sM:[]};
+function initMotion(){
+  if(MOT.on)return;
+  const h=e=>{const a=e.accelerationIncludingGravity||e.acceleration;if(!a||a.x==null)return;
+    const t=performance.now(),m=Math.hypot(a.x,a.y,a.z);MOT.buf.push([t,m]);while(MOT.buf.length&&t-MOT.buf[0][0]>2000)MOT.buf.shift();
+    if(MOT.buf.length<20)return;MOT.ok=true;
+    const n=MOT.buf.length,mean=MOT.buf.reduce((s,b)=>s+b[1],0)/n;MOT.sd=Math.sqrt(MOT.buf.reduce((s,b)=>s+(b[1]-mean)**2,0)/n);
+    // 1.5秒続いたら切り替える（境目で行ったり来たりしないよう、走り出しはしきい値の1.5倍）
+    if(MOT.sd<MOT.thr){MOT.moveT=0;if(!MOT.stillT)MOT.stillT=t;if(t-MOT.stillT>1500)MOT.still=true;}
+    else if(MOT.sd>MOT.thr*1.5){MOT.stillT=0;if(!MOT.moveT)MOT.moveT=t;if(t-MOT.moveT>1500)MOT.still=false;}};
+  const go=()=>{addEventListener("devicemotion",h);MOT.on=true;};
+  try{if(typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function")DeviceMotionEvent.requestPermission().catch(()=>{});}catch(e){}
+  go(); // 許可されなければイベントが来ないだけ
+}
+// GPSが正しい時に、止まっている時・走っている時の揺れを集めて、しきい値をその車・置き方に合わせる
+function learnMotion(spd,acc){
+  if(MOT.sd==null||spd==null||acc>30)return;
+  const L=spd<1?MOT.sS:spd>30?MOT.sM:null;if(!L)return;
+  L.push(MOT.sd);if(L.length>300)L.shift();
+  if(MOT.sS.length>=20&&MOT.sM.length>=20){const med=a=>[...a].sort((x,y)=>x-y)[a.length>>1];
+    MOT.thr=Math.max(0.01,Math.min(0.5,Math.sqrt(med(MOT.sS)*med(MOT.sM))));}
+}
 setInterval(()=>{if(drOn())render(Math.min(TOTAL,A.fixKm+drAhead(performance.now())));},1000); // 推定位置で案内の距離・音声を進める
 function onFix(p){
   stopPlay();
@@ -1609,6 +1666,7 @@ function onFix(p){
   // トンネルの中などで来る誤差の大きい位置（基地局等、100m超）は、5分以内に良い位置があれば使わない（位置が飛んで「ルート外れ」になるため）
   if(MODE==="nav"&&hasRoute()&&c.accuracy>100&&DR.goodT&&Date.now()-DR.goodT<300000){setStatus("bad",`GPSが弱い（精度±${Math.round(c.accuracy)}m）`);return;}
   if(c.accuracy<=100)DR.goodT=Date.now();
+  learnMotion(s,c.accuracy);
   if(c.heading!=null&&!isNaN(c.heading)&&(s??0)>5)gpsHeading=c.heading;
   setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m）`);
   if(MODE!=="nav"||!hasRoute()){
