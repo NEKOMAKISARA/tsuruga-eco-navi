@@ -1116,7 +1116,15 @@ function setUserZoom(z){if(!(z>=5&&z<=20))return;userZoom=z;try{localStorage.set
 const isCity=()=>!onHighway();
 const curZoom=()=>userZoom??(isCity()?16:13);
 /* ---- ルート上にいるか：GPSの誤差で行き来しないよう、80m以内で戻り・150m超で外れとする ---- */
-let onRouteF=true;
+let onRouteF=true,snapF=false;
+// 表示用：ルートの線に吸い寄せるのは、25m以内で進む向きもルートと合っている時だけ（40m超・向きが60°以上ずれたら外す）
+function routeHdAt(km){return bearing(posAt(Math.max(0,km-0.02)),posAt(km+0.04));}
+function updSnap(){
+  if(!curPos||!hasRoute()||MODE!=="nav"){snapF=!curPos&&hasRoute();return;}
+  const h=A.spd>8?(gpsHeading??A.moveHd):null,dh=h==null?0:Math.abs(((h-routeHdAt(A.fixKm))%360+540)%360-180);
+  if(!snapF&&offD<0.025&&dh<45)snapF=true;
+  else if(snapF&&(offD>0.04||dh>60))snapF=false;
+}
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 const A={fixT:0,fixKm:0,fixPos:null,spd:0,dispKm:null,dispPos:null,lastT:0,lastDraw:0,lastIcon:0,movePos:null,moveHd:null,pinchT:0};
@@ -1131,13 +1139,13 @@ function feedFix(km,pos,spdKmh){
     if(!A.dispPos||distKm(A.dispPos,pos)>1)A.dispPos=pos.slice();
     if(!A.movePos)A.movePos=pos;else if(distKm(A.movePos,pos)>0.015){if(A.spd>8)A.moveHd=bearing(A.movePos,pos);A.movePos=pos;} // 走行中に15m動いたら、その向きを覚える（停車中のぶれは無視）
   }else A.dispPos=null;
-  updOnRoute();startLoop();
+  updOnRoute();updSnap();startLoop();
 }
 // 向き：ルート上ならルートの向き。外れていたら、走行中はGPSの向き、低速ではコンパス、それもなければ直前に動いた向き
 function targetHeading(){
   // 止まっている・ノロノロの時は向きを変えない（GPSのぶれやコンパスの誤差で地図が回るため）
   if(A.spd<8&&rotAcc!=null)return null;
-  if(onRouteF&&A.dispKm!=null&&hasRoute())return bearing(posAt(Math.max(0,A.dispKm-0.02)),posAt(A.dispKm+(isCity()?0.06:0.35)));
+  if(snapF&&A.dispKm!=null&&hasRoute())return bearing(posAt(Math.max(0,A.dispKm-0.02)),posAt(A.dispKm+(isCity()?0.06:0.35)));
   if(A.spd>8&&gpsHeading!=null)return gpsHeading;
   if(A.moveHd!=null)return A.moveHd;
   return rotAcc==null?compassHd:null; // コンパスは、まだ一度も向きが分からない時（出発前）だけ使う // 何も分からなければ向きを変えない
@@ -1156,16 +1164,18 @@ function frame(now){
   if(MODE!=="nav"||!hasRoute()){if(curPos)drawMe(curPos,((rotAcc||0)%360+360)%360);return;} // 目的地を決めている間は印だけ動かす
   if(A.dispKm!=null){const tk=Math.min(TOTAL,A.fixKm+(onRouteF?ahead:0));A.dispKm+=(tk-A.dispKm)*k;}
   let p;
-  if(curPos&&!onRouteF&&A.fixPos){
+  if(curPos&&!snapF&&A.fixPos){
     const tp=hd!=null&&A.spd>5?destPt(A.fixPos,hd,ahead):A.fixPos;
-    if(!A.dispPos)A.dispPos=tp.slice();
-    A.dispPos[0]+=(tp[0]-A.dispPos[0])*k;A.dispPos[1]+=(tp[1]-A.dispPos[1])*k;p=A.dispPos;
-  }else p=posAt(A.dispKm??curKm);
-  drawFrame(p);
+    if(!A.dispPos||A.wasSnap)A.dispPos=(A.lastP||tp).slice();
+    A.dispPos[0]+=(tp[0]-A.dispPos[0])*k;A.dispPos[1]+=(tp[1]-A.dispPos[1])*k;p=A.dispPos;A.wasSnap=false;
+  }else{p=posAt(A.dispKm??curKm);A.wasSnap=true;}
+  A.lastP=p;drawFrame(p);
 }
 // 現在地の印だけ動かす（北が上の地図）
+const mapHd=()=>{try{const h=gmap&&vectorMode&&gmap.getHeading();return typeof h==="number"&&!isNaN(h)?h:0;}catch(e){return 0;}};
+function setMeIcon(ir){ir=Math.round(((ir%360)+360)%360);const t=performance.now();if(t-A.lastIcon>120&&ir!==A.lastIr){A.lastIcon=t;A.lastIr=ir;gMe.setIcon(meIcon(ir));}}
 function drawMe(p,hd){
-  if(gmap&&gMe){gMe.setVisible(true);gMe.setPosition({lat:p[0],lng:p[1]});const t=performance.now();if(t-A.lastIcon>200&&hd!==A.lastIr){A.lastIcon=t;A.lastIr=hd;gMe.setIcon(meIcon(hd));}return;}
+  if(gmap&&gMe){gMe.setVisible(true);gMe.setPosition({lat:p[0],lng:p[1]});setMeIcon(hd-mapHd());return;}
   if(!map||!meMk)return;meMk.setOpacity(1);meMk.setLatLng(p);{const e=meMk.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${hd}deg)`;}
 }
 function drawFrame(p){
@@ -1179,11 +1189,11 @@ function drawFrame(p){
   if(vectorMode&&w>h)c=destPt(c,hd-90,w*0.12*kpp); // 横向きは現在地を右寄りに（中心を左へずらす）
   if(gmap&&gMe){
     gMe.setVisible(true);gMe.setPosition({lat:p[0],lng:p[1]});
-    const ir=vectorMode?0:hd,t=performance.now();if(t-A.lastIcon>200&&ir!==A.lastIr){A.lastIcon=t;A.lastIr=ir;gMe.setIcon(meIcon(ir));}
     if(Date.now()>holdUntil){progMove=true;
       if(vectorMode)gmap.moveCamera({center:{lat:c[0],lng:c[1]},zoom,heading:hd,tilt:45});
       else{const zi=Math.round(zoom);if(gmap.getZoom()!==zi)gmap.setZoom(zi);gmap.setCenter({lat:c[0],lng:c[1]});}
       progMove=false;}
+    setMeIcon(vectorMode?hd-mapHd():hd); // 枠ごと回す時（Map IDなし）は北基準の向き
     return;
   }
   if(!map)return;
@@ -1394,7 +1404,7 @@ function updateInset(nj,d){
   z=Math.max(city?15:13,Math.min(city?19:18,z));
   $("insetAr").textContent=arrowOf(nj.text,nj.ty);
   $("insetTxt").textContent=(d<1?Math.round(d*100)*10+"m ":d.toFixed(1)+"km ")+(nj.name?nj.name+"：":"")+nj.text;
-  const p=onRouteF?posAt(A.dispKm??curKm):(curPos||posAt(curKm)),key=nj.km.toFixed(3)+"|"+routeKey()+"|"+ATTR.length;
+  const p=A.lastP||(snapF?posAt(A.dispKm??curKm):(curPos||posAt(curKm))),key=nj.km.toFixed(3)+"|"+routeKey()+"|"+ATTR.length;
   if(gmap&&window.google){
     $("insetG").hidden=false;$("insetL").hidden=true;
     if(!iMap){
@@ -1406,7 +1416,7 @@ function updateInset(nj,d){
     if(key!==iKey){iKey=key;iLines.forEach(l=>l.setMap(null));iLines=routePolys(true,iMap,8);}
     if(GMAPS_ID){iMap.moveCamera({center:{lat:ctr[0],lng:ctr[1]},zoom:z,heading:hd});$("insetRot").style.setProperty("--irot","0deg");}
     else{iMap.setCenter({lat:ctr[0],lng:ctr[1]});iMap.setZoom(Math.floor(z));$("insetRot").style.setProperty("--irot",(-hd)+"deg");}
-    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(((((rotAcc||0)-(GMAPS_ID?hd:0))%360)+360)%360)); // 立体表示では、ポップアップの向きとの差だけ回す
+    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(((((rotAcc||0)-(GMAPS_ID?(()=>{try{const h=iMap.getHeading();return typeof h==="number"?h:0;}catch(e){return 0;}})():0))%360)+360)%360)); // 立体表示では、ポップアップの向きとの差だけ回す
     return;
   }
   if(!window.L)return;
