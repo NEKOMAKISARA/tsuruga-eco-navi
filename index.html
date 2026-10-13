@@ -1175,21 +1175,26 @@ function startLoop(){if(!looping&&!document.hidden){looping=true;A.lastT=perform
 function frame(now){
   if(document.hidden){looping=false;return;}
   requestAnimationFrame(frame);
-  if(now-A.lastDraw<30)return; // 約30fps
+  if(now-A.lastDraw<(gmap?45:30))return; // Googleの地図は重いので約20fps、それ以外は約30fps
   const dt=Math.min(0.15,(now-A.lastT)/1000);A.lastT=now;A.lastDraw=now;
   const ahead=drAhead(now); // 前回のGPSから先読み（ふだんは最大2.5秒、GPSが途切れた時は推定位置）
   const k=1-Math.exp(-dt*5);
   const hd=targetHeading();
   if(hd!=null&&!isNaN(hd)){if(rotAcc==null)rotAcc=hd;else rotAcc+=(((hd-rotAcc)%360+540)%360-180)*(1-Math.exp(-dt*3));} // 359°→1°で一回転しないよう差分で回す
   if(MODE!=="nav"||!hasRoute()){if(curPos)drawMe(curPos,((rotAcc||0)%360+360)%360);return;} // 目的地を決めている間は印だけ動かす
-  if(A.dispKm!=null){const tk=Math.min(TOTAL,A.fixKm+(onRouteF?ahead:0));A.dispKm+=(tk-A.dispKm)*k;}
+  const fade=Math.exp(-(now-A.fixT)/400); // GPSが来た時のずれを0.4秒で消す
+  if(A.dispKm!=null){
+    const tk=Math.min(TOTAL,A.fixKm+(onRouteF?ahead:0));
+    if(A.errT!==A.fixT){A.errT=A.fixT;A.errKm=Math.max(-0.3,Math.min(0.3,(A.shownKm??tk)-tk));} // 新しいGPS：直前に描いていた位置とのずれを覚える
+    A.dispKm=tk+(A.errKm||0)*fade;
+  }
   let p;
   if(curPos&&!snapF&&A.fixPos){
     const tp=hd!=null&&A.spd>5?destPt(A.fixPos,hd,ahead):A.fixPos;
-    if(!A.dispPos||A.wasSnap)A.dispPos=(A.lastP||tp).slice();
-    A.dispPos[0]+=(tp[0]-A.dispPos[0])*k;A.dispPos[1]+=(tp[1]-A.dispPos[1])*k;p=A.dispPos;A.wasSnap=false;
+    if(A.errPT!==A.fixT||A.wasSnap){A.errPT=A.fixT;const q=A.lastP||tp;A.errP=distKm(q,tp)<0.3?[q[0]-tp[0],q[1]-tp[1]]:[0,0];}
+    p=[tp[0]+A.errP[0]*fade,tp[1]+A.errP[1]*fade];A.wasSnap=false;
   }else{p=posAt(A.dispKm??curKm);A.wasSnap=true;}
-  A.lastP=p;drawFrame(p);
+  A.shownKm=A.dispKm;A.lastP=p;drawFrame(p);
 }
 // 現在地の印だけ動かす（北が上の地図）
 const mapHd=()=>{try{const h=gmap&&vectorMode&&gmap.getHeading();return typeof h==="number"&&!isNaN(h)?h:0;}catch(e){return 0;}};
@@ -1949,6 +1954,7 @@ function passStop(km){if(STOP&&STOP.km!=null&&km>STOP.km+0.5){STOP=null;sapaHtml
 
 /* ===================== GPS：ページを開いた時から受け続ける ===================== */
 let gpsWatch=null,lastFix=null,lastFixT=0,firstFix=true;
+const GPSI={prev:null,iv:null,v:null};
 function startGps(){
   if(gpsWatch!=null)return;
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
@@ -1968,8 +1974,8 @@ function drAhead(now){
   const sec=(now-A.fixT)/1000;
   if(sec<=2.5||!drOn()){DR.ext=Math.min(sec,2.5)*A.spd/3600;DR.t=now;DR.stopped=false;return DR.ext;}
   const dt=Math.max(0,Math.min(1,(now-DR.t)/1000));DR.t=now;
-  if(MOT.still)DR.stopped=true;
-  const v=MOT.still?0:DR.stopped||A.spd<10?Math.min(Math.max(A.spd,10),25):A.spd;
+  if(MOT.still&&A.spd<20)DR.stopped=true; // 揺れが小さいだけ（速い時）では止まったと見なさない
+  const v=MOT.still&&A.spd<20?0:DR.stopped?Math.min(Math.max(A.spd,10),25):A.spd;
   DR.ext+=dt*v/3600;return DR.ext;
 }
 /* ---- 加速度センサー：揺れの大きさ（2秒間のばらつき）で停車を見分ける。しきい値はGPSで止まっている時・走っている時の揺れから学ぶ ---- */
@@ -2000,12 +2006,18 @@ function onFix(p){
   stopPlay();
   const c=p.coords;let s=c.speed!=null&&c.speed>=0?c.speed*3.6:null;
   lastFixT=Date.now();
+  { // GPSの更新間隔と、位置どうしから出した速さ（表示の確認用・速度が来ない時の代わり）
+    const raw=[c.latitude,c.longitude],pv=GPSI.prev;
+    if(pv){const dt=(p.timestamp-pv.t)/1000;if(dt>0.2){GPSI.iv=GPSI.iv==null?dt:GPSI.iv*0.8+dt*0.2;const v=distKm(pv.p,raw)/dt*3600;if(dt<10&&c.accuracy<=50&&v<250)GPSI.v=v;}}
+    GPSI.prev={t:p.timestamp,p:raw};
+    if(s==null&&GPSI.v!=null)s=GPSI.v;
+  }
   // トンネルの中などで来る誤差の大きい位置（基地局等、100m超）は、5分以内に良い位置があれば使わない（位置が飛んで「ルート外れ」になるため）
   if(MODE==="nav"&&hasRoute()&&c.accuracy>100&&DR.goodT&&Date.now()-DR.goodT<300000){setStatus("bad",`GPSが弱い（精度±${Math.round(c.accuracy)}m）`);return;}
   if(c.accuracy<=100)DR.goodT=Date.now();
   learnMotion(s,c.accuracy);
   gpsHeading=c.heading!=null&&!isNaN(c.heading)&&c.heading>=0&&(s??0)>=5?c.heading:null; // 止まっている時の向きは当てにならないので捨てる
-  setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}）`);
+  setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}・速さ ${s!=null?Math.round(s):"—"}km/h${c.speed!=null&&c.speed>=0?"":"（推定）"}・更新 ${GPSI.iv!=null?GPSI.iv.toFixed(1):"—"}秒）`);
   if(MODE!=="nav"||!hasRoute()){
     curPos=[c.latitude,c.longitude];gpsSpeed=s;feedFix(null,curPos,s);
     if(firstFix&&MODE==="browse")centerOn(curPos,15);
