@@ -836,16 +836,23 @@ function posAt(km){
   return[ROUTE[lo][0]+(ROUTE[hi][0]-ROUTE[lo][0])*t,ROUTE[lo][1]+(ROUTE[hi][1]-ROUTE[lo][1])*t];
 }
 let map=null,meMk=null,curPos=null,holdUntil=0,routeLines=[],progMove=false,destMk=null,saMks=[];
+// ルートの線：高速は緑（案内の緑と同じ）、一般道は青。白い縁取りを下に敷く
+const HW_COLOR="#0f7d45",RD_COLOR="#1a73e8";
+function routeRuns(){
+  const runs=[];
+  for(let i=0;i<ROUTE.length-1;i++){const hw=attrAt((RCUM[i]+RCUM[i+1])/2).hw,r=runs[runs.length-1];
+    if(r&&r.hw===hw)r.pts.push(ROUTE[i+1]);else runs.push({hw,pts:[ROUTE[i],ROUTE[i+1]]});}
+  return runs;
+}
+function routePolys(gm,target,w){
+  if(gm){const P=pts=>pts.map(r=>({lat:r[0],lng:r[1]}));
+    return[new google.maps.Polyline({path:P(ROUTE),strokeColor:"#fff",strokeWeight:w+3,strokeOpacity:.95,map:target}),
+      ...routeRuns().map(r=>new google.maps.Polyline({path:P(r.pts),strokeColor:r.hw?HW_COLOR:RD_COLOR,strokeWeight:w,strokeOpacity:.95,map:target}))];}
+  return[L.polyline(ROUTE,{color:"#fff",weight:w+3,opacity:.95}),...routeRuns().map(r=>L.polyline(r.pts,{color:r.hw?HW_COLOR:RD_COLOR,weight:w,opacity:.95}))].map(l=>l.addTo(target));
+}
 function drawRouteLine(){
-  if(gmap){
-    gLines.forEach(l=>l.setMap(null));gLines=[];if(!hasRoute())return;const path=ROUTE.map(r=>({lat:r[0],lng:r[1]}));
-    gLines=[new google.maps.Polyline({path,strokeColor:"#fff",strokeWeight:10,strokeOpacity:.95,map:gmap}),
-            new google.maps.Polyline({path,strokeColor:"#1a73e8",strokeWeight:7,strokeOpacity:.95,map:gmap})];
-    return;
-  }
-  if(!map)return;routeLines.forEach(l=>l.remove());routeLines=[];if(!hasRoute())return;
-  routeLines=[L.polyline(ROUTE,{color:"#fff",weight:10,opacity:.95}),L.polyline(ROUTE,{color:"#1a73e8",weight:7,opacity:.95})];
-  routeLines.forEach(l=>l.addTo(map));
+  if(gmap){gLines.forEach(l=>l.setMap(null));gLines=hasRoute()?routePolys(true,gmap,7):[];return;}
+  if(!map)return;routeLines.forEach(l=>l.remove());routeLines=hasRoute()?routePolys(false,map,7):[];
 }
 // 目的地とSA・PAの印
 function drawMarks(){
@@ -1257,7 +1264,7 @@ function updateInset(nj,d){
   z=Math.max(city?15:13,Math.min(city?19:18,z));
   $("insetAr").textContent=arrowOf(nj.text,nj.ty);
   $("insetTxt").textContent=(d<1?Math.round(d*100)*10+"m ":d.toFixed(1)+"km ")+(nj.name?nj.name+"：":"")+nj.text;
-  const p=onRouteF?posAt(A.dispKm??curKm):(curPos||posAt(curKm)),key=nj.km.toFixed(3)+"|"+routeKey();
+  const p=onRouteF?posAt(A.dispKm??curKm):(curPos||posAt(curKm)),key=nj.km.toFixed(3)+"|"+routeKey()+"|"+ATTR.length;
   if(gmap&&window.google){
     $("insetG").hidden=false;$("insetL").hidden=true;
     if(!iMap){
@@ -1266,8 +1273,7 @@ function updateInset(nj,d){
       iMap=new google.maps.Map($("insetG"),o);usageBump("gmap");
       iMe=new google.maps.Marker({map:iMap,zIndex:9,icon:meIcon(0)});
     }
-    if(key!==iKey){iKey=key;iLines.forEach(l=>l.setMap(null));const path=ROUTE.map(r=>({lat:r[0],lng:r[1]}));
-      iLines=[new google.maps.Polyline({path,strokeColor:"#fff",strokeWeight:12,map:iMap}),new google.maps.Polyline({path,strokeColor:"#1a73e8",strokeWeight:8,map:iMap})];}
+    if(key!==iKey){iKey=key;iLines.forEach(l=>l.setMap(null));iLines=routePolys(true,iMap,8);}
     if(GMAPS_ID){iMap.moveCamera({center:{lat:ctr[0],lng:ctr[1]},zoom:z,heading:hd});$("insetRot").style.setProperty("--irot","0deg");}
     else{iMap.setCenter({lat:ctr[0],lng:ctr[1]});iMap.setZoom(Math.floor(z));$("insetRot").style.setProperty("--irot",(-hd)+"deg");}
     iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(((((rotAcc||0)-(GMAPS_ID?hd:0))%360)+360)%360)); // 立体表示では、ポップアップの向きとの差だけ回す
@@ -1279,7 +1285,7 @@ function updateInset(nj,d){
     new CachedTiles({maxZoom:18}).addTo(iL);
     iMe=L.marker(p,{icon:L.divIcon({className:"",iconSize:[28,28],html:'<svg class="me-ar" style="width:28px;height:28px" viewBox="0 0 34 34"><path d="M17 3 L29 30 L17 23 L5 30 Z" fill="#1a73e8" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>'})}).addTo(iL);}
   if(key!==iKey){iKey=key;iLines.forEach(l=>l.remove());
-    iLines=[L.polyline(ROUTE,{color:"#fff",weight:12}),L.polyline(ROUTE,{color:"#1a73e8",weight:8})];iLines.forEach(l=>l.addTo(iL));iL.invalidateSize();}
+    iLines=routePolys(false,iL,8);iL.invalidateSize();}
   iL.setView(ctr,Math.min(z,18),{animate:false});$("insetRot").style.setProperty("--irot",(-hd)+"deg");
   iMe.setLatLng(p);{const e=iMe.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${rotAcc||0}deg)`;}
 }
@@ -1455,7 +1461,7 @@ async function loadAttr(){
     }
     // 同じ種類・制限速度が続く所はまとめる
     const m=[];for(const s of out){const p=m[m.length-1];if(p&&p.hw===s.hw&&p.lim===s.lim&&Math.abs(p.v-s.v)<1){p.b=s.b;}else m.push(Object.assign({},s));}
-    ATTR=m;buildIndex();saveRoute();scheduleElev();
+    ATTR=m;buildIndex();drawRouteLine();saveRoute();scheduleElev();
     if(MODE==="preview")showPreview();render(curKm);
   }catch(e){} // 取れない時は経路検索の「高速かどうか」で代用（制限速度なし＝80）
 }
