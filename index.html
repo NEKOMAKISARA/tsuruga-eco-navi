@@ -1190,7 +1190,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 02:40";
+const BUILD="2026-10-14 02:50";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1435,16 +1435,15 @@ function syncNav(){
   if(tun&&MODE==="nav"){const key="tun@"+tun.a.toFixed(2);
     if(!spoken.has(key)&&tun.a-curKm<=(hw?1:0.3)&&tun.a>curKm){spoken.add(key);
       speak(`この先のトンネル内で、分岐が${tun.g.length}か所あります。`+tun.g.map(g=>`${g.ord}つ目、${g.text}`).join("。"));}}
-  // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）。
-  // 続く分岐は、600m以上離れていればそれぞれの地点に立てる（最大3枚、奥のものは小さく）。近いものは手前の看板に「その先」として1行足す
+  // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）。奥の看板は小さく薄く
   const signOk=navOn&&!off&&onRouteF&&hw&&$("tunCard").hidden;
   const sj=signOk?GUIDE.filter(j=>j.km>curKm+0.15&&j.km-curKm<=2.2&&JCT_TY.includes(j.ty)&&(j.name||j.sig)):[];
-  const groups=[];for(const j of sj){const gp=groups[groups.length-1];if(gp&&j.km-gp[gp.length-1].km<0.6)gp.push(j);else groups.push([j]);}
-  const shown=groups.slice(0,1),showSign=shown.length>0; // 次に進む1か所だけ
+  // 分かれ道ごとに1枚（2.2km先までの最大4か所）。中身は自分が進む方向の案内だけ
+  const shown=sj.slice(0,4).map(j=>[j]),showSign=shown.length>0;
   document.body.classList.toggle("hsg",showSign);
   const pins=shown.map((gp,gi)=>{const head=gp[0],dd=head.km-curKm,ar=arrowOf(head.text,head.ty);
-    return{nj:head,html:signHtmlOf(head,dd,gp.slice(1)),side:/↖|↰|↶/.test(ar)?"r":"l",far:gi>0};});
-  if(showSign&&showSignPins(pins)){$("hSign").hidden=true;}
+    return{nj:head,html:signHtmlOf(head,dd,[]),side:/↖|↰|↶/.test(ar)?"r":"l",far:gi>0};});
+  if(showSign&&showSignPins(pins)){$("hSign").hidden=true;unstackPins(pins);}
   else if(showSign){hideSignPin();$("hSign").hidden=false;if(pins[0].html!==signHtml){signHtml=pins[0].html;$("hSign").innerHTML=signHtml;}placeSign();}
   else{hideSignPin();$("hSign").hidden=true;}
   $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&!showSign&&next.length&&$("tunCard").hidden);
@@ -1528,6 +1527,26 @@ function showSignPins(list){
 // 毎フレーム：枠ごと回している地図では、看板を進む向きぶん回し戻す
 function signPinRot(hd){if(!SGN.onMap)return;const a=(gmap&&vectorMode)?0:hd;for(const q of SGP)if(q.on){const r=q.el.firstChild;r.style.transform=(a?`rotate(${a}deg)`:"")+(q.el.classList.contains("far")?" scale(.82)":"");}}
 /* 看板の置き場所：右上 → 右の中ほど → 左（案内の下）の順に、この先3kmのルートが画面で重ならない所 */
+function screenOf(q){
+  const p=A.lastP||posAt(curKm),hd=((rotAcc||0)%360+360)%360*Math.PI/180,W=innerWidth,H=innerHeight;
+  const kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,curZoom())/1000,Lo=layoutNow(),mr=$("map").getBoundingClientRect();
+  const x=(q[1]-p[1])*111.32*Math.cos(p[0]*Math.PI/180),y=(q[0]-p[0])*110.57;
+  const rx=x*Math.cos(hd)-y*Math.sin(hd),ry=x*Math.sin(hd)+y*Math.cos(hd);
+  return[(W>H?W*0.62:W/2)+rx/kpp,mr.top+Lo.ty-ry/kpp*0.75];
+}
+// 同じ側で重なる看板は、奥のものを上へずらして、線を斜めにつなぐ
+function unstackPins(list){
+  const last={r:null,l:null};
+  list.forEach((it,i)=>{const q=SGP[i];if(!q||!q.on)return;
+    const sg=q.el.querySelector(".hsign"),h=sg.offsetHeight*(it.far?0.82:1),y=screenOf(posAt(it.nj.km))[1];
+    let dy=0;const L=last[it.side];
+    if(L){const need=L.y-L.h/2-6-h/2;if(y>need)dy=y-need;}
+    last[it.side]={y:y-dy,h};
+    const len=Math.hypot(26,dy),ang=Math.atan2(-dy,26)*180/Math.PI;
+    const pole=q.el.querySelector(".pole");pole.style.width=len+"px";pole.style.transform=`rotate(${it.side==="r"?ang:180-ang}deg)`;
+    sg.style.marginTop=(-dy)+"px";sg.style[it.side==="r"?"left":"right"]=(24+0)+"px";
+  });
+}
 function routeScreenPts(){
   const p=A.lastP||posAt(curKm),hd=((rotAcc||0)%360+360)%360*Math.PI/180,zoom=curZoom(),W=innerWidth,H=innerHeight;
   const kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,zoom)/1000,Lo=layoutNow(),mr=$("map").getBoundingClientRect();
