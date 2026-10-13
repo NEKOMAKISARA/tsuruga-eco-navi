@@ -1059,6 +1059,12 @@ function initGmap(){
   else Object.assign(opt,{gestureHandling:"greedy",keyboardShortcuts:false,
     styles:[{featureType:"poi",stylers:[{visibility:"off"}]},{featureType:"transit",stylers:[{visibility:"off"}]},{featureType:"administrative.land_parcel",stylers:[{visibility:"off"}]}]});
   gmap=new google.maps.Map($("gmap"),opt);vectorMode=!!GMAPS_ID;document.body.classList.toggle("vec",vectorMode);fitRot();
+  // Map IDがあっても、端末やMap IDの設定によってはラスター（回転・斜めができない画像の地図）で表示される。
+  // 実際の描画方式を見て、ラスターなら地図の枠ごと回す方式に切り替える
+  const rtype=()=>{try{const t=gmap.getRenderingType&&gmap.getRenderingType();if(t==="VECTOR"||t==="RASTER"){const v=t==="VECTOR";
+    if(v!==vectorMode){vectorMode=v;document.body.classList.toggle("vec",v);fitRot();applyMapMode();A.lastIr=null;}
+    mapNote(v?"":"Googleマップ：ラスター表示（Map IDの種類を確認）");}}catch(e){}};
+  gmap.addListener("renderingtype_changed",rtype);setTimeout(rtype,1500);
   drawRouteLine();drawMarks();applyTraffic();
   gMe=makeMe(gmap);gMe.setPosition({lat:p[0],lng:p[1]});gMe.setVisible(!!curPos);
   gmap.addListener("dragstart",()=>{if(Date.now()-A.pinchT>1500)holdUntil=Date.now()+30000;}); // 1本指で動かしたら30秒は追いかけない
@@ -1200,7 +1206,7 @@ function frame(now){
   A.shownKm=A.dispKm;A.lastP=p;drawFrame(p);
 }
 // 現在地の印だけ動かす（北が上の地図）
-const mapHd=()=>{try{const h=gmap&&vectorMode&&gmap.getHeading();return typeof h==="number"&&!isNaN(h)?h:0;}catch(e){return 0;}};
+const mapHd=()=>{try{if(!vectorMode)return 0;const h=gmap&&gmap.getHeading();return typeof h==="number"&&!isNaN(h)?h:0;}catch(e){return 0;}};
 function setMeIcon(ir){gMe.setRot(ir);}
 function drawMe(p,hd){
   if(gmap&&gMe){gMe.setVisible(true);gMe.setPosition({lat:p[0],lng:p[1]});setMeIcon(hd-mapHd());return;}
@@ -1478,7 +1484,7 @@ $("pvTargetClear").addEventListener("click",()=>setTarget(""));
 
 let wake=null;
 async function keepAwake(){try{if("wakeLock" in navigator&&document.visibilityState==="visible")wake=await navigator.wakeLock.request("screen");}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){startLoop();if(wake!==null)keepAwake();}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){A.resumeT=performance.now();startLoop();if(wake!==null)keepAwake();}});
 
 /* ===================== 目的地・経路検索 ===================== */
 function decodeShape(s){let i=0,la=0,lo=0;const out=[];
@@ -1969,12 +1975,22 @@ function onGpsErr(e){
 /* ---- GPSが途切れた時（トンネル等）：ルートの上を最後の速さで進めた「推定位置」で案内を続ける（最大10分）。
    GPSが戻ったら本当の位置に合わせる ---- */
 const DR={goodT:0,ext:0,t:0,stopped:false};
-function drOn(){const t=performance.now()-A.fixT;return MODE==="nav"&&!!curPos&&!timer&&onRouteF&&(A.spd>=10||MOT.ok)&&t>3000&&t<600000;}
+// 推定で進めるのは、GPSが毎秒ちゃんと来ていたのに途切れた時で、トンネル（の手前300m〜）にいる時か、直前のGPSが弱かった時だけ。
+// 画面を戻した直後・開き直した直後（最後のGPSが古い）は推定しない
+function drOn(){
+  const t=performance.now()-A.fixT;
+  if(!(MODE==="nav"&&!!curPos&&!timer&&onRouteF&&(A.spd>=10||MOT.ok)&&t>3000&&t<600000))return false;
+  if(A.resumeT&&A.fixT<A.resumeT)return false; // 画面を戻してから、まだ新しいGPSが来ていない
+  if(!(GPSI.iv!=null&&GPSI.iv<2.5))return false; // そもそもGPSが毎秒来ていなかった
+  const k=A.fixKm,inTun=typeof TUN!=="undefined"&&TUN.some(x=>k>=x.a-0.3&&k<=x.b+0.2);
+  return inTun||GPSI.weak;
+}
 // 最後のGPSから進んだ距離（km）。GPSが途切れている間は、止まっている時は進めず、走っている時は最後の速さで進める
 // （渋滞で一度止まった後は、速さが分からないので25km/hで）
 function drAhead(now){
+  if(A.resumeT&&A.fixT<A.resumeT)return 0; // 画面を戻した直後は、新しいGPSが来るまで先読みしない（古い速さで勝手に進まない）
   const sec=(now-A.fixT)/1000;
-  if(sec<=2.5||!drOn()){DR.ext=Math.min(sec,2.5)*A.spd/3600;DR.t=now;DR.stopped=false;return DR.ext;}
+  if(sec<=2.5||!drOn()){DR.ext=Math.min(sec,1.5)*A.spd/3600;DR.t=now;DR.stopped=false;return DR.ext;}
   const dt=Math.max(0,Math.min(1,(now-DR.t)/1000));DR.t=now;
   if(MOT.still&&A.spd<20)DR.stopped=true; // 揺れが小さいだけ（速い時）では止まったと見なさない
   const v=MOT.still&&A.spd<20?0:DR.stopped?Math.min(Math.max(A.spd,10),25):A.spd;
@@ -2013,13 +2029,14 @@ function onFix0(p){
   lastFixT=Date.now();
   { // GPSの更新間隔と、位置どうしから出した速さ（表示の確認用・速度が来ない時の代わり）
     const raw=[c.latitude,c.longitude],pv=GPSI.prev;
-    if(pv){const dt=(p.timestamp-pv.t)/1000;if(dt>0.2){GPSI.iv=GPSI.iv==null?dt:GPSI.iv*0.8+dt*0.2;const v=distKm(pv.p,raw)/dt*3600;if(dt<10&&c.accuracy<=50&&v<250)GPSI.v=v;}}
+    if(pv){const dt=(p.timestamp-pv.t)/1000;if(dt>0.2){GPSI.iv=GPSI.iv==null?dt:GPSI.iv*0.8+dt*0.2;const v=distKm(pv.p,raw)/dt*3600;GPSI.v=dt<10&&c.accuracy<=50&&v<250?v:null;}else GPSI.v=null;}else GPSI.v=null;
     GPSI.prev={t:p.timestamp,p:raw};
     if(s==null&&GPSI.v!=null)s=GPSI.v;
   }
   // トンネルの中などで来る誤差の大きい位置（基地局等、100m超）は、5分以内に良い位置があれば使わない（位置が飛んで「ルート外れ」になるため）
   if(MODE==="nav"&&hasRoute()&&c.accuracy>100&&DR.goodT&&Date.now()-DR.goodT<300000){setStatus("bad",`GPSが弱い（精度±${Math.round(c.accuracy)}m）`);return;}
   if(c.accuracy<=100)DR.goodT=Date.now();
+  GPSI.weak=c.accuracy>30;
   learnMotion(s,c.accuracy);
   gpsHeading=c.heading!=null&&!isNaN(c.heading)&&c.heading>=0&&(s??0)>=5?c.heading:null; // 止まっている時の向きは当てにならないので捨てる
   setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}・速さ ${s!=null?Math.round(s):"—"}km/h${c.speed!=null&&c.speed>=0?"":"（推定）"}・更新 ${GPSI.iv!=null?GPSI.iv.toFixed(1):"—"}秒・遅れ ${(GPSI.age/1000).toFixed(1)}秒・画面 ${GPSI.fps!=null?Math.round(GPSI.fps):"—"}fps）`+(GPSI.err?`　⚠${GPSI.err}`:""));
@@ -2030,7 +2047,7 @@ function onFix0(p){
   }
   firstFix=false;
   const pr=projectTrack(c.latitude,c.longitude,p.timestamp);
-  curPos=[c.latitude,c.longitude];gpsSpeed=s??gpsSpeed;offD=pr.d;feedFix(pr.km,curPos,s,p.timestamp); // 先に位置を更新（この後でエラーが出ても矢印は止まらない）
+  curPos=[c.latitude,c.longitude];offD=pr.d;feedFix(pr.km,curPos,s??0,p.timestamp);if(s!=null)gpsSpeed=s; // 先に位置を更新（この後でエラーが出ても矢印は止まらない）
   if(s==null&&lastFix){const dt=(p.timestamp-lastFix.t)/3.6e6;if(dt>0)s=Math.max(0,(pr.km-lastFix.km)/dt);} // 速度が取れない時は進み具合から推定
   lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
   const alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
