@@ -155,6 +155,8 @@ body.sheet .app .jct{display:none}
 .nav-toast button{width:auto;padding:6px 14px;background:#1a73e8;color:#fff;border:0;border-radius:18px;font-size:14px}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
 /* 指定速度：標識と見間違えないよう、丸や赤は使わず青いカードに */
+.road{align-self:flex-end;background:#fff;color:#3c4043;border-radius:10px;padding:6px 10px;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:nowrap}
+.road.hw{background:#0f7d45;color:#fff}
 .setv{background:#1a73e8;color:#fff;border-radius:12px;padding:4px 12px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);min-width:70px}
 .setv b{display:block;font-family:var(--num);font-size:30px;line-height:1.1}
 .setv small{display:block;font-size:11px;opacity:.9}
@@ -211,6 +213,7 @@ body.sheet .app .jct{display:none}
   <div class="fuel-ask" id="fuelAsk" hidden><b>今の燃費（車の平均燃費の表示）</b><div class="row"><input id="fuelIn" type="text" inputmode="decimal" placeholder="16.2" maxlength="5" aria-label="燃費"><span>km/L</span><button id="fuelSave">記録</button><button id="fuelClose" class="x">閉じる</button></div><small id="fuelMsg">入れなくてもかまいません</small></div>
 </div>
 <div class="nav-eco" id="navEco">
+  <div class="road" id="nvRoad">一般道</div>
   <div class="setv"><small>指定</small><b id="nvSet">--</b><small id="nvCc"></small></div>
   <div class="spd"><b id="nvSpd">--</b><small>km/h</small></div>
   <div class="shift"><b id="nvShift">D</b><small id="nvShiftSub"></small></div>
@@ -373,7 +376,7 @@ try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}ca
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 function xy(lat,lon){const r=Math.PI/180;return[R*lon*r*Math.cos(35.3*r),R*lat*r];}
 // 曲がる所の案内（同じ経路検索の結果から。文言は標識の情報に基づく）
-const MAN=[[35.69898,139.41442,"左方向"],[35.69897,139.41258,"左方向、その先昭和記念公園通り"],[35.70029,139.40585,"曙町一丁目を左方向"],[35.69935,139.38813,"郷地町を右方向"],[35.70387,139.34895,"拝島町を左方向"],[35.6855,139.34716,"左入町を右方向"],[35.7024,139.31292,"左方向、高月楢原線/186、その先186"],[35.7013,139.31108,"右方向、高月楢原線/186、その先、186"],[35.69683,139.30596,"左方向、その先186"],[35.68945,139.30883,"右方向、その先高月楢原線/186"],[35.68933,139.30506,"犬目交番前を左方向"],[35.67317,139.29567,"右方向、陣馬高原/八王子西IC方面"],[35.67262,139.25943,"川原宿を右方向"],[35.68038,139.25543,"C4を左方向"],[35.42753,139.37665,"4-2番出口、その先E1、名古屋方面"],[35.42433,139.3768,"右方向、その先E1、名古屋方面"],[35.42294,139.36727,"右方向、その先E1、名古屋方面"],[35.34309,139.15687,"右方向、その先E1"],[35.27034,138.91595,"左方向、7-1番出口、その先E1A、新東名/静岡/名古屋方面"],[35.02502,137.15388,"19-2番出口、その先E1、静岡/名神方面"],[35.02318,137.15136,"右方向、その先E1、豊田/名古屋方面"],[35.16826,137.02777,"右方向、その先E1、小牧/京都方面"],[35.31811,136.32514,"27-1番出口、その先E8、米原/舞鶴若狭道/福井方面"],[35.64189,136.09457,"4番出口"],[35.64677,136.089,"右方向、その先8、越前市/福井/敦賀市街/越前海岸方面"]];
+const MAN=[[35.69898,139.41442,"左方向"],[35.69897,139.41258,"左方向、その先昭和記念公園通り"],[35.70029,139.40585,"曙町一丁目を左方向"],[35.69935,139.38813,"郷地町を右方向"],[35.70387,139.34895,"拝島町を左方向"],[35.6855,139.34716,"左入町を右方向"],[35.7024,139.31292,"左方向、高月楢原線/186、その先186"],[35.7013,139.31108,"右方向、高月楢原線/186、その先、186"],[35.69683,139.30596,"左方向、その先186"],[35.68945,139.30883,"右方向、その先高月楢原線/186"],[35.68933,139.30506,"犬目交番前を左方向"],[35.67317,139.29567,"右方向、陣馬高原/八王子西IC方面"],[35.67262,139.25943,"川原宿を右方向"],[35.68038,139.25543,"C4を左方向"],[35.42753,139.37665,"左方向、4-2番出口、その先E1、名古屋方面",21],[35.42433,139.3768,"右方向、その先E1、名古屋方面",23],[35.42294,139.36727,"右方向、その先E1、名古屋方面",23],[35.34309,139.15687,"右方向、その先E1",23],[35.27034,138.91595,"左方向、7-1番出口、その先E1A、新東名/静岡/名古屋方面",24],[35.02502,137.15388,"左方向、19-2番出口、その先E1、静岡/名神方面",21],[35.02318,137.15136,"右方向、その先E1、豊田/名古屋方面",23],[35.16826,137.02777,"右方向、その先E1、小牧/京都方面",23],[35.31811,136.32514,"左方向、27-1番出口、その先E8、米原/舞鶴若狭道/福井方面",21],[35.64189,136.09457,"左方向、4番出口",21],[35.64677,136.089,"右方向、その先8、越前市/福井/敦賀市街/越前海岸方面"]];
 let P,RCUM,TOTAL,CUM,JKM,SAKM,GUIDE;
 
 function project(lat,lon,kmFrom,kmTo){
@@ -399,6 +402,28 @@ function projectTrack(lat,lon,t){
   }
   trackKm=r.km;trackT=t;return r;
 }
+// 高速道路に乗っているか：速さではなく場所で決める（渋滞中も高速、速い一般道は一般道）。
+// 予定ルートの高速部分（八王子西ICの入口〜敦賀ICの出口）の線上を、同じ向きで3回続けて走ったら高速、
+// 線から離れたのが3回続いたら一般道。高速の下や上を横切る一般道は向きが違うので高速にならない
+let HWL=null,hwOn=null,hwIn=0,hwOut=0,hwSaid=null;
+function initHW(){
+  const a=MAN.find(m=>/^C4を/.test(m[2])),b=MAN.find(m=>/4番出口$/.test(m[2]));
+  const k0=project(a[0],a[1]).km,k1=project(b[0],b[1]).km;
+  HWL=[];for(let i=0;i<P.length-1;i++)if(RCUM[i+1]>=k0&&RCUM[i]<=k1)HWL.push([P[i],P[i+1]]);
+}
+function hwUpdate(lat,lon,hd){
+  const q=xy(lat,lon);let bd=1e9,bh=0;
+  for(const[a,b]of HWL){const dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy||1e-12;
+    const t=Math.max(0,Math.min(1,((q[0]-a[0])*dx+(q[1]-a[1])*dy)/L2)),d=Math.hypot(q[0]-(a[0]+t*dx),q[1]-(a[1]+t*dy));
+    if(d<bd){bd=d;bh=(Math.atan2(dx,dy)*180/Math.PI+360)%360;}}
+  const diff=hd==null?0:Math.abs(((hd-bh)%360+540)%360-180);
+  if(bd<(hwOn?0.08:0.05)&&diff<35){hwOut=0;if(++hwIn>=3)hwOn=true;}
+  else{hwIn=0;if(++hwOut>=3)hwOn=false;}
+}
+function onHighway(){
+  if(curPos&&hwOn!=null)return hwOn;
+  const zi=zoneAt(curKm);return zi.z.v>=70&&zi.i<Z.length; // デモ走行・GPS前は区間で決める
+}
 // ルート（ROUTE）と案内（mans）から距離・区間・案内を作り直す。再検索の後にも呼ぶ
 function rebuildRoute(mans,via){
   P=ROUTE.map(r=>xy(r[0],r[1]));trackKm=null;
@@ -410,7 +435,7 @@ function rebuildRoute(mans,via){
   JKM=JCT.map(j=>{const q=project(j[1],j[2]);return{name:j[0],text:j[3],km:q.km,d:q.d};}).filter(j=>j.d<4);
   SAKM=SA.map(s=>({name:s[0],km:project(s[1],s[2]).km,f:s[3]||""})).sort((a,b)=>a.km-b.km);
   // 案内：経路検索の案内を基本に、近くに案内がないJCTだけ手書きの方面を足す
-  const g=mans.map(m=>({name:"",text:m[2],km:project(m[0],m[1]).km}));
+  const g=mans.map(m=>({name:"",text:m[2],ty:m[3],km:project(m[0],m[1]).km}));
   // 再検索した経路では、予定の本線に戻るまで（最初の経由点より手前）は手書きの方面を出さない
   const fromKm=via?project(via.lat,via.lon).km:0;
   for(const j of JKM)if(j.km>=fromKm&&!g.some(x=>Math.abs(x.km-j.km)<1.2))g.push(j);
@@ -857,10 +882,10 @@ function render(km){
   nextGuideD=nj?nj.km-km:null;
   $("jctBox").hidden=!nj||(curPos&&offD>0.25);
   if(nj){const d=Math.max(0,nj.km-km);
-    $("jctName").textContent=nj.name;$("jctText").textContent=nj.text;$("jctArrow").textContent=arrowOf(nj.text);
+    $("jctName").textContent=nj.name;$("jctText").textContent=nj.text;$("jctArrow").textContent=arrowOf(nj.text,nj.ty);
     if(d<1){$("jctKm").textContent=Math.round(d*100)*10;$("jctUnit").textContent="m";}
     else{$("jctKm").textContent=d<10?d.toFixed(1):d.toFixed(0);$("jctUnit").textContent="km";}
-    $("jctBox").classList.toggle("soon",d<(gpsSpeed!=null&&gpsSpeed<60?0.3:2));}
+    $("jctBox").classList.toggle("soon",d<(isCity()?0.3:2));}
   syncNav();
   updateMap();
 }
@@ -1026,7 +1051,7 @@ let rotAcc=null,gpsHeading=null,offD=0,nextGuideD=null,compassHd=null;
 /* ---- 地図の拡大率：ピンチで変えた値を保存し、以後はその拡大率で追いかける ---- */
 let userZoom=null;try{const z=parseFloat(localStorage.getItem("mapZoom"));if(z>=5&&z<=20)userZoom=z;}catch(e){}
 function setUserZoom(z){if(!(z>=5&&z<=20))return;userZoom=z;try{localStorage.setItem("mapZoom",String(z));}catch(e){}}
-const isCity=()=>gpsSpeed!=null&&gpsSpeed<60;
+const isCity=()=>!onHighway();
 const curZoom=()=>userZoom??(isCity()?16:13);
 /* ---- ルート上にいるか：GPSの誤差で行き来しないよう、80m以内で戻り・150m超で外れとする ---- */
 let onRouteF=true;
@@ -1199,13 +1224,15 @@ function syncNav(){
   $("nvToastTxt").textContent=off?T("offroute"):tr?T("trafficBox"):ad?T("advice"):"";
   $("rerouteBtn").hidden=!(off&&curPos&&!rerouting);
   // 曲がる所・IC・JCTが近い時は拡大ポップアップ、高速走行中は次のSA・PA
-  const city=gpsSpeed!=null&&gpsSpeed<60,nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
+  const city=isCity(),nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
   const navOn=(curPos&&performance.now()-A.fixT<15000)||!!timer;
   const showInset=navOn&&nj&&!off&&onRouteF&&d>0&&d<(city?0.3:1.0)&&insetClosed!==nj.km;
   $("inset").hidden=!showInset;
   insetFor=showInset?nj.km:null;
   if(showInset)updateInset(nj,d);
-  const zi=zoneAt(curKm),hw=zi.z.v>=70&&zi.i<Z.length;
+  const hw=onHighway();
+  $("nvRoad").textContent=hw?"高速":"一般道";$("nvRoad").classList.toggle("hw",hw);
+  if(curPos&&hwOn!=null&&hwSaid!==hwOn){if(hwSaid!=null&&SET.voice)speak(hwOn?"高速道路に入りました":"一般道に入りました");hwSaid=hwOn;}
   const next=SAKM.filter(x=>x.km>curKm+0.3).slice(0,3);
   $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&next.length);
   if(!$("sapaCard").hidden){
@@ -1227,7 +1254,7 @@ function updateInset(nj,d){
   const spanM=(k1-k0)*1000+(city?40:150);
   let z=Math.log2(156543.03*Math.cos(ctr[0]*Math.PI/180)*hpx*0.75/spanM);
   z=Math.max(city?15:13,Math.min(city?19:18,z));
-  $("insetAr").textContent=arrowOf(nj.text);
+  $("insetAr").textContent=arrowOf(nj.text,nj.ty);
   $("insetTxt").textContent=(d<1?Math.round(d*100)*10+"m ":d.toFixed(1)+"km ")+(nj.name?nj.name+"：":"")+nj.text;
   const p=onRouteF?posAt(A.dispKm??curKm):(curPos||posAt(curKm)),key=nj.km.toFixed(3)+"|"+ROUTE.length;
   if(gmap&&window.google){
@@ -1255,7 +1282,10 @@ function updateInset(nj,d){
   iL.setView(ctr,Math.min(z,18),{animate:false});$("insetRot").style.setProperty("--irot",(-hd)+"deg");
   iMe.setLatLng(p);{const e=iMe.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${rotAcc||0}deg)`;}
 }
-function arrowOf(t){
+// 矢印：経路検索の案内の種類があればそれで決める（高速の分岐・出口は斜め、曲がる所は直角）
+const TY_AR={9:"↗",18:"↗",20:"↗",23:"↗",16:"↖",19:"↖",21:"↖",24:"↖",10:"↱",11:"↱",14:"↰",15:"↰",17:"↑",22:"↑",12:"↶",13:"↶"};
+function arrowOf(t,ty){
+  if(TY_AR[ty])return TY_AR[ty];
   if(/Uターン/.test(t))return"↶";
   if(/直進/.test(t))return"↑";
   const r=t.search(/右方向|右折/),l=t.search(/左方向|左折/); // 地名の「左」「右」に反応しないよう方向の語で判定
@@ -1291,7 +1321,9 @@ async function reroute(lat,lon,heading){
     if(!r.ok)throw new Error(r.status);
     const d=await r.json(),mans=[];let pts=[];
     for(const leg of d.trip.legs){const sh=decodeShape(leg.shape);
-      for(const m of leg.maneuvers)if(![1,2,3,4,8].includes(m.type))mans.push([...sh[m.begin_shape_index],cleanIns(m.instruction)]);
+      for(const m of leg.maneuvers)if(![1,2,3,4,8].includes(m.type)){let t=cleanIns(m.instruction);
+        if((m.type===20||m.type===21)&&!/^(左|右)方向/.test(t))t=(m.type===21?"左":"右")+"方向、"+t; // 出口は左右を書き足す
+        mans.push([...sh[m.begin_shape_index],t,m.type]);}
       pts=pts.concat(sh);}
     usageBump("route");ROUTE=pts;rebuildRoute(mans,vias[0]);drawRouteLine();hist=[];offCount=0;
     rerouteMsg="";const pr=project(lat,lon);render(pr.km);
@@ -1303,7 +1335,7 @@ $("startBtn").addEventListener("click",()=>{
   if(!FUEL.log.length||Date.now()-FUEL.log[FUEL.log.length-1].t>12*3600e3){if(FUEL.trip){CAL.dist=(FUEL.prior?FUEL.prior.dist:CAL.dist||0)+FUEL.trip.dNew;try{localStorage.setItem("carCal",JSON.stringify(CAL));}catch(e){}FUEL.trip=null;}FUEL.log=[];FUEL.sv={};FUEL.sc={};FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0};FUEL.needStart=true;FUEL.cal=CAL.s;} // 前回の記録が12時間以上前なら新しい旅として始める
   initCompass();keepAwake();if(SET.voice)speak("ナビを開始します");
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
-  stopPlay();simOffset=0;hist=[];trackKm=null;
+  stopPlay();simOffset=0;hist=[];trackKm=null;hwOn=hwSaid=null;hwIn=hwOut=0;
   setStatus("demo","GPS取得中…");
   try{
     navigator.geolocation.watchPosition(p=>{
@@ -1314,6 +1346,7 @@ $("startBtn").addEventListener("click",()=>{
       lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
       if(p.coords.heading!=null&&!isNaN(p.coords.heading)&&(s??0)>5)gpsHeading=p.coords.heading;
       const c=p.coords,alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
+      hwUpdate(c.latitude,c.longitude,(s??0)>8?(c.heading!=null&&!isNaN(c.heading)?c.heading:A.moveHd):null);
       curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);checkArea(curPos);trackStop(s);
       if(FUEL.needStart){FUEL.needStart=false;FUEL.startKm=pr.km;fuelStore();}
       if(offD<0.25)recordSpeed(pr.km,s);
@@ -1357,7 +1390,7 @@ $("playBtn").addEventListener("click",()=>{
   },250);
 });
 setInterval(()=>render(curKm),20000);
-rebuildRoute(MAN);
+rebuildRoute(MAN);initHW();
 updateCal();
 // 再検索で経路を引き直す時に、予定どおりの道を通らせるための本線上の点（元のルート上の距離）
 const VIA=[35,90,200,340,400,445].map(k=>{const p=posAt(k);return{lat:p[0],lon:p[1]};});
