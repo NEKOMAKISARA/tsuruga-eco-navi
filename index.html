@@ -1033,9 +1033,23 @@ function loadGmaps(){
   window.gm_authFailure=()=>{gmap=null;gState="fail";$("gmap").hidden=true;$("lmap").hidden=false;initLeaflet();mapNote("Googleマップ：キーが使えません（制限・有効化を確認）");};
   window.onGmaps=()=>{gState="ok";initGmap();fitRot();usageBump("gmap");};
   const sc=document.createElement("script");
-  sc.src=`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&v=weekly&language=ja&region=JP&loading=async&callback=onGmaps`;
+  sc.src=`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&v=weekly&language=ja&region=JP&loading=async&libraries=marker&callback=onGmaps`;
   sc.async=true;sc.onerror=fail;document.head.appendChild(sc);
   setTimeout(()=>{if(gState==="loading")fail();},12000);
+}
+/* 現在地の矢印。setRot(角度) は「画面の上=0」で時計回りに回す。地図が回っている時は呼ぶ側で地図の向きを引く。
+   Map IDがある時はAdvancedMarker（中身がHTMLなのでCSSの回転がそのまま画面に効く）、ない時は従来のマーカー */
+function makeMe(m,size){
+  const AM=window.google&&google.maps.marker&&google.maps.marker.AdvancedMarkerElement;
+  if(AM&&GMAPS_ID){
+    const box=document.createElement("div"),sz=size||34;
+    box.style.cssText=`width:${sz}px;height:${sz}px;transform:translateY(50%);pointer-events:none`; // 中心を位置に合わせる
+    box.innerHTML='<svg viewBox="0 0 34 34" style="width:100%;height:100%;display:block;transition:none"><path d="M17 3 L29 30 L17 23 L5 30 Z" fill="#1a73e8" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>';
+    const svg=box.firstChild,mk=new AM({map:m,content:box,zIndex:9});let last=null;
+    return{setPosition:q=>{mk.position=q;},setVisible:v=>{mk.map=v?m:null;},setRot:r=>{r=Math.round(((r%360)+360)%360);if(r!==last){last=r;svg.style.transform=`rotate(${r}deg)`;}}};
+  }
+  const mk=new google.maps.Marker({map:m,zIndex:9,icon:meIcon(0)});let last=null;
+  return{setPosition:q=>mk.setPosition(q),setVisible:v=>mk.setVisible(v),setRot:r=>{r=Math.round(((r%360)+360)%360);if(r!==last){last=r;mk.setIcon(meIcon(r));}}};
 }
 function initGmap(){
   const p=hasRoute()?posAt(curKm):(curPos||[35.68,139.6]);
@@ -1046,7 +1060,7 @@ function initGmap(){
     styles:[{featureType:"poi",stylers:[{visibility:"off"}]},{featureType:"transit",stylers:[{visibility:"off"}]},{featureType:"administrative.land_parcel",stylers:[{visibility:"off"}]}]});
   gmap=new google.maps.Map($("gmap"),opt);vectorMode=!!GMAPS_ID;document.body.classList.toggle("vec",vectorMode);fitRot();
   drawRouteLine();drawMarks();applyTraffic();
-  gMe=new google.maps.Marker({position:{lat:p[0],lng:p[1]},map:gmap,zIndex:9,icon:meIcon(0),visible:!!curPos});
+  gMe=makeMe(gmap);gMe.setPosition({lat:p[0],lng:p[1]});gMe.setVisible(!!curPos);
   gmap.addListener("dragstart",()=>{if(Date.now()-A.pinchT>1500)holdUntil=Date.now()+30000;}); // 1本指で動かしたら30秒は追いかけない
   gmap.addListener("zoom_changed",()=>{if(!progMove&&MODE==="nav")setUserZoom(gmap.getZoom());}); // ピンチした拡大率を保存
   const pin=e=>{if(e.touches&&e.touches.length>1)A.pinchT=Date.now();};$("gmap").addEventListener("touchstart",pin,{passive:true,capture:true});$("gmap").addEventListener("touchmove",pin,{passive:true,capture:true});
@@ -1143,16 +1157,16 @@ function feedFix(km,pos,spdKmh){
   if(km!=null){A.fixKm=km;if(A.dispKm==null||Math.abs(A.dispKm-km)>1)A.dispKm=km;} // 1km以上飛んだら補間せずに移動
   if(pos){
     if(!A.dispPos||distKm(A.dispPos,pos)>1)A.dispPos=pos.slice();
-    if(!A.movePos)A.movePos=pos;else if(distKm(A.movePos,pos)>0.015){if(A.spd>8)A.moveHd=bearing(A.movePos,pos);A.movePos=pos;} // 走行中に15m動いたら、その向きを覚える（停車中のぶれは無視）
+    if(!A.movePos)A.movePos=pos;else if(distKm(A.movePos,pos)>0.012){if(A.spd>=5)A.moveHd=bearing(A.movePos,pos);A.movePos=pos;} // 走行中に15m動いたら、その向きを覚える（停車中のぶれは無視）
   }else A.dispPos=null;
   updOnRoute();updSnap();startLoop();
 }
 // 向き：ルート上ならルートの向き。外れていたら、走行中はGPSの向き、低速ではコンパス、それもなければ直前に動いた向き
 function targetHeading(){
   // 止まっている・ノロノロの時は向きを変えない（GPSのぶれやコンパスの誤差で地図が回るため）
-  if(A.spd<8&&rotAcc!=null)return null;
+  if(A.spd<5&&rotAcc!=null)return null;
   if(snapF&&A.dispKm!=null&&hasRoute())return bearing(posAt(Math.max(0,A.dispKm-0.02)),posAt(A.dispKm+(isCity()?0.06:0.35)));
-  if(A.spd>8&&gpsHeading!=null)return gpsHeading;
+  if(A.spd>=5&&gpsHeading!=null&&performance.now()-A.fixT<5000)return gpsHeading;
   if(A.moveHd!=null)return A.moveHd;
   return rotAcc==null?compassHd:null; // コンパスは、まだ一度も向きが分からない時（出発前）だけ使う // 何も分からなければ向きを変えない
 }
@@ -1179,7 +1193,7 @@ function frame(now){
 }
 // 現在地の印だけ動かす（北が上の地図）
 const mapHd=()=>{try{const h=gmap&&vectorMode&&gmap.getHeading();return typeof h==="number"&&!isNaN(h)?h:0;}catch(e){return 0;}};
-function setMeIcon(ir){ir=Math.round(((ir%360)+360)%360);const t=performance.now();if(t-A.lastIcon>120&&ir!==A.lastIr){A.lastIcon=t;A.lastIr=ir;gMe.setIcon(meIcon(ir));}}
+function setMeIcon(ir){gMe.setRot(ir);}
 function drawMe(p,hd){
   if(gmap&&gMe){gMe.setVisible(true);gMe.setPosition({lat:p[0],lng:p[1]});setMeIcon(hd-mapHd());return;}
   if(!map||!meMk)return;meMk.setOpacity(1);meMk.setLatLng(p);{const e=meMk.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${hd}deg)`;}
@@ -1417,12 +1431,12 @@ function updateInset(nj,d){
       const o={center:{lat:ctr[0],lng:ctr[1]},zoom:Math.round(z),disableDefaultUI:true,gestureHandling:"none",clickableIcons:false,keyboardShortcuts:false};
       if(GMAPS_ID)Object.assign(o,{mapId:GMAPS_ID,heading:hd,tilt:0});
       iMap=new google.maps.Map($("insetG"),o);usageBump("gmap");
-      iMe=new google.maps.Marker({map:iMap,zIndex:9,icon:meIcon(0)});
+      iMe=makeMe(iMap,28);
     }
     if(key!==iKey){iKey=key;iLines.forEach(l=>l.setMap(null));iLines=routePolys(true,iMap,8);}
     if(GMAPS_ID){iMap.moveCamera({center:{lat:ctr[0],lng:ctr[1]},zoom:z,heading:hd});$("insetRot").style.setProperty("--irot","0deg");}
     else{iMap.setCenter({lat:ctr[0],lng:ctr[1]});iMap.setZoom(Math.floor(z));$("insetRot").style.setProperty("--irot",(-hd)+"deg");}
-    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setIcon(meIcon(((((rotAcc||0)-(GMAPS_ID?(()=>{try{const h=iMap.getHeading();return typeof h==="number"?h:0;}catch(e){return 0;}})():0))%360)+360)%360)); // 立体表示では、ポップアップの向きとの差だけ回す
+    iMe.setPosition({lat:p[0],lng:p[1]});iMe.setRot((rotAcc||0)-(GMAPS_ID?(()=>{try{const h=iMap.getHeading();return typeof h==="number"&&!isNaN(h)?h:0;}catch(e){return 0;}})():0)); // 立体表示では、ポップアップの向きとの差だけ回す
     return;
   }
   if(!window.L)return;
@@ -1909,7 +1923,7 @@ async function reroute(force,opt){
   if(rerouting||(!force&&Date.now()-lastReroute<5000)||!DEST||!hasRoute())return false;
   const from=curPos||posAt(curKm);if(!from)return false;
   // 向き：ルートの上ならルートの向き（本線の逆方向に引かれないように）、外れていればGPSの向き
-  const hd=onRouteF?bearing(posAt(Math.max(0,curKm-0.05)),posAt(curKm+0.05)):(gpsSpeed??0)>5?gpsHeading:A.moveHd;
+  const hd=onRouteF?bearing(posAt(Math.max(0,curKm-0.05)),posAt(curKm+0.05)):(gpsSpeed??0)>5?(gpsHeading??A.moveHd):A.moveHd;
   rerouting=true;lastReroute=Date.now();syncNav();
   try{
     const t=await fetchTrip(from,hd,opt&&opt.vias?{vias:opt.vias}:{});
@@ -1990,8 +2004,8 @@ function onFix(p){
   if(MODE==="nav"&&hasRoute()&&c.accuracy>100&&DR.goodT&&Date.now()-DR.goodT<300000){setStatus("bad",`GPSが弱い（精度±${Math.round(c.accuracy)}m）`);return;}
   if(c.accuracy<=100)DR.goodT=Date.now();
   learnMotion(s,c.accuracy);
-  if(c.heading!=null&&!isNaN(c.heading)&&(s??0)>5)gpsHeading=c.heading;
-  setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m）`);
+  gpsHeading=c.heading!=null&&!isNaN(c.heading)&&c.heading>=0&&(s??0)>=5?c.heading:null; // 止まっている時の向きは当てにならないので捨てる
+  setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}）`);
   if(MODE!=="nav"||!hasRoute()){
     curPos=[c.latitude,c.longitude];gpsSpeed=s;feedFix(null,curPos,s);
     if(firstFix&&MODE==="browse")centerOn(curPos,15);
