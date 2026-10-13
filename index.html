@@ -328,6 +328,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 <div class="app">
  <div class="col">
   <button id="closeSheet">閉じる</button>
+  <small class="build" id="gpsAge"></small>
   <small class="build" id="buildTag"></small>
   <button id="endNav">案内を終了</button>
   <button id="rerouteSheet">今の位置から再検索</button>
@@ -1158,7 +1159,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-13 18:30";
+const BUILD="2026-10-13 18:40";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1494,7 +1495,7 @@ $("pvTargetClear").addEventListener("click",()=>setTarget(""));
 
 let wake=null;
 async function keepAwake(){try{if("wakeLock" in navigator&&document.visibilityState==="visible")wake=await navigator.wakeLock.request("screen");}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){A.resumeT=performance.now();checkUpdate();startLoop();if(wake!==null)keepAwake();}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){A.resumeT=performance.now();checkUpdate();gpsRestartT=0;restartGps("resume");startLoop();if(wake!==null)keepAwake();}});
 
 /* ===================== 目的地・経路検索 ===================== */
 function decodeShape(s){let i=0,la=0,lo=0;const out=[];
@@ -1796,7 +1797,7 @@ function startNav(){
   MODE="nav";applyMapMode();document.body.classList.remove("sheet");
   ECO.stopMin=0;ECO.lastFixT=0;saveStop();DEC.said.clear();spoken.clear();arrived=false;
   if(!FUEL.log.length||Date.now()-FUEL.log[FUEL.log.length-1].t>12*3600e3){if(FUEL.trip){CAL.dist=(FUEL.prior?FUEL.prior.dist:CAL.dist||0)+FUEL.trip.dNew;try{localStorage.setItem("carCal",JSON.stringify(CAL));}catch(e){}FUEL.trip=null;}FUEL.log=[];FUEL.sv={};FUEL.sc={};FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0};FUEL.needStart=true;FUEL.cal=CAL.s;} // 前回の記録が12時間以上前なら新しい旅として始める
-  initCompass();initMotion();keepAwake();if(SET.voice)speak("案内を開始します");
+  initCompass();initMotion();keepAwake();setTimeout(()=>{gpsRestartT=0;restartGps("start");},2000);if(SET.voice)speak("案内を開始します");
   simOffset=0;hist=[];trackKm=null;TRIPBASE=0;progSaid=false;addHist(DEST);hwOn=hwSaid=null;hwIn=hwOut=0;holdUntil=0;rotAcc=null;
   if(curPos){const pr=projectTrack(curPos[0],curPos[1],Date.now());offD=pr.d;feedFix(pr.km,curPos,gpsSpeed);render(pr.km);}else render(0);
   saveRoute();
@@ -1973,12 +1974,28 @@ function passStop(km){if(STOP&&STOP.km!=null&&km>STOP.km+0.5){STOP=null;sapaHtml
 
 /* ===================== GPS：ページを開いた時から受け続ける ===================== */
 let gpsWatch=null,lastFix=null,lastFixT=0,firstFix=true;
+/* iPhone（特にホーム画面から開いた時）は、位置の受信が黙って止まることがある（許可の確認画面の後など）。
+   案内中にGPSが5秒以上来なければ、受信を掛け直す。掛け直しは10秒に1回まで */
+let gpsRestartT=0,gpsRestarts=0;
+function restartGps(why){
+  const t=Date.now();if(t-gpsRestartT<10000)return;gpsRestartT=t;gpsRestarts++;
+  try{if(gpsWatch!=null)navigator.geolocation.clearWatch(gpsWatch);}catch(e){}
+  gpsWatch=null;startGps();
+  try{navigator.geolocation.getCurrentPosition(onFix,()=>{},{enableHighAccuracy:true,maximumAge:0,timeout:10000});}catch(e){}
+}
+setInterval(()=>{
+  if(document.hidden)return;
+  const age=lastFixT?(Date.now()-lastFixT)/1000:null;
+  if(MODE==="nav"&&gpsWatch!=null&&(age==null||age>5))restartGps("stale");
+  const el=$("gpsAge");if(el)el.textContent=age==null?"GPS：まだ受信していません":`最後のGPS ${age<1?"1秒以内":Math.round(age)+"秒前"}・掛け直し ${gpsRestarts}回`;
+},1000);
 function startGps(){
   if(gpsWatch!=null)return;
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
   try{gpsWatch=navigator.geolocation.watchPosition(onFix,onGpsErr,{enableHighAccuracy:true,maximumAge:2000,timeout:15000});}catch(e){setStatus("bad","位置情報が使えません");}
 }
 function onGpsErr(e){
+  if(e&&(e.code===2||e.code===3)&&MODE==="nav"){setTimeout(()=>restartGps("err"),1000);} // 位置が取れない・時間切れ：掛け直す
   if(e&&e.code===1){gpsWatch!=null&&navigator.geolocation.clearWatch(gpsWatch);gpsWatch=null;setStatus("bad","位置情報が許可されていません");
     const off=$("offroute");off.hidden=false;off.textContent="位置情報が許可されていません。iPhoneの「設定 → プライバシー → 位置情報サービス → Safari」で許可してください。";}
 }
@@ -2047,7 +2064,7 @@ function onFix0(p){
   if(MODE==="nav"&&hasRoute()&&c.accuracy>100&&DR.goodT&&Date.now()-DR.goodT<300000){setStatus("bad",`GPSが弱い（精度±${Math.round(c.accuracy)}m）`);return;}
   if(c.accuracy<=100)DR.goodT=Date.now();
   GPSI.weak=c.accuracy>30;
-  learnMotion(s,c.accuracy);
+  try{learnMotion(s,c.accuracy);}catch(e){showErr("揺れの学習",e);}
   gpsHeading=c.heading!=null&&!isNaN(c.heading)&&c.heading>=0&&(s??0)>=5?c.heading:null; // 止まっている時の向きは当てにならないので捨てる
   setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}・速さ ${s!=null?Math.round(s):"—"}km/h${c.speed!=null&&c.speed>=0?"":"（推定）"}・更新 ${GPSI.iv!=null?GPSI.iv.toFixed(1):"—"}秒・遅れ ${(GPSI.age/1000).toFixed(1)}秒・画面 ${GPSI.fps!=null?Math.round(GPSI.fps):"—"}fps）`+(GPSI.err?`　⚠${GPSI.err}`:""));
   if(MODE!=="nav"||!hasRoute()){
