@@ -1592,12 +1592,14 @@ function applyG(op){
 }
 // 案内中にGoogleを使うのは「迂回」ボタンを押した時だけ（ふだんの渋滞は地図の交通状況の色と、高速の看板で見る）。
 // Googleが渋滞を考えて出した一番早い別ルートを、今のルートと並べて出し、どちらにするかは運転手が決める
-let checking=false,NOTE=null;
+let checking=false,NOTE=null,LASTCHK=null; // LASTCHK：前回の結果（1分以内にもう一度押されたらそのまま出す。ルートが変わったら捨てる）
 function note(msg){NOTE={msg,t:Date.now()};syncNav();setTimeout(()=>{if(NOTE&&Date.now()-NOTE.t>=4900){NOTE=null;syncNav();}},5000);}
 async function navCheck(manual){
   if(checking)return;
   if(!gAvail()){if(manual)note((usageGet().groute||0)>=(+SET.gCap||0)?"今日のGoogleの上限に達しました":"Googleが使えません");return;}
   if(STOP){if(manual)note("立ち寄り中は迂回案を探せません");return;}
+  if(LASTCHK&&Date.now()-LASTCHK.t<60000){ // 続けて押された：Googleに聞かずに前回の結果を出す
+    if(LASTCHK.det){DETOUR=Object.assign({},LASTCHK.det,{t:Date.now()});detHtml="";syncNav();}else note(LASTCHK.note);return;}
   gCheckT=Date.now();checking=true;syncNav();
   let gs;try{gs=await gRoutes(curPos||posAt(curKm));gErr="";}catch(e){gErr=e&&e.message||"取得できません";checking=false;if(manual)note("迂回案を取得できませんでした");syncNav();return;}
   checking=false;
@@ -1611,8 +1613,9 @@ async function navCheck(manual){
   const best=sc.filter(x=>x!==cur&&x.ov<0.9).sort((a,b)=>a.g.durMin-b.g.durMin)[0];
   if(best){
     DETOUR={g:best.g,stay,save:base-best.g.durMin,dy:cur&&cur.g.tollKnown&&best.g.tollKnown?best.g.yen-cur.g.yen:null,eta:new Date(Date.now()+best.g.durMin*60e3),t:Date.now()};detHtml="";
+    LASTCHK={t:Date.now(),det:DETOUR};
     speak(Math.abs(DETOUR.save)<1?"迂回しても、到着はほぼ同じです":DETOUR.save>0?`迂回すると、約${Math.round(DETOUR.save)}分早く着きます`:`迂回すると、約${Math.round(-DETOUR.save)}分遅くなります`);
-  }else{DETOUR=null;detHtml="";note(`迂回ルートなし（このまま${hm(stay.eta)}着${delay>=1?"・渋滞で+"+Math.round(delay)+"分":""}）`);}
+  }else{DETOUR=null;detHtml="";const m=`迂回ルートなし（このまま${hm(stay.eta)}着${delay>=1?"・渋滞で+"+Math.round(delay)+"分":""}）`;LASTCHK={t:Date.now(),note:m};note(m);}
   render(curKm);
 }
 async function takeDetour(){
@@ -1622,6 +1625,7 @@ async function takeDetour(){
 }
 // ルートを入れ替える（新しい目的地・再検索の両方）。SA・PAは再検索では前のものを使い回す
 function setRoute(t,keepSA){
+  if(typeof LASTCHK!=="undefined")LASTCHK=null; // 迂回の比べた結果は前のルートのものなので捨てる
   ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};if(!keepSA)SAS=[];
   buildGeom();
   ATTR=t.ms.map(m=>({a:RCUM[m.b]||0,b:RCUM[m.e]??TOTAL,hw:m.hw,lim:null,v:m.v})).filter(s=>s.b>s.a);
