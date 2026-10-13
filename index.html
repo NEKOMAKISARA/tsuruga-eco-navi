@@ -212,6 +212,16 @@ body.sheet .app .jct{display:none}
   background:#fff;color:#202124;border-radius:16px;padding:8px 8px 8px 16px;display:flex;gap:14px;align-items:center;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 .nav-bottom .eta b{font-family:var(--num);font-size:26px;color:#188038}
 .nav-bottom .eta small{font-size:13px;color:#5f6368;margin-left:2px}
+.nav-bottom.pg{padding-top:18px}
+.prog{position:absolute;left:16px;right:52px;top:8px;height:6px;border-radius:3px;background:#e8eaed}
+.prog i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:#188038}
+.prog .h{position:absolute;left:50%;top:-2px;bottom:-2px;width:2px;margin-left:-1px;background:#9aa0a6}
+.prog .s{position:absolute;top:1px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0f7d45}
+.prog .c{position:absolute;top:-4px;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:#1a73e8;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.prog-p{position:absolute;right:12px;top:3px;font:700 12px/1 var(--num);color:#188038}
+.results .hh{display:flex;justify-content:space-between;align-items:center;padding:8px 14px 4px;font-size:12px;color:#5f6368}
+.results .hr{display:flex;align-items:stretch;border-bottom:1px solid #e8eaed}.results .hr:last-child{border-bottom:0}
+.results .hr button{border-bottom:0;flex:1}.results .hr button.del{flex:0 0 44px;text-align:center;color:#9aa0a6;font-size:18px;padding:0}
 .nav-bottom .meta{display:flex;flex-direction:column;font-size:13px;color:#5f6368;flex:1;min-width:0}
 .nav-bottom .meta #nvSlack{font-weight:700;color:var(--sc,#188038)}
 .nav-bottom button{width:44px;height:44px;padding:0;border-radius:50%;background:#f1f3f4;color:#202124;border:0;font-size:22px}
@@ -309,7 +319,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="setv" id="nvSetBox"><small>指定</small><b id="nvSet">--</b><small id="nvCc"></small></div>
   <div class="spd"><b id="nvSpd">--</b><small>km/h</small></div>
 </div>
-<div class="nav-bottom" id="navBottom"><div class="eta"><b id="nvEta">--:--</b><small>着</small></div><div class="meta"><span id="nvSlack"></span><span id="nvRemain">--</span></div><button id="detBtn" class="det" aria-label="迂回を探す">迂回</button><button id="menuBtn" aria-label="詳細">≡</button></div>
+<div class="nav-bottom" id="navBottom"><div class="prog" id="nvProg" hidden></div><span class="prog-p" id="nvProgP" hidden></span><div class="eta"><b id="nvEta">--:--</b><small>着</small></div><div class="meta"><span id="nvSlack"></span><span id="nvRemain">--</span></div><button id="detBtn" class="det" aria-label="迂回を探す">迂回</button><button id="menuBtn" aria-label="詳細">≡</button></div>
 <div class="sheet-bg" id="sheetBg"></div>
 <div class="app">
  <div class="col">
@@ -785,7 +795,7 @@ function trackStop(spd){
   ECO.lastFixT=t;
 }
 
-let curKm=0,gpsSpeed=null,hurry=false;
+let curKm=0,gpsSpeed=null,hurry=false,TRIPBASE=0;
 function render(km){
   const now=new Date(nowMs());
   $("clock").textContent=hm(now);
@@ -1295,6 +1305,13 @@ function syncNav(){
   $("nvSpd").textContent=T("spd");
   $("nvEta").textContent=T("eta");
   const tg=$("target").value;$("nvSlack").textContent=tg?`目標${tg}・余裕 ${T("slack")}`:"";$("nvSlack").hidden=!tg;
+  // 目的地までの進み具合：ここまで走った距離÷（走った距離＋残り）。SA/PAは小さな点、半分に目盛り
+  {const done=TRIPBASE+Math.max(0,curKm),all=done+Math.max(0,TOTAL-curKm),f=all>0?Math.min(1,done/all):0,pc=v=>(v*100).toFixed(1)+"%";
+    $("navBottom").classList.add("pg");$("nvProg").hidden=$("nvProgP").hidden=false;
+    const h=`<i style="width:${pc(f)}"></i><b class="h"></b>`+SAKM.filter(x=>x.km>0&&x.km<TOTAL).map(x=>`<b class="s" style="left:${pc((TRIPBASE+x.km)/all)}"></b>`).join("")+`<b class="c" style="left:${pc(f)}"></b>`;
+    if(h!==progHtml){progHtml=h;$("nvProg").innerHTML=h;}
+    $("nvProgP").textContent=Math.floor(f*100)+"%";
+    if(f>=0.5&&!progSaid&&all>20&&!arrived){progSaid=true;if(SET.voice&&f<0.6)speak("目的地まで半分を過ぎました");}}
   ensureWX();if(Math.floor(Date.now()/300e3)!==wxTick){wxTick=Math.floor(Date.now()/300e3);drawWx();}
   {const w=wxAt(TOTAL,etaAt(TOTAL));$("nvRemain").textContent="残り "+T("remain")+" km"+(w?" ・ 着 "+wxTxt(w):"");}
   $("navBottom").style.setProperty("--sc",getComputedStyle($("slackBox")).getPropertyValue("--sc").trim()||"#188038");
@@ -1359,7 +1376,7 @@ function syncNav(){
     else if(t-ecoCand.t>8000&&e!==lastEcoSay){if(lastEcoSay)speak(`指定速度${T("set")}`);lastEcoSay=e;}}
 }
 // SA・PAの看板：種類（SA/PA）と、上り・下りやSA/PAを除いた名前
-let sapaHtml="",tunHtml="",detHtml="",wxTick=0;
+let sapaHtml="",tunHtml="",detHtml="",wxTick=0,progHtml="",progSaid=true;
 const fmtKm=d=>d<1?Math.round(d*10)*100+"m":(d<10?d.toFixed(1):d.toFixed(0))+"km";
 const saKind=n=>/SA|ＳＡ|サービスエリア/.test(n)?"SA":"PA";
 const saShort=n=>n.replace(/[\s　]*[（(](上り|下り|内回り|外回り|[東西南北]行き?)[)）]/g,"").replace(/[\s　]*(SA|PA|ＳＡ|ＰＡ|サービスエリア|パーキングエリア)$/,"").trim()||n;
@@ -1458,7 +1475,28 @@ async function search(q){
 }
 function mapCenter(){if(gmap){const c=gmap.getCenter();return[c.lat(),c.lng()];}if(map){const c=map.getCenter();return[c.lat,c.lng];}return[35.68,139.6];}
 $("searchForm").addEventListener("submit",e=>{e.preventDefault();search($("q").value);});
-$("q").addEventListener("focus",()=>{document.body.classList.add("srch");if($("results").children.length)$("results").hidden=false;});
+// 行き先の履歴：出発した目的地を新しい順に20件。検索欄が空の時に出す
+const HIST_N=20;
+function histGet(){try{const a=JSON.parse(localStorage.getItem("destHist")||"[]");return Array.isArray(a)?a:[];}catch(e){return[];}}
+function histPut(a){try{localStorage.setItem("destHist",JSON.stringify(a.slice(0,HIST_N)));}catch(e){}}
+function addHist(d){
+  if(!d)return;const a=histGet().filter(x=>!(distKm([x.lat,x.lon],[d.lat,d.lon])<0.1));
+  a.unshift({name:d.name,addr:d.addr||"",lat:d.lat,lon:d.lon,t:Date.now()});histPut(a);
+}
+function showHist(){
+  const a=histGet(),box=$("results");box.innerHTML="";
+  if(!a.length){box.hidden=true;return;}
+  const c=curPos||mapCenter();
+  box.insertAdjacentHTML("beforeend",'<div class="hh">最近の行き先</div>');
+  a.forEach((x,i)=>{const d=distKm(c,[x.lat,x.lon]),row=document.createElement("div");row.className="hr";
+    row.innerHTML=`<button type="button">${esc(x.name)}<small>${esc(x.addr)}${x.addr?" ・ ":""}${d<10?d.toFixed(1):Math.round(d)} km</small></button><button type="button" class="del" aria-label="履歴から消す">×</button>`;
+    row.children[0].addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});
+    row.children[1].addEventListener("click",e=>{e.preventDefault();histPut(histGet().filter(y=>!(y.lat===x.lat&&y.lon===x.lon)));showHist();$("q").focus();});
+    box.appendChild(row);});
+  box.hidden=false;
+}
+$("q").addEventListener("input",()=>{if(!$("q").value.trim()){searchSeq++;showHist();}});
+$("q").addEventListener("focus",()=>{document.body.classList.add("srch");if(!$("q").value.trim())showHist();else if($("results").children.length)$("results").hidden=false;});
 $("map").addEventListener("touchstart",()=>{document.body.classList.remove("srch");$("results").hidden=true;$("q").blur();},{passive:true}); // 地図に触ったら候補を閉じる
 // 地図の長押しで選んだ地点：名前は国土地理院で住所に
 let lastPick=0;
@@ -1632,6 +1670,7 @@ async function takeDetour(){
 }
 // ルートを入れ替える（新しい目的地・再検索の両方）。SA・PAは再検索では前のものを使い回す
 function setRoute(t,keepSA){
+  if(MODE==="nav"&&hasRoute())TRIPBASE+=Math.max(0,curKm); // 案内中の引き直し：ここまで走った分を足しておき、旅全体の進み具合を出す
   if(typeof LASTCHK!=="undefined")LASTCHK=null; // 迂回の比べた結果は前のルートのものなので捨てる
   ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};if(!keepSA)SAS=[];
   buildGeom();
@@ -1704,7 +1743,7 @@ function startNav(){
   ECO.stopMin=0;ECO.lastFixT=0;saveStop();DEC.said.clear();spoken.clear();arrived=false;
   if(!FUEL.log.length||Date.now()-FUEL.log[FUEL.log.length-1].t>12*3600e3){if(FUEL.trip){CAL.dist=(FUEL.prior?FUEL.prior.dist:CAL.dist||0)+FUEL.trip.dNew;try{localStorage.setItem("carCal",JSON.stringify(CAL));}catch(e){}FUEL.trip=null;}FUEL.log=[];FUEL.sv={};FUEL.sc={};FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0};FUEL.needStart=true;FUEL.cal=CAL.s;} // 前回の記録が12時間以上前なら新しい旅として始める
   initCompass();initMotion();keepAwake();if(SET.voice)speak("案内を開始します");
-  simOffset=0;hist=[];trackKm=null;hwOn=hwSaid=null;hwIn=hwOut=0;holdUntil=0;rotAcc=null;
+  simOffset=0;hist=[];trackKm=null;TRIPBASE=0;progSaid=false;addHist(DEST);hwOn=hwSaid=null;hwIn=hwOut=0;holdUntil=0;rotAcc=null;
   if(curPos){const pr=projectTrack(curPos[0],curPos[1],Date.now());offD=pr.d;feedFix(pr.km,curPos,gpsSpeed);render(pr.km);}else render(0);
   saveRoute();
 }
@@ -1789,11 +1828,11 @@ async function loadSA(retry){
 /* ---- ルートの保存：ページを開き直しても、案内中ならそのまま続ける ---- */
 function saveRoute(){
   try{if(!DEST){localStorage.removeItem("navRoute");return;}
-    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT}));}catch(e){}
+    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,tripBase:TRIPBASE,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT}));}catch(e){}
 }
 function restoreRoute(){
   try{const v=JSON.parse(localStorage.getItem("navRoute")||"null");if(!v||!v.dest||Date.now()-v.t>12*3600e3)return;
-    DEST=v.dest;STOP=v.stop||null;GINFO=v.ginfo||null;JAMRAW=v.jamraw||[];
+    DEST=v.dest;STOP=v.stop||null;TRIPBASE=v.tripBase||0;GINFO=v.ginfo||null;JAMRAW=v.jamraw||[];
     if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
     MODE=v.mode==="nav"&&hasRoute()?"nav":"preview";
   }catch(e){}
