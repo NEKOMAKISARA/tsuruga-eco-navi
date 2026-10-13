@@ -453,7 +453,7 @@ function xy(lat,lon){const r=Math.PI/180;return[R*lon*r*Math.cos(XLAT*r),R*lat*r
    ROUTE：経路の点、MANS：案内[緯度,経度,文,種類,点の番号]、ATTR：道路の区間{a,b(km),hw(高速),lim(制限速度),v(想定速度)}、SAS：沿線のSA・PA */
 let STOP=null; // 立ち寄り先のSA・PA {name,lat,lon,km}
 let ROUTE=[],MANS=[],ATTR=[],SAS=[],DEST=null,RT={time:0,len:0,toll:false};
-let P=[],RCUM=[0],TOTAL=0,SAKM=[],GUIDE=[],GENK=1,TUN=[];
+let P=[],RCUM=[0],TOTAL=0,SAKM=[],GUIDE=[],GENK=1,TUN=[],TOLLS=[];
 let MODE="browse"; // browse＝目的地を決める／preview＝経路を確認／nav＝案内中
 const hasRoute=()=>ROUTE.length>1&&TOTAL>0;
 
@@ -1190,7 +1190,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 02:50";
+const BUILD="2026-10-14 03:20";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1370,13 +1370,39 @@ function speak(t,force){
 }
 const spoken=new Set();let lastEcoSay="",ecoCand={v:"",t:0};
 function fmtSay(km){return km>=1?`${km.toFixed(km<10?1:0).replace(/\.0$/,"")}キロ先`:`${Math.round(km*10)*100}メートル先`;}
+// 左右の言葉（看板風の文言には左右が入らないので、読み上げでは必ず足す）
+function dirWord(g){const a=TY_AR[g.ty]||"";return/↗|↱/.test(a)?"右方向":/↖|↰/.test(a)?"左方向":/↶/.test(a)?"Uターン":"";}
+function phraseOf(g){const dw=/^(左|右)方向/.test(g.text)?"":dirWord(g);return(dw?dw+"、":"")+(g.name?g.name+"、":"")+g.text;}
+/* ---- こまめな念押し：料金所の手前と抜けた所、高速で分かれ道が続く所 ---- */
+function remind(msg,say){NOTE={t:Date.now()+5000,msg};if(say&&SET.voice)speak(say);} // 画面の一言は10秒
+function remindTick(km){
+  if(MODE!=="nav"||!hasRoute())return;
+  const nextAfter=k=>GUIDE.find(j=>j.km>k+0.02&&!j.stop);
+  for(const t of TOLLS){
+    const d=t-km;
+    if(d>0.05&&d<=0.4){const key="tb-pre@"+t.toFixed(2);if(!spoken.has(key)){spoken.add(key);const g=nextAfter(t);
+      if(g&&g.km-t<3)remind(`料金所の先 ${fmtKm(g.km-t)} ${arrowOf(g.text,g.ty)} ${g.name?g.name+" ":""}${g.text}`,`この先、料金所です。抜けたら、${phraseOf(g)}です`);}}
+    if(-d>=0.03&&-d<=0.3){const key="tb-post@"+t.toFixed(2);if(!spoken.has(key)){spoken.add(key);const g=nextAfter(km),dup=g&&g.km-km<0.35&&spoken.has(g.km.toFixed(2)+"@0.3");if(g)[2,1,0.3].forEach(x=>{if(g.km-km<=x+0.1)spoken.add(g.km.toFixed(2)+"@"+x);});
+      if(g&&g.km-km<3)remind(`${fmtKm(g.km-km)}先 ${arrowOf(g.text,g.ty)} ${g.name?g.name+" ":""}${g.text}`,dup?null:`料金所を出たら、${fmtSay(g.km-km)}、${phraseOf(g)}です`);}}
+  }
+  // 高速で分かれ道を通過した直後、次の分かれ道が3km以内なら「続いて」
+  if(!onHighway())return;
+  const passed=[...GUIDE].reverse().find(j=>j.km<=km-0.03);if(!passed||km-passed.km>0.3)return;
+  const key="next@"+passed.km.toFixed(2);if(spoken.has(key))return;
+  const n=nextAfter(km);if(!n||n.stop||n.km-km>3||n.km-km<0.35)return;
+  if(GUIDE.indexOf(n)!==GUIDE.indexOf(passed)+1)return; // 通過したすぐ次の分かれ道だけ
+  if(TOLLS.some(t=>t>passed.km-0.05&&t<n.km))return; // 料金所の念押しに任せる
+  const dn=n.km-km,thN=[2,1,0.3].filter(x=>dn<=x).pop(),dup=thN!=null&&spoken.has(n.km.toFixed(2)+"@"+thN); // ふつうの案内で今言ったばかりなら声は出さない
+  spoken.add(key);[2,1].forEach(x=>{if(n.km-km<=x)spoken.add(n.km.toFixed(2)+"@"+x);});
+  remind(`続いて ${fmtKm(n.km-km)}先 ${arrowOf(n.text,n.ty)} ${n.name?n.name+" ":""}${n.text}`,dup?null:`続いて、${fmtSay(n.km-km)}、${phraseOf(n)}です`);
+}
 function voiceGuide(nj,d,city){
   if(!nj||MODE!=="nav")return;
   const ths=city?[0.3,0.08]:[2,1,0.3]; // 一般道は300m・80m手前、高速は2km・1km・300m手前
   const th=ths.filter(x=>d<=x).pop();if(th==null)return;
   const key=nj.km.toFixed(2)+"@"+th;if(spoken.has(key))return;
-  ths.filter(x=>x>=th).forEach(x=>spoken.add(nj.km.toFixed(2)+"@"+x));
-  speak((th<=0.08||d<0.05?"まもなく、":fmtSay(d))+(nj.name?nj.name+"、":"")+nj.text);
+  ths.filter(x=>x>=th||x>=d-0.1).forEach(x=>spoken.add(nj.km.toFixed(2)+"@"+x)); // すぐ下の区切り（100m以内）も言ったことにする（同じ距離を2回言わない）
+  speak((th<=0.08||d<0.05?"まもなく、":fmtSay(d)+"、")+phraseOf(nj));
 }
 function syncNav(){
   const T=id=>$(id).textContent;
@@ -1468,6 +1494,7 @@ function syncNav(){
       return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n">${esc(saShort(x.name))}</span>${on?'<span class="yr">寄る</span>':""}${(w=>w?`<span class="w">${wxTxt(w)}</span>`:"")(wxAt(x.km,etaAt(x.km)))}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
     if(h!==sapaHtml){sapaHtml=h;$("sapaCard").innerHTML=h;} // 毎回作り直すとタッチが外れるので、変わった時だけ
   }
+  remindTick(curKm); // 念押しを先に（言った距離はふつうの案内で繰り返さない）
   voiceGuide(nj,d,city);
   // 指定速度の読み上げ：同じ値が8秒続いた時だけ（行ったり来たりする時は読まない）。減速の合図（アクセルOFF）は別に読むので除く
   if(SET.voiceEco&&hw&&T("set")!=="—"&&T("setUnit")!=="アクセルOFF"){const e=T("set"),t=performance.now();
@@ -1881,7 +1908,7 @@ async function takeDetour(){
 function setRoute(t,keepSA){
   if(MODE==="nav"&&hasRoute())TRIPBASE+=Math.max(0,curKm); // 案内中の引き直し：ここまで走った分を足しておき、旅全体の進み具合を出す
   if(typeof LASTCHK!=="undefined")LASTCHK=null; // 迂回の比べた結果は前のルートのものなので捨てる
-  ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};if(!keepSA)SAS=[];
+  ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};TOLLS=[];if(!keepSA)SAS=[];
   buildGeom();
   ATTR=t.ms.map(m=>({a:RCUM[m.b]||0,b:RCUM[m.e]??TOTAL,hw:m.hw,lim:null,v:m.v})).filter(s=>s.b>s.a);
   buildIndex();spoken.clear();DEC.said.clear();hist=[];arrived=false;A.dispKm=null;
@@ -1969,21 +1996,22 @@ function checkArrive(km){
 async function loadAttr(){
   const key=routeKey();if(!key)return;
   try{
-    const out=[];
+    const out=[],tb=[];
     for(let a=0;a<TOTAL-0.01;a+=60){
       const b=Math.min(TOTAL,a+60);
       const q={encoded_polyline:encPoly(ptsBetween(a,b)),shape_match:"edge_walk",costing:"auto",
-        filters:{attributes:["edge.road_class","edge.use","edge.speed_limit","edge.speed","edge.length","edge.tunnel"],action:"include"}};
+        filters:{attributes:["edge.road_class","edge.use","edge.speed_limit","edge.speed","edge.length","edge.tunnel","node.type"],action:"include"}};
       const r=await fetch(VAL+"/trace_attributes?json="+encodeURIComponent(JSON.stringify(q)));
       if(!r.ok)throw new Error(r.status);
       const es=(await r.json()).edges||[],tot=es.reduce((s,e)=>s+(e.length||0),0);if(!tot)throw new Error("empty");
       let x=a;for(const e of es){const L=(e.length||0)/tot*(b-a),lim=+e.speed_limit;
-        out.push({a:x,b:x+L,hw:e.road_class==="motorway",ramp:e.use==="ramp",lim:lim>0&&lim<200?lim:null,v:e.speed||30,tun:!!e.tunnel});x+=L;}
+        out.push({a:x,b:x+L,hw:e.road_class==="motorway",ramp:e.use==="ramp",lim:lim>0&&lim<200?lim:null,v:e.speed||30,tun:!!e.tunnel});x+=L;if(e.end_node&&/toll_booth/.test(e.end_node.type||""))tb.push(x);}
       if(key!==routeKey())return;
       await new Promise(r=>setTimeout(r,300));
     }
     // 同じ種類・制限速度が続く所はまとめる
     const m=[];for(const s of out){const p=m[m.length-1];if(p&&p.hw===s.hw&&p.lim===s.lim&&p.tun===s.tun&&Math.abs(p.v-s.v)<1){p.b=s.b;}else m.push(Object.assign({},s));}
+    TOLLS=[];for(const k of tb)if(!TOLLS.length||k-TOLLS[TOLLS.length-1]>0.3)TOLLS.push(k);
     ATTR=m;buildIndex();drawRouteLine();saveRoute();scheduleElev();
     if(MODE==="preview")showPreview();render(curKm);
   }catch(e){} // 取れない時は経路検索の「高速かどうか」で代用（制限速度なし＝80）
@@ -2075,12 +2103,12 @@ async function loadSA(retry){
 /* ---- ルートの保存：ページを開き直しても、案内中ならそのまま続ける ---- */
 function saveRoute(){
   try{if(!DEST){localStorage.removeItem("navRoute");return;}
-    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,tripBase:TRIPBASE,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT}));}catch(e){}
+    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,tripBase:TRIPBASE,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT,tolls:TOLLS}));}catch(e){}
 }
 function restoreRoute(){
   try{const v=JSON.parse(localStorage.getItem("navRoute")||"null");if(!v||!v.dest||Date.now()-v.t>12*3600e3)return;
     DEST=v.dest;STOP=v.stop||null;TRIPBASE=v.tripBase||0;GINFO=v.ginfo||null;JAMRAW=v.jamraw||[];
-    if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
+    if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];TOLLS=v.tolls||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
     MODE=v.mode==="nav"&&hasRoute()?"nav":"preview";
   }catch(e){}
 }
