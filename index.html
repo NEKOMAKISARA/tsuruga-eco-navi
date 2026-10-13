@@ -156,6 +156,7 @@ body.sheet .app .jct{display:none}
 .fuel-ask button.x{background:#f1f3f4;color:#202124}
 .upd-bar{position:fixed;z-index:30;left:50%;transform:translateX(-50%);top:calc(max(8px,env(safe-area-inset-top)) + 4px);background:#1a73e8;color:#fff;border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;width:auto;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 .build{color:var(--muted);font-size:12px}
+.jamc .ag{font-size:11px;font-weight:400;opacity:.85;flex-basis:100%;text-align:right;margin-top:-2px}
 .nav-toast{background:#fff;color:#202124;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .nav-toast button{width:auto;padding:6px 14px;background:#1a73e8;color:#fff;border:0;border-radius:18px;font-size:14px}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
@@ -210,7 +211,7 @@ body.sheet .app .jct{display:none}
 .sapa .kd{flex-shrink:0;background:#fff;color:#0f7d45;border-radius:4px;font:700 12px/1 var(--num);padding:4px 5px}
 .sapa .yr{flex-shrink:0;font-size:11px;font-weight:700;border:1.5px solid currentColor;border-radius:4px;padding:1px 4px}
 /* 次の渋滞（赤）・混雑（オレンジ） */
-.jamc{display:flex;gap:8px;align-items:baseline;background:#d93025;color:#fff;border-radius:12px;padding:6px 12px;box-shadow:0 2px 10px rgba(0,0,0,.3);width:min(250px,62vw);font-size:14px;font-weight:700}
+.jamc{display:flex;flex-wrap:wrap;gap:0 8px;align-items:baseline;background:#d93025;color:#fff;border-radius:12px;padding:6px 12px;box-shadow:0 2px 10px rgba(0,0,0,.3);width:min(250px,62vw);font-size:14px;font-weight:700}
 .jamc.slow{background:#e37400}.jamc .k{margin-left:auto;font:700 18px var(--num)}
 /* 迂回案 */
 .detour{display:flex;flex-direction:column;gap:4px;background:#fff;color:#202124;border-radius:12px;padding:8px 12px;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(330px,100%)}
@@ -1202,7 +1203,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 08:00";
+const BUILD="2026-10-14 08:05";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1486,11 +1487,11 @@ function syncNav(){
   else{hideSignPin();$("hSign").hidden=true;}
   $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&!showSign&&next.length&&$("tunCard").hidden);
   // 次の渋滞（30km先まで）：どこから・長さ・通過にかかる時間。2km手前で1回読む
-  const jm=GINFO&&Date.now()-GINFO.t<30*60e3?JAMS.find(j=>j.b>curKm&&j.a-curKm<30):null;
+  const jm=GINFO&&Date.now()-GINFO.t<JAM_TTL?JAMS.find(j=>j.b>curKm&&j.a-curKm<30):null;
   $("jamCard").hidden=!jm;
   if(jm){const inJ=jm.a<=curKm,len=jm.b-Math.max(jm.a,curKm),pm=jm.passMin*len/(jm.b-jm.a);
     $("jamCard").className="jamc"+(jm.speed==="TRAFFIC_JAM"?"":" slow");
-    $("jamCard").innerHTML=`<b>${jm.speed==="TRAFFIC_JAM"?"渋滞":"混雑"}</b><span>${inJ?"ここから":fmtKm(jm.a-curKm)+"先"} ${fmtKm(len)}</span><span class="k">約${Math.max(1,Math.round(pm))}分</span>`;
+    $("jamCard").innerHTML=`<b>${jm.speed==="TRAFFIC_JAM"?"渋滞":"混雑"}</b><span>${inJ?"ここから":fmtKm(jm.a-curKm)+"先"} ${fmtKm(len)}</span><span class="k">約${Math.max(1,Math.round(pm))}分</span><span class="ag">${Math.max(1,Math.round((Date.now()-GINFO.t)/60e3))}分前の情報</span>`;
     const key="jam@"+jm.a.toFixed(1);if(!inJ&&jm.a-curKm<=2&&!spoken.has(key)){spoken.add(key);
       speak(`${fmtSay(jm.a-curKm)}から${jm.speed==="TRAFFIC_JAM"?"渋滞":"混雑"}、${fmtKm(len).replace("km","キロ").replace("m","メートル")}、通過に約${Math.max(1,Math.round(pm))}分`);}}
   // 迂回案：このまま（到着・渋滞の遅れ）と迂回（到着・早い/遅い・料金の差）を並べる。3分たったら消す
@@ -1821,6 +1822,7 @@ function followVias(path){
    GoogleのRoute（Routes API）で、渋滞を考えた経路を最大3本、ETCの料金と渋滞の区間付きで受け取る。
    選んだ経路の上に経由点を置いてValhallaに引き直させ、案内（曲がる所・高速の判定・トンネル等）はValhallaの仕組みのまま使う。
    料金と渋滞の区間を頼むと Compute Routes Enterprise（月1,000回まで無料）になるので、端末で1日の回数に上限を付ける */
+const JAM_TTL=10*60e3; // Googleの交通情報を使うのは取ってから10分まで（自動では取り直さない）
 let OPTS=[],OPT_I=0,GINFO=null,JAMRAW=[],JAMS=[],DETOUR=null,gErr="",gCheckT=0;
 const gAvail=()=>typeof google!=="undefined"&&google.maps&&typeof google.maps.importLibrary==="function"&&(usageGet().groute||0)<(+SET.gCap||0);
 async function gRoutes(from){
@@ -1864,7 +1866,7 @@ function mapJams(){
 }
 // この先の渋滞の遅れ（分）。Googleの情報が30分より古ければ使わない。今いる渋滞は実測で見ているので除く
 function jamDelayAhead(km,inJam){
-  if(!GINFO||Date.now()-GINFO.t>30*60e3)return 0;
+  if(!GINFO||Date.now()-GINFO.t>JAM_TTL)return 0;
   let m=0;for(const j of JAMS){if(j.b<=km)continue;if(inJam&&j.a<=km)continue;m+=j.delay*(j.b-Math.max(j.a,km))/(j.b-j.a);}
   return m;
 }
