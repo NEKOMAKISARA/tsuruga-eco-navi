@@ -1559,14 +1559,25 @@ async function pickOpt(i,from,hd,keepSA){
 }
 function applyG(op){
   if(op&&op.src==="g"){
-    GINFO={t:Date.now(),durMin:op.durMin,staticMin:op.staticMin,yen:op.yen,tollKnown:op.tollKnown};JAMRAW=gJamList(op);
+    GINFO={t:Date.now(),durMin:op.durMin,staticMin:op.staticMin,yen:op.yen,tollKnown:op.tollKnown};JAMRAW=gJamList(op);gCheckT=Date.now(); // 次の取り直しはここから数える
     // なぞった経路がGoogleの経路からずれていないか（Googleの点の9割が100m以内）
     let n=0,c=0;for(let i=0;i<op.path.length;i+=Math.max(1,op.path.length/60|0)){c++;if(project(...op.path[i]).d<0.1)n++;}GINFO.same=c?n/c>=0.9:true;
   }else{GINFO=null;JAMRAW=[];}
   mapJams();drawRouteLine();saveRoute();
 }
-// 案内中：5分ごとにGoogleで渋滞を取り直し、今のルートより5分以上早い迂回案があれば知らせる
-setInterval(()=>{if(MODE==="nav"&&!timer&&curPos&&hasRoute()&&!rerouting&&!arrived&&gAvail()&&Date.now()-gCheckT>5*60e3)navCheck();},30000);
+// 案内中：Googleで渋滞を取り直し、今のルートより5分以上早い迂回案があれば知らせる。
+// 間隔は「到着までの残り時間÷今日の残り回数」（5〜20分。2回は次の経路検索用に残す）で、1日の上限に収まるようにする。
+// 3分以上止まっている（SAで休憩など）・到着まで10分を切った・トンネル内（推定位置）の時は取りに行かない
+function gInterval(){
+  const left=(+SET.gCap||0)-(usageGet().groute||0)-2;if(left<=0)return Infinity;
+  return Math.max(5,Math.min(20,driveMin(curKm,TOTAL)/left))*60e3;
+}
+setInterval(()=>{
+  if(MODE!=="nav"||timer||!curPos||!hasRoute()||rerouting||arrived||!gAvail()||drOn())return;
+  if(FUEL.stopT&&performance.now()-FUEL.stopT>180000)return;
+  if(driveMin(curKm,TOTAL)<10)return;
+  if(Date.now()-gCheckT>gInterval())navCheck();
+},30000);
 async function navCheck(){
   gCheckT=Date.now();
   let gs;try{gs=await gRoutes(curPos);gErr="";}catch(e){gErr=e&&e.message||"取得できません";return;}
