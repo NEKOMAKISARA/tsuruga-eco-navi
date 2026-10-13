@@ -244,6 +244,7 @@ body.nav #plan,body.nav #preview,body.nav #locBtn{display:none}
 body:not(.pv) #preview{display:none}
 body.pv:not(.srch) #results{display:none}
 body:not(.nav):not(.pv) #endNav{display:none}
+body:not(.nav) #rerouteSheet{display:none}
 .plan{position:fixed;z-index:6;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:6px}
 .search{display:flex;gap:6px;align-items:center;background:#fff;border-radius:24px;padding:4px 4px 4px 16px;box-shadow:0 3px 12px rgba(0,0,0,.35);margin:0}
 .search input{flex:1;min-width:0;border:0;outline:none;background:transparent;color:#202124;font:16px/1.4 var(--jp);padding:8px 0}
@@ -325,6 +326,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
  <div class="col">
   <button id="closeSheet">閉じる</button>
   <button id="endNav">案内を終了</button>
+  <button id="rerouteSheet">今の位置から再検索</button>
   <div class="usage" id="usage"></div>
   <section class="settings" id="settings">
     <h2>設定</h2>
@@ -438,7 +440,10 @@ function projectTrack(lat,lon,t){
   const all=project(lat,lon);let r=all;
   if(trackKm!=null){
     const h=Math.max(0,(t-trackT)/3.6e6),near=project(lat,lon,trackKm-0.2,trackKm+0.2+h*150);
-    if(near.d<0.25||near.d<=all.d+0.03)r=near;
+    if(near.d<0.1)r=near; // ルートの近く（100m以内）を走っている時だけ、前回の続きで探す
+    else if(all.d>=0.1){ // ルートから離れている：進み具合は止めたまま（探す範囲の端へずるずる進まないように）。距離は本当のルートまでの距離
+      trackT=t;return{km:trackKm,d:all.d};
+    }
   }
   trackKm=r.km;trackT=t;return r;
 }
@@ -880,7 +885,7 @@ function render(km){
   }).join("");
   const nj=GUIDE.find(j=>j.km>km+0.02);
   nextGuideD=nj?nj.km-km:null;
-  $("jctBox").hidden=!nj||(curPos&&offD>0.25);
+  $("jctBox").hidden=!nj||(curPos&&offD>0.1);
   if(nj){const d=Math.max(0,nj.km-km);
     $("jctName").textContent=nj.name;$("jctText").textContent=nj.text;$("jctArrow").textContent=arrowOf(nj.text,nj.ty);
     if(d<1){$("jctKm").textContent=Math.round(d*100)*10;$("jctUnit").textContent="m";}
@@ -999,6 +1004,7 @@ $("menuBtn").addEventListener("click",openSheet);$("menuBtn2").addEventListener(
 $("closeSheet").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("sheetBg").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute();});
+$("rerouteSheet").addEventListener("click",()=>{if(MODE!=="nav"||!hasRoute())return;document.body.classList.remove("sheet");reroute(true);});
 for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setEcoRest","ecoRest"],["setTraffic","traffic"]]){
   $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="traffic")applyTraffic();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
@@ -1307,7 +1313,7 @@ function syncNav(){
   $("nvAr").textContent=arrived?"⚑":has?T("jctArrow"):"⚑";
   $("nvDist").innerHTML=!arrived&&has?`${T("jctKm")}<small>${T("jctUnit")}</small>`:"";
   {const g=GUIDE.find(j=>j.km>curKm+0.02);$("nvName").textContent=!arrived&&has?(g&&g.tun?`トンネル内 ${g.ord}/${g.tun.g.length}`:T("jctName")):"";}
-  $("nvTxt").textContent=arrived?"目的地に到着しました":has?T("jctText"):(curPos&&offD>0.25)?"ルートから外れています":"まもなく目的地";
+  $("nvTxt").textContent=arrived?"目的地に到着しました":has?T("jctText"):(curPos&&offD>0.1)?"ルートから外れています":"まもなく目的地";
   $("navTop").classList.toggle("soon",$("jctBox").classList.contains("soon"));
   const hw=onHighway();
   $("nvSetBox").hidden=!hw||T("set")==="—";
@@ -1999,11 +2005,11 @@ function onFix(p){
   hwUpdate(c.latitude,c.longitude,(s??0)>8?(c.heading!=null&&!isNaN(c.heading)?c.heading:A.moveHd):null);
   curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);checkArea(curPos);trackStop(s);
   if(FUEL.needStart){FUEL.needStart=false;FUEL.startKm=pr.km;fuelStore();}
-  if(offD<0.25)recordSpeed(pr.km,s);
+  if(offD<0.1)recordSpeed(pr.km,s);
   fuelAskCheck(s);
   gpsSpeed=s;addSample(pr.km,s,alt);
   const off=$("offroute");
-  if(pr.d>0.25){off.hidden=false;off.textContent=rerouting?"ルートを再検索中…":rerouteMsg||"ルートから外れています";}else{off.hidden=true;rerouteMsg="";}
+  if(pr.d>0.1){off.hidden=false;off.textContent=rerouting?"ルートを再検索中…":rerouteMsg||"ルートから外れています";}else{off.hidden=true;rerouteMsg="";}
   $("sim").value=pr.km;$("simKm").textContent=pr.km.toFixed(0)+" km";
   checkArrive(pr.km);passStop(pr.km);
   render(pr.km);
