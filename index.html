@@ -128,7 +128,10 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 body.sheet .app{overflow-x:hidden}
 .app>*{min-width:0;max-width:100%}
 .settings label input[type=range]{flex:1;min-width:0;max-width:60%}
-body.sheet .app{display:flex;position:fixed;z-index:20;top:0;right:0;bottom:0;width:min(440px,100%);max-width:none;overflow:auto;
+/* 詳細画面の外（暗い所）をタップすると閉じる。縦でも左に外が残るよう幅は画面の86%まで */
+.sheet-bg{display:none;position:fixed;inset:0;z-index:19;background:rgba(0,0,0,.35)}
+body.sheet .sheet-bg{display:block}
+body.sheet .app{display:flex;position:fixed;z-index:20;top:0;right:0;bottom:0;width:min(440px,86vw);max-width:none;overflow:auto;
   background:var(--bg);box-shadow:-4px 0 20px rgba(0,0,0,.4);padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 24px 16px}
 body.sheet .app .jct{display:none}
 .col>#closeSheet,.col>#usage,.col>#settings{order:0}
@@ -298,6 +301,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="spd"><b id="nvSpd">--</b><small>km/h</small></div>
 </div>
 <div class="nav-bottom" id="navBottom"><div class="eta"><b id="nvEta">--:--</b><small>着</small></div><div class="meta"><span id="nvSlack"></span><span id="nvRemain">--</span></div><button id="menuBtn" aria-label="詳細">≡</button></div>
+<div class="sheet-bg" id="sheetBg"></div>
 <div class="app">
  <div class="col">
   <button id="closeSheet">閉じる</button>
@@ -973,6 +977,7 @@ showUsage();
 const openSheet=()=>document.body.classList.add("sheet");
 $("menuBtn").addEventListener("click",openSheet);$("menuBtn2").addEventListener("click",openSheet);
 $("closeSheet").addEventListener("click",()=>document.body.classList.remove("sheet"));
+$("sheetBg").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute();});
 for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setEcoRest","ecoRest"],["setTraffic","traffic"]]){
   $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="traffic")applyTraffic();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
