@@ -190,7 +190,10 @@ body.sheet .app .jct{display:none}
 .sgpin .pole{position:absolute;left:-2px;bottom:0;width:4px;height:34px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35)}
 .sgpin .foot{position:absolute;left:-6px;bottom:-6px;width:12px;height:12px;border-radius:50%;background:#0b7a3e;border:2px solid #fff}
 .sgpin .hsign{position:absolute;bottom:30px;width:min(190px,46vw);transition:none}
-.sgpin.r .hsign{left:-14px}.sgpin.l .hsign{right:-14px}
+.sgpin.r .hsign{left:-4px}.sgpin.l .hsign{right:-4px}
+.sgpin.far .rot{opacity:.85}
+.hsign .nx{display:flex;align-items:center;gap:6px;margin-top:5px;padding-top:4px;border-top:2px solid rgba(255,255,255,.8);font-size:13px;font-weight:700;min-width:0}
+.hsign .nx>span:first-child{white-space:nowrap;flex-shrink:0}.hsign .nx b{font-size:18px;line-height:1}.hsign .nx .nn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 @media (orientation:landscape){.sgpin .hsign{width:min(230px,28vw)}}
 .inset{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(240px,60vw)}
 .inset-map{position:relative;height:170px;overflow:hidden}
@@ -1186,7 +1189,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 02:00";
+const BUILD="2026-10-14 02:15";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1431,23 +1434,18 @@ function syncNav(){
   if(tun&&MODE==="nav"){const key="tun@"+tun.a.toFixed(2);
     if(!spoken.has(key)&&tun.a-curKm<=(hw?1:0.3)&&tun.a>curKm){spoken.add(key);
       speak(`この先のトンネル内で、分岐が${tun.g.length}か所あります。`+tun.g.map(g=>`${g.ord}つ目、${g.text}`).join("。"));}}
-  // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）
-  const showSign=navOn&&nj&&!off&&onRouteF&&hw&&JCT_TY.includes(nj.ty)&&d>0.03&&d<=2.2&&(nj.name||nj.sig)&&$("tunCard").hidden;
-  $("hSign").hidden=!showSign;document.body.classList.toggle("hsg",!!showSign);
-  if(showSign){
-    const g=nj.sig||{},jct=g.jct!=null?g.jct:/JCT|ジャンクション/.test(nj.name),ar=arrowOf(nj.text,nj.ty);
-    const dest=jct?((g.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(g.tw||[]).join("・")||nj.text):((g.tw||[]).join("・")||nj.text.replace(/^出口\s*/,"").replace(/（.*?）/g,"").replace(/方面$/,"")||"出口");
-    const sub=jct&&(g.br||[]).some(x=>!/^[A-Z]{1,2}\d/.test(x))?(g.tw||[]).join("・"):"";
-    const shields=(g.br||[]).filter(x=>/^[A-Z]{1,2}\d|^R\d|^国道/.test(x)).slice(0,2).map(x=>`<span class="sh">${esc(x)}</span>`).join("");
-    const kmT=d<1?`${Math.round(d*100)*10}<small>m</small>`:`${d.toFixed(1)}<small>km</small>`;
-    const h=`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="kmr"><span class="km">${kmT}</span><b class="ar">${ar}</b></span></div>`+
-      `<div class="ds${dest.length>6?" sm":""}">${esc(dest)}</div>${sub?`<div style="font-size:12px;opacity:.9">${esc(sub)}</div>`:""}`+
-      `<div class="r2">${shields}<span class="nm">${esc(nj.name||"")}</span></div></div>`;
-    // 曲がる側と反対側に立てる（左の出口なら右、右の分岐なら左）
-    const side=/↖|↰|↶/.test(ar)?"r":"l";
-    if(showSignPin(nj,h,side)){$("hSign").hidden=true;}
-    else{if(h!==signHtml){signHtml=h;$("hSign").innerHTML=h;}placeSign();}
-  }else hideSignPin();
+  // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）。
+  // 続く分岐は、600m以上離れていればそれぞれの地点に立てる（最大3枚、奥のものは小さく）。近いものは手前の看板に「その先」として1行足す
+  const signOk=navOn&&!off&&onRouteF&&hw&&$("tunCard").hidden;
+  const sj=signOk?GUIDE.filter(j=>j.km>curKm+0.03&&j.km-curKm<=2.2&&JCT_TY.includes(j.ty)&&(j.name||j.sig)):[];
+  const groups=[];for(const j of sj){const gp=groups[groups.length-1];if(gp&&j.km-gp[gp.length-1].km<0.6)gp.push(j);else groups.push([j]);}
+  const shown=groups.slice(0,3),showSign=shown.length>0;
+  document.body.classList.toggle("hsg",showSign);
+  const pins=shown.map((gp,gi)=>{const head=gp[0],dd=head.km-curKm,ar=arrowOf(head.text,head.ty);
+    return{nj:head,html:signHtmlOf(head,dd,gp.slice(1)),side:/↖|↰|↶/.test(ar)?"r":"l",far:gi>0};});
+  if(showSign&&showSignPins(pins)){$("hSign").hidden=true;}
+  else if(showSign){hideSignPin();$("hSign").hidden=false;if(pins[0].html!==signHtml){signHtml=pins[0].html;$("hSign").innerHTML=signHtml;}placeSign();}
+  else{hideSignPin();$("hSign").hidden=true;}
   $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&!showSign&&next.length&&$("tunCard").hidden);
   // 次の渋滞（30km先まで）：どこから・長さ・通過にかかる時間。2km手前で1回読む
   const jm=GINFO&&Date.now()-GINFO.t<30*60e3?JAMS.find(j=>j.b>curKm&&j.a-curKm<30):null;
@@ -1489,27 +1487,45 @@ let signHtml="";
 /* 看板を地図に貼る（Googleは中身をHTMLにできるAdvancedMarker、国土地理院の地図はLeafletの印）。
    地図の枠ごと回している時（ラスター・国土地理院）は、看板だけ逆に回して正面を向ける */
 const SGN={mk:null,lmk:null,el:null,key:"",side:"r",onMap:false};
-function signPinEl(){
-  if(!SGN.el){SGN.el=document.createElement("div");SGN.el.className="sgpin r";SGN.el.innerHTML='<div class="rot"><div class="pole"></div><div class="foot"></div><div class="hsign"></div></div>';}
-  return SGN.el;
+function hideSignPin(){for(const q of SGP)q.hide();SGN.onMap=false;}
+const kmTxt=d=>d<1?`${Math.round(d*100)*10}<small>m</small>`:`${d.toFixed(1)}<small>km</small>`;
+// 1枚の看板の中身。more＝すぐ先（600m以内）に続く分岐
+function signHtmlOf(nj,d,more){
+  const g=nj.sig||{},jct=g.jct!=null?g.jct:/JCT|ジャンクション/.test(nj.name),ar=arrowOf(nj.text,nj.ty);
+  const dest=jct?((g.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(g.tw||[]).join("・")||nj.text):((g.tw||[]).join("・")||nj.text.replace(/^出口\s*/,"").replace(/（.*?）/g,"").replace(/方面$/,"")||"出口");
+  const sub=jct&&(g.br||[]).some(x=>!/^[A-Z]{1,2}\d/.test(x))?(g.tw||[]).join("・"):"";
+  const shields=(g.br||[]).filter(x=>/^[A-Z]{1,2}\d|^R\d|^国道/.test(x)).slice(0,2).map(x=>`<span class="sh">${esc(x)}</span>`).join("");
+  const nx=(more||[]).map(m=>{const mg=m.sig||{},mj=mg.jct!=null?mg.jct:/JCT|ジャンクション/.test(m.name),
+      md=mj?((mg.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(mg.tw||[]).join("・")):((mg.tw||[]).join("・")||"出口");
+    return`<div class="nx"><span>その先 ${kmTxt(m.km-nj.km).replace(/<\/?small>/g,"")}</span><b>${arrowOf(m.text,m.ty)}</b><span class="nn">${esc(m.name||"")} ${esc(md)}</span></div>`;}).join("");
+  return`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="kmr"><span class="km">${kmTxt(d)}</span><b class="ar">${ar}</b></span></div>`+
+    `<div class="ds${dest.length>6?" sm":""}">${esc(dest)}</div>${sub?`<div style="font-size:12px;opacity:.9">${esc(sub)}</div>`:""}`+
+    `<div class="r2">${shields}<span class="nm">${esc(nj.name||"")}</span></div>${nx}</div>`;
 }
-function showSignPin(nj,html,side){
+// 地図に貼る看板を必要な枚数だけ（使い回し）
+const SGP=[];
+function signPin(){
+  const el=document.createElement("div");el.className="sgpin r";el.innerHTML='<div class="rot"><div class="pole"></div><div class="foot"></div><div class="hsign"></div></div>';
+  const q={el,mk:null,lmk:null,html:"",on:false,
+    show(pos,html,side,far){
+      el.className="sgpin "+side+(far?" far":"");if(html!==q.html){q.html=html;el.querySelector(".hsign").innerHTML=html;}
+      const AM=window.google&&google.maps.marker&&google.maps.marker.AdvancedMarkerElement;
+      if(gmap){if(!q.mk)q.mk=new AM({content:el,zIndex:far?7:8});q.mk.zIndex=far?7:8;q.mk.position={lat:pos[0],lng:pos[1]};if(q.mk.map!==gmap)q.mk.map=gmap;}
+      else{if(!q.lmk)q.lmk=L.marker(pos,{interactive:false,zIndexOffset:900,icon:L.divIcon({className:"",iconSize:[0,0],iconAnchor:[0,0],html:""})}).addTo(map);
+        q.lmk.setLatLng(pos);q.lmk.setZIndexOffset(far?800:900);const host=q.lmk.getElement();if(host&&el.parentNode!==host){host.innerHTML="";host.appendChild(el);}}
+      q.on=true;},
+    hide(){if(q.mk)q.mk.map=null;if(q.lmk){const h=q.lmk.getElement();if(h&&el.parentNode===h)h.removeChild(el);}q.on=false;}};
+  return q;
+}
+function showSignPins(list){
   const AM=window.google&&google.maps.marker&&google.maps.marker.AdvancedMarkerElement;
-  const pos=posAt(nj.km),el=signPinEl();
-  if(gmap&&!(AM&&GMAPS_ID))return false; // Map IDなしのGoogleは貼れないので、画面に固定で出す
-  el.className="sgpin "+side;el.querySelector(".hsign").innerHTML=html;
-  if(gmap){
-    if(!SGN.mk)SGN.mk=new AM({content:el,zIndex:8});
-    SGN.mk.position={lat:pos[0],lng:pos[1]};if(SGN.mk.map!==gmap)SGN.mk.map=gmap;
-  }else if(map&&window.L){
-    if(!SGN.lmk){SGN.lmk=L.marker(pos,{interactive:false,zIndexOffset:900,icon:L.divIcon({className:"",iconSize:[0,0],iconAnchor:[0,0],html:""})}).addTo(map);}
-    SGN.lmk.setLatLng(pos);const host=SGN.lmk.getElement();if(host&&el.parentNode!==host){host.innerHTML="";host.appendChild(el);}
-  }else return false;
+  if(gmap?!(AM&&GMAPS_ID):!(map&&window.L))return false; // 貼れない地図（Map IDなしのGoogle）
+  while(SGP.length<list.length)SGP.push(signPin());
+  SGP.forEach((q,i)=>{const it=list[i];if(it)q.show(posAt(it.nj.km),it.html,it.side,it.far);else q.hide();});
   SGN.onMap=true;return true;
 }
-function hideSignPin(){if(SGN.mk)SGN.mk.map=null;if(SGN.lmk&&SGN.lmk.getElement()){SGN.lmk.getElement().innerHTML="";}SGN.onMap=false;}
 // 毎フレーム：枠ごと回している地図では、看板を進む向きぶん回し戻す
-function signPinRot(hd){if(!SGN.onMap||!SGN.el)return;const r=SGN.el.firstChild;const a=(gmap&&vectorMode)?0:hd;r.style.transform=a?`rotate(${a}deg)`:"";}
+function signPinRot(hd){if(!SGN.onMap)return;const a=(gmap&&vectorMode)?0:hd;for(const q of SGP)if(q.on){const r=q.el.firstChild;r.style.transform=(a?`rotate(${a}deg)`:"")+(q.el.classList.contains("far")?" scale(.82)":"");}}
 /* 看板の置き場所：右上 → 右の中ほど → 左（案内の下）の順に、この先3kmのルートが画面で重ならない所 */
 function routeScreenPts(){
   const p=A.lastP||posAt(curKm),hd=((rotAcc||0)%360+360)%360*Math.PI/180,zoom=curZoom(),W=innerWidth,H=innerHeight;
