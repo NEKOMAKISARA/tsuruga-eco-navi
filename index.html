@@ -376,9 +376,10 @@ function xy(lat,lon){const r=Math.PI/180;return[R*lon*r*Math.cos(35.3*r),R*lat*r
 const MAN=[[35.69898,139.41442,"左方向"],[35.69897,139.41258,"左方向、その先昭和記念公園通り"],[35.70029,139.40585,"曙町一丁目を左方向"],[35.69935,139.38813,"郷地町を右方向"],[35.70387,139.34895,"拝島町を左方向"],[35.6855,139.34716,"左入町を右方向"],[35.7024,139.31292,"左方向、高月楢原線/186、その先186"],[35.7013,139.31108,"右方向、高月楢原線/186、その先、186"],[35.69683,139.30596,"左方向、その先186"],[35.68945,139.30883,"右方向、その先高月楢原線/186"],[35.68933,139.30506,"犬目交番前を左方向"],[35.67317,139.29567,"右方向、陣馬高原/八王子西IC方面"],[35.67262,139.25943,"川原宿を右方向"],[35.68038,139.25543,"C4を左方向"],[35.42753,139.37665,"4-2番出口、その先E1、名古屋方面"],[35.42433,139.3768,"右方向、その先E1、名古屋方面"],[35.42294,139.36727,"右方向、その先E1、名古屋方面"],[35.34309,139.15687,"右方向、その先E1"],[35.27034,138.91595,"左方向、7-1番出口、その先E1A、新東名/静岡/名古屋方面"],[35.02502,137.15388,"19-2番出口、その先E1、静岡/名神方面"],[35.02318,137.15136,"右方向、その先E1、豊田/名古屋方面"],[35.16826,137.02777,"右方向、その先E1、小牧/京都方面"],[35.31811,136.32514,"27-1番出口、その先E8、米原/舞鶴若狭道/福井方面"],[35.64189,136.09457,"4番出口"],[35.64677,136.089,"右方向、その先8、越前市/福井/敦賀市街/越前海岸方面"]];
 let P,RCUM,TOTAL,CUM,JKM,SAKM,GUIDE;
 
-function project(lat,lon){
+function project(lat,lon,kmFrom,kmTo){
   const q=xy(lat,lon);let best={d:1e9,km:0};
   for(let i=0;i<P.length-1;i++){
+    if(kmFrom!=null&&(RCUM[i+1]<kmFrom||RCUM[i]>kmTo))continue;
     const a=P[i],b=P[i+1],dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy;
     let t=((q[0]-a[0])*dx+(q[1]-a[1])*dy)/L2;t=Math.max(0,Math.min(1,t));
     const d=Math.hypot(q[0]-(a[0]+t*dx),q[1]-(a[1]+t*dy));
@@ -386,9 +387,21 @@ function project(lat,lon){
   }
   return best;
 }
+// 走行中の現在地：前回の位置の少し手前〜先だけで探す。アンダーパスで、この先に通る上の道と交差した時に
+// 先の区間へ飛んで地図が回らないように。先は前回から時速150kmで進める距離まで。
+// 近くに見つからない時（ルート外れ等）は全体から探す
+let trackKm=null,trackT=0;
+function projectTrack(lat,lon,t){
+  const all=project(lat,lon);let r=all;
+  if(trackKm!=null){
+    const h=Math.max(0,(t-trackT)/3.6e6),near=project(lat,lon,trackKm-0.2,trackKm+0.2+h*150);
+    if(near.d<0.25||near.d<=all.d+0.03)r=near;
+  }
+  trackKm=r.km;trackT=t;return r;
+}
 // ルート（ROUTE）と案内（mans）から距離・区間・案内を作り直す。再検索の後にも呼ぶ
 function rebuildRoute(mans,via){
-  P=ROUTE.map(r=>xy(r[0],r[1]));
+  P=ROUTE.map(r=>xy(r[0],r[1]));trackKm=null;
   RCUM=[0];for(let i=1;i<P.length;i++)RCUM[i]=RCUM[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]);
   TOTAL=RCUM[RCUM.length-1];$("sim").max=TOTAL.toFixed(1);
   // 区間の境目（WP）のルート上の距離
@@ -1290,12 +1303,12 @@ $("startBtn").addEventListener("click",()=>{
   if(!FUEL.log.length||Date.now()-FUEL.log[FUEL.log.length-1].t>12*3600e3){if(FUEL.trip){CAL.dist=(FUEL.prior?FUEL.prior.dist:CAL.dist||0)+FUEL.trip.dNew;try{localStorage.setItem("carCal",JSON.stringify(CAL));}catch(e){}FUEL.trip=null;}FUEL.log=[];FUEL.sv={};FUEL.sc={};FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0};FUEL.needStart=true;FUEL.cal=CAL.s;} // 前回の記録が12時間以上前なら新しい旅として始める
   initCompass();keepAwake();if(SET.voice)speak("ナビを開始します");
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
-  stopPlay();simOffset=0;hist=[];
+  stopPlay();simOffset=0;hist=[];trackKm=null;
   setStatus("demo","GPS取得中…");
   try{
     navigator.geolocation.watchPosition(p=>{
       stopPlay();
-      const pr=project(p.coords.latitude,p.coords.longitude);
+      const pr=projectTrack(p.coords.latitude,p.coords.longitude,p.timestamp);
       let s=p.coords.speed!=null&&p.coords.speed>=0?p.coords.speed*3.6:null;
       if(s==null&&lastFix){const dt=(p.timestamp-lastFix.t)/3.6e6;if(dt>0)s=Math.max(0,(pr.km-lastFix.km)/dt);} // 速度が取れない時は進み具合から推定
       lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
