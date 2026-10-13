@@ -168,19 +168,30 @@ body.sheet .app .jct{display:none}
 .setv small{display:block;font-size:11px;opacity:.9}
 /* 曲がる所・IC・JCTの拡大ポップアップ */
 /* 高速の案内標識風の看板（出口・JCTの2km手前から） */
-.hsign{background:#0b7a3e;border-radius:10px;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,.4);width:min(300px,78vw);color:#fff;font-family:var(--jp,system-ui)}
-.hsign .in{border:3px solid #fff;border-radius:6px;padding:8px 10px 8px}
+.hsign{position:fixed;z-index:6;background:#0b7a3e;border-radius:10px;padding:5px;box-shadow:0 4px 14px rgba(0,0,0,.4);width:min(190px,46vw);color:#fff;font-family:var(--jp,system-ui);transition:top .4s,left .4s}
+@media (orientation:landscape){.hsign{width:min(270px,30vw)}}
+@media (prefers-reduced-motion:reduce){.hsign{transition:none}}
+.hsign .in{border:3px solid #fff;border-radius:6px;padding:6px 8px}
 .hsign .r{display:flex;align-items:center;gap:6px;min-width:0}
 .hsign .ex{background:#fff;color:#0b7a3e;font-weight:900;font-size:14px;padding:0 7px;border-radius:3px;flex-shrink:0}
 .hsign .no{border:2px solid #fff;font-weight:800;font-size:15px;padding:0 5px;border-radius:3px;flex-shrink:0}
-.hsign .nm{font-size:14px;font-weight:700;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.hsign .ds{font-size:26px;font-weight:800;letter-spacing:.05em;line-height:1.2;margin-top:4px;word-break:keep-all;overflow-wrap:anywhere}
-.hsign .ds.sm{font-size:20px}
+.hsign .nm{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hsign .ds{font-size:22px;font-weight:800;letter-spacing:.04em;line-height:1.2;margin-top:3px;word-break:keep-all;overflow-wrap:anywhere}
+.hsign .ds.sm{font-size:17px}
+.hsign .r2{display:flex;align-items:center;gap:6px;margin-top:4px;min-width:0}
 .hsign .bt{display:flex;align-items:center;gap:8px;margin-top:6px}
 .hsign .sh{background:#fff;color:#0b7a3e;font-weight:900;font-size:13px;padding:0 6px;border-radius:10px/9px;outline:2px solid #fff;border:2px solid #0b7a3e}
 .hsign .km{font-size:22px;font-weight:800;margin-left:auto;font-variant-numeric:tabular-nums}.hsign .km small{font-size:13px}
 .hsign .ar{font-size:36px;font-weight:900;line-height:1}
-.hsign .kmr{display:none;align-items:center;gap:6px;flex-shrink:0}.hsign .kmr .km{font-size:18px}.hsign .kmr .ar{font-size:24px}
+.hsign .kmr{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto}.hsign .kmr .km{font-size:18px;margin-left:0}.hsign .kmr .ar{font-size:24px}
+/* 地図に貼る看板：分かれ道の地点に支柱を立て、その上に看板。ルートの反対側に立てる */
+.sgpin{position:relative;width:0;height:0;pointer-events:none}
+.sgpin .rot{position:absolute;left:0;top:0;transform-origin:0 0}
+.sgpin .pole{position:absolute;left:-2px;bottom:0;width:4px;height:34px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+.sgpin .foot{position:absolute;left:-6px;bottom:-6px;width:12px;height:12px;border-radius:50%;background:#0b7a3e;border:2px solid #fff}
+.sgpin .hsign{position:absolute;bottom:30px;width:min(190px,46vw);transition:none}
+.sgpin.r .hsign{left:-14px}.sgpin.l .hsign{right:-14px}
+@media (orientation:landscape){.sgpin .hsign{width:min(230px,28vw)}}
 .inset{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(240px,60vw)}
 .inset-map{position:relative;height:170px;overflow:hidden}
 #insetRot{position:absolute;left:50%;top:60%;width:560px;height:560px;transform:translate(-50%,-50%) rotate(var(--irot,0deg))}
@@ -252,9 +263,7 @@ body.sheet .app .jct{display:none}
   .nav-eco{left:auto;right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom))}
   #mapNote{bottom:auto;top:8px}
   .inset{width:100%}.inset-map{height:150px}.sapa{width:100%}
-  .hsign{width:100%;padding:4px}.hsign .ds{font-size:18px;margin-top:2px}.hsign .ds.sm{font-size:16px}.hsign .in{padding:4px 8px}
-  .hsign .bt{display:none}.hsign .kmr{display:flex}
-  body.hsg .inset-map{height:100px}body.hsg .inset-cap{display:none}
+
 }
 /* ===== 目的地を決める画面：検索欄・候補・経路の確認 ===== */
 .mapbox{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -324,10 +333,10 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <label class="pv-target">目標到着<input type="time" id="pvTarget"><button type="button" id="pvTargetClear">なし</button></label>
   <div class="pv-btns"><button id="pvCancel">やめる</button><button class="go" id="pvGo" disabled>出発</button></div>
 </div>
+<div class="hsign" id="hSign" hidden></div>
 <div class="nav-stack" id="navStack">
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
-  <div class="hsign" id="hSign" hidden></div>
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap"><b id="insetAr"></b><span id="insetTxt"></span></div></div>
   <div class="detour" id="detCard" hidden></div>
   <div class="jamc" id="jamCard" hidden></div>
@@ -1177,7 +1186,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 01:30";
+const BUILD="2026-10-14 02:00";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1257,10 +1266,12 @@ function drawFrame(p){
       else{const zi=Math.round(zoom);if(gmap.getZoom()!==zi)gmap.setZoom(zi);gmap.setCenter({lat:c[0],lng:c[1]});}
       progMove=false;}
     setMeIcon(vectorMode?hd-mapHd():hd); // 枠ごと回す時（Map IDなし）は北基準の向き
+    signPinRot(hd);
     return;
   }
   if(!map)return;
   meMk.setOpacity(1);meMk.setLatLng(p);{const e=meMk.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${hd}deg)`;}
+  signPinRot(hd);
   if(Date.now()>holdUntil){progMove=true;map.setView(c,zoom,{animate:false});progMove=false;}
 }
 // 矢印を置く高さ（地図の上端からのpx）。速度カードと下のバーの上端から55px上、設定で上下に調整できる
@@ -1421,7 +1432,7 @@ function syncNav(){
     if(!spoken.has(key)&&tun.a-curKm<=(hw?1:0.3)&&tun.a>curKm){spoken.add(key);
       speak(`この先のトンネル内で、分岐が${tun.g.length}か所あります。`+tun.g.map(g=>`${g.ord}つ目、${g.text}`).join("。"));}}
   // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）
-  const showSign=navOn&&nj&&!off&&onRouteF&&hw&&JCT_TY.includes(nj.ty)&&d>0&&d<=2.2&&(nj.name||nj.sig)&&$("tunCard").hidden;
+  const showSign=navOn&&nj&&!off&&onRouteF&&hw&&JCT_TY.includes(nj.ty)&&d>0.03&&d<=2.2&&(nj.name||nj.sig)&&$("tunCard").hidden;
   $("hSign").hidden=!showSign;document.body.classList.toggle("hsg",!!showSign);
   if(showSign){
     const g=nj.sig||{},jct=g.jct!=null?g.jct:/JCT|ジャンクション/.test(nj.name),ar=arrowOf(nj.text,nj.ty);
@@ -1429,11 +1440,14 @@ function syncNav(){
     const sub=jct&&(g.br||[]).some(x=>!/^[A-Z]{1,2}\d/.test(x))?(g.tw||[]).join("・"):"";
     const shields=(g.br||[]).filter(x=>/^[A-Z]{1,2}\d|^R\d|^国道/.test(x)).slice(0,2).map(x=>`<span class="sh">${esc(x)}</span>`).join("");
     const kmT=d<1?`${Math.round(d*100)*10}<small>m</small>`:`${d.toFixed(1)}<small>km</small>`;
-    const h=`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="nm">${esc(nj.name||"")}</span><span class="kmr"><span class="km">${kmT}</span><b class="ar">${ar}</b></span></div>`+
-      `<div class="ds${dest.length>8?" sm":""}">${esc(dest)}</div>${sub?`<div style="font-size:13px;opacity:.9">${esc(sub)}</div>`:""}`+
-      `<div class="bt">${shields}<span class="km">${kmT}</span><b class="ar">${ar}</b></div></div>`;
-    if(h!==signHtml){signHtml=h;$("hSign").innerHTML=h;}
-  }
+    const h=`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="kmr"><span class="km">${kmT}</span><b class="ar">${ar}</b></span></div>`+
+      `<div class="ds${dest.length>6?" sm":""}">${esc(dest)}</div>${sub?`<div style="font-size:12px;opacity:.9">${esc(sub)}</div>`:""}`+
+      `<div class="r2">${shields}<span class="nm">${esc(nj.name||"")}</span></div></div>`;
+    // 曲がる側と反対側に立てる（左の出口なら右、右の分岐なら左）
+    const side=/↖|↰|↶/.test(ar)?"r":"l";
+    if(showSignPin(nj,h,side)){$("hSign").hidden=true;}
+    else{if(h!==signHtml){signHtml=h;$("hSign").innerHTML=h;}placeSign();}
+  }else hideSignPin();
   $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&!showSign&&next.length&&$("tunCard").hidden);
   // 次の渋滞（30km先まで）：どこから・長さ・通過にかかる時間。2km手前で1回読む
   const jm=GINFO&&Date.now()-GINFO.t<30*60e3?JAMS.find(j=>j.b>curKm&&j.a-curKm<30):null;
@@ -1472,6 +1486,54 @@ $("detCard").addEventListener("click",e=>{const b=e.target.closest("button[data-
 $("sapaCard").addEventListener("click",e=>{const b=e.target.closest("button[data-n]");if(b)toggleStop(SAKM.find(x=>x.name===b.dataset.n&&x.km>curKm-0.5));});
 /* ---- 拡大ポップアップ：今の位置から分岐の先までが収まる拡大率で、近づく向きを上にして表示 ---- */
 let signHtml="";
+/* 看板を地図に貼る（Googleは中身をHTMLにできるAdvancedMarker、国土地理院の地図はLeafletの印）。
+   地図の枠ごと回している時（ラスター・国土地理院）は、看板だけ逆に回して正面を向ける */
+const SGN={mk:null,lmk:null,el:null,key:"",side:"r",onMap:false};
+function signPinEl(){
+  if(!SGN.el){SGN.el=document.createElement("div");SGN.el.className="sgpin r";SGN.el.innerHTML='<div class="rot"><div class="pole"></div><div class="foot"></div><div class="hsign"></div></div>';}
+  return SGN.el;
+}
+function showSignPin(nj,html,side){
+  const AM=window.google&&google.maps.marker&&google.maps.marker.AdvancedMarkerElement;
+  const pos=posAt(nj.km),el=signPinEl();
+  if(gmap&&!(AM&&GMAPS_ID))return false; // Map IDなしのGoogleは貼れないので、画面に固定で出す
+  el.className="sgpin "+side;el.querySelector(".hsign").innerHTML=html;
+  if(gmap){
+    if(!SGN.mk)SGN.mk=new AM({content:el,zIndex:8});
+    SGN.mk.position={lat:pos[0],lng:pos[1]};if(SGN.mk.map!==gmap)SGN.mk.map=gmap;
+  }else if(map&&window.L){
+    if(!SGN.lmk){SGN.lmk=L.marker(pos,{interactive:false,zIndexOffset:900,icon:L.divIcon({className:"",iconSize:[0,0],iconAnchor:[0,0],html:""})}).addTo(map);}
+    SGN.lmk.setLatLng(pos);const host=SGN.lmk.getElement();if(host&&el.parentNode!==host){host.innerHTML="";host.appendChild(el);}
+  }else return false;
+  SGN.onMap=true;return true;
+}
+function hideSignPin(){if(SGN.mk)SGN.mk.map=null;if(SGN.lmk&&SGN.lmk.getElement()){SGN.lmk.getElement().innerHTML="";}SGN.onMap=false;}
+// 毎フレーム：枠ごと回している地図では、看板を進む向きぶん回し戻す
+function signPinRot(hd){if(!SGN.onMap||!SGN.el)return;const r=SGN.el.firstChild;const a=(gmap&&vectorMode)?0:hd;r.style.transform=a?`rotate(${a}deg)`:"";}
+/* 看板の置き場所：右上 → 右の中ほど → 左（案内の下）の順に、この先3kmのルートが画面で重ならない所 */
+function routeScreenPts(){
+  const p=A.lastP||posAt(curKm),hd=((rotAcc||0)%360+360)%360*Math.PI/180,zoom=curZoom(),W=innerWidth,H=innerHeight;
+  const kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,zoom)/1000,Lo=layoutNow(),mr=$("map").getBoundingClientRect();
+  const ax=W>H?W*0.62:W/2,ay=mr.top+Lo.ty,out=[];
+  for(let k=(A.dispKm??curKm);k<Math.min(TOTAL,(A.dispKm??curKm)+3);k+=0.05){
+    const q=posAt(k),x=(q[1]-p[1])*111.32*Math.cos(p[0]*Math.PI/180),y=(q[0]-p[0])*110.57; // 東・北（km）
+    const rx=x*Math.cos(hd)-y*Math.sin(hd),ry=x*Math.sin(hd)+y*Math.cos(hd); // 進む向きを上に
+    const sx=ax+rx/kpp,sy=ay-ry/kpp*0.75; // 斜めに見ているので奥は詰まる（おおよそ）
+    if(sy<-50)break;out.push([sx,sy]);}
+  return out;
+}
+function placeSign(){
+  const el=$("hSign");if(el.hidden)return;
+  const W=innerWidth,H=innerHeight,land=W>H,r=el.getBoundingClientRect(),sw=r.width,sh=r.height;
+  const safeT=parseFloat(getComputedStyle(document.documentElement).paddingTop)||0;
+  const nb=$("navTop").getBoundingClientRect(),st=$("navStack").getBoundingClientRect();
+  const top0=land?Math.max(8,safeT+8):nb.bottom+8,eco=$("navEco").getBoundingClientRect();
+  const cands=[{x:W-sw-8,y:top0},{x:W-sw-8,y:Math.min(top0+sh+16,(land?eco.top:H*0.6)-sh-8)},{x:st.left,y:st.bottom+8,left:true}];
+  const pts=routeScreenPts(),M=14;
+  const hits=c=>pts.filter(([x,y])=>x>c.x-M&&x<c.x+sw+M&&y>c.y-M&&y<c.y+sh+M).length;
+  let best=cands[cands.length-1];for(const c of cands){if(!hits(c)){best=c;break;}}
+  el.style.left=Math.round(best.x)+"px";el.style.top=Math.round(best.y)+"px";
+}
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
 function updateInset(nj,d){
   const city=isCity(),k0=Math.min(A.dispKm??curKm,nj.km-0.01),k1=nj.km+(city?0.04:0.2);
