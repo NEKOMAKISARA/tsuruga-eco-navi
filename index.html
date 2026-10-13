@@ -1147,13 +1147,15 @@ function updSnap(){
 }
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
+const GPSI={prev:null,iv:null,v:null,age:0,fps:null,fc:0,ft:0,err:""};
 const A={fixT:0,fixKm:0,fixPos:null,spd:0,dispKm:null,dispPos:null,lastT:0,lastDraw:0,lastIcon:0,movePos:null,moveHd:null,pinchT:0};
 function distKm(a,b){const r=Math.PI/180,x=(b[1]-a[1])*r*Math.cos((a[0]+b[0])/2*r),y=(b[0]-a[0])*r;return Math.hypot(x,y)*6371;}
 function destPt(p,hd,km){const r=Math.PI/180,d=km/6371,la=p[0]*r,lo=p[1]*r,h=hd*r;
   const la2=Math.asin(Math.sin(la)*Math.cos(d)+Math.cos(la)*Math.sin(d)*Math.cos(h));
   return[la2/r,(lo+Math.atan2(Math.sin(h)*Math.sin(d)*Math.cos(la),Math.cos(d)-Math.sin(la)*Math.sin(la2)))/r];}
-function feedFix(km,pos,spdKmh){
-  A.fixT=performance.now();A.spd=spdKmh||0;A.fixPos=pos;
+function feedFix(km,pos,spdKmh,fixTime){
+  const age=fixTime?Math.max(0,Math.min(3000,Date.now()-fixTime)):0; // 測ってから処理するまでの遅れ
+  A.fixT=performance.now()-age;GPSI.age=age;A.spd=spdKmh||0;A.fixPos=pos;
   if(km!=null){A.fixKm=km;if(A.dispKm==null||Math.abs(A.dispKm-km)>1)A.dispKm=km;} // 1km以上飛んだら補間せずに移動
   if(pos){
     if(!A.dispPos||distKm(A.dispPos,pos)>1)A.dispPos=pos.slice();
@@ -1175,6 +1177,7 @@ function startLoop(){if(!looping&&!document.hidden){looping=true;A.lastT=perform
 function frame(now){
   if(document.hidden){looping=false;return;}
   requestAnimationFrame(frame);
+  GPSI.fc++;if(now-GPSI.ft>2000){GPSI.fps=GPSI.fc*1000/(now-GPSI.ft);GPSI.fc=0;GPSI.ft=now;}
   if(now-A.lastDraw<(gmap?45:30))return; // Googleの地図は重いので約20fps、それ以外は約30fps
   const dt=Math.min(0.15,(now-A.lastT)/1000);A.lastT=now;A.lastDraw=now;
   const ahead=drAhead(now); // 前回のGPSから先読み（ふだんは最大2.5秒、GPSが途切れた時は推定位置）
@@ -1954,7 +1957,6 @@ function passStop(km){if(STOP&&STOP.km!=null&&km>STOP.km+0.5){STOP=null;sapaHtml
 
 /* ===================== GPS：ページを開いた時から受け続ける ===================== */
 let gpsWatch=null,lastFix=null,lastFixT=0,firstFix=true;
-const GPSI={prev:null,iv:null,v:null};
 function startGps(){
   if(gpsWatch!=null)return;
   if(!("geolocation" in navigator)){setStatus("bad","GPSが使えない端末です");return;}
@@ -2003,6 +2005,9 @@ function learnMotion(spd,acc){
 }
 setInterval(()=>{if(drOn())render(Math.min(TOTAL,A.fixKm+drAhead(performance.now())));},1000); // 推定位置で案内の距離・音声を進める
 function onFix(p){
+  try{onFix0(p);}catch(e){showErr("GPSの処理",e);}
+}
+function onFix0(p){
   stopPlay();
   const c=p.coords;let s=c.speed!=null&&c.speed>=0?c.speed*3.6:null;
   lastFixT=Date.now();
@@ -2017,19 +2022,20 @@ function onFix(p){
   if(c.accuracy<=100)DR.goodT=Date.now();
   learnMotion(s,c.accuracy);
   gpsHeading=c.heading!=null&&!isNaN(c.heading)&&c.heading>=0&&(s??0)>=5?c.heading:null; // 止まっている時の向きは当てにならないので捨てる
-  setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}・速さ ${s!=null?Math.round(s):"—"}km/h${c.speed!=null&&c.speed>=0?"":"（推定）"}・更新 ${GPSI.iv!=null?GPSI.iv.toFixed(1):"—"}秒）`);
+  setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}・速さ ${s!=null?Math.round(s):"—"}km/h${c.speed!=null&&c.speed>=0?"":"（推定）"}・更新 ${GPSI.iv!=null?GPSI.iv.toFixed(1):"—"}秒・遅れ ${(GPSI.age/1000).toFixed(1)}秒・画面 ${GPSI.fps!=null?Math.round(GPSI.fps):"—"}fps）`+(GPSI.err?`　⚠${GPSI.err}`:""));
   if(MODE!=="nav"||!hasRoute()){
-    curPos=[c.latitude,c.longitude];gpsSpeed=s;feedFix(null,curPos,s);
+    curPos=[c.latitude,c.longitude];gpsSpeed=s;feedFix(null,curPos,s,p.timestamp);
     if(firstFix&&MODE==="browse")centerOn(curPos,15);
     firstFix=false;return;
   }
   firstFix=false;
   const pr=projectTrack(c.latitude,c.longitude,p.timestamp);
+  curPos=[c.latitude,c.longitude];gpsSpeed=s??gpsSpeed;offD=pr.d;feedFix(pr.km,curPos,s,p.timestamp); // 先に位置を更新（この後でエラーが出ても矢印は止まらない）
   if(s==null&&lastFix){const dt=(p.timestamp-lastFix.t)/3.6e6;if(dt>0)s=Math.max(0,(pr.km-lastFix.km)/dt);} // 速度が取れない時は進み具合から推定
   lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
   const alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
   hwUpdate(c.latitude,c.longitude,(s??0)>8?(c.heading!=null&&!isNaN(c.heading)?c.heading:A.moveHd):null);
-  curPos=[c.latitude,c.longitude];feedFix(pr.km,curPos,s);checkArea(curPos);trackStop(s);
+  try{checkArea(curPos);}catch(e){showErr("市区町村",e);}trackStop(s);
   if(FUEL.needStart){FUEL.needStart=false;FUEL.startKm=pr.km;fuelStore();}
   if(offD<0.1)recordSpeed(pr.km,s);
   fuelAskCheck(s);
@@ -2038,8 +2044,13 @@ function onFix(p){
   if(pr.d>0.1){off.hidden=false;off.textContent=rerouting?"ルートを再検索中…":rerouteMsg||"ルートから外れています";}else{off.hidden=true;rerouteMsg="";}
   $("sim").value=pr.km;$("simKm").textContent=pr.km.toFixed(0)+" km";
   checkArrive(pr.km);passStop(pr.km);
-  render(pr.km);
+  renderSoon(pr.km);
 }
+let rsKm=null,rsT=0;
+function renderSoon(km){const first=rsKm==null;rsKm=km;if(first)setTimeout(()=>{const k=rsKm;rsKm=null;rsT=performance.now();try{render(k);}catch(e){showErr("画面の更新",e);}},0);}
+// エラーを詳細画面のGPSの状態に出す（実機で原因を確かめられるように）
+function showErr(where,e){GPSI.err=`${where}：${(e&&e.message)||e}`;try{console.error(e);}catch(_){}}
+addEventListener("error",e=>{GPSI.err=`エラー：${e.message||e}`;});
 
 /* ---- デモ：選んだルートを早送りで走る（1ステップ＝20秒ぶん） ---- */
 $("sim").addEventListener("input",e=>{if(!hasRoute())return;const km=+e.target.value;$("simKm").textContent=km.toFixed(0)+" km";hist=[];gpsSpeed=null;curPos=null;demoKm=null;feedFix(km,null,0);render(km);});
