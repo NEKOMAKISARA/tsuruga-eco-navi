@@ -187,14 +187,15 @@ body.sheet .app .jct{display:none}
 /* 地図に貼る看板：分かれ道の地点に支柱を立て、その上に看板。ルートの反対側に立てる */
 .sgpin{position:relative;width:0;height:0;pointer-events:none}
 .sgpin .rot{position:absolute;left:0;top:0;transform-origin:0 0}
-.sgpin .pole{position:absolute;left:-2px;bottom:0;width:4px;height:34px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+.sgpin .pole{position:absolute;left:0;top:-1.5px;width:26px;height:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35);transform-origin:0 50%}
+.sgpin.r .pole{transform:none}.sgpin.l .pole{transform:rotate(180deg)}
 .sgpin .foot{position:absolute;left:-6px;bottom:-6px;width:12px;height:12px;border-radius:50%;background:#0b7a3e;border:2px solid #fff}
-.sgpin .hsign{position:absolute;bottom:30px;width:min(190px,46vw);transition:none}
-.sgpin.r .hsign{left:-4px}.sgpin.l .hsign{right:-4px}
+.sgpin .hsign{position:absolute;top:0;transform:translateY(-50%);width:min(140px,34vw);transition:none}
+.sgpin.r .hsign{left:24px}.sgpin.l .hsign{right:24px}
 .sgpin.far .rot{opacity:.85}
 .hsign .nx{display:flex;align-items:center;gap:6px;margin-top:5px;padding-top:4px;border-top:2px solid rgba(255,255,255,.8);font-size:13px;font-weight:700;min-width:0}
 .hsign .nx>span:first-child{white-space:nowrap;flex-shrink:0}.hsign .nx b{font-size:18px;line-height:1}.hsign .nx .nn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-@media (orientation:landscape){.sgpin .hsign{width:min(230px,28vw)}}
+@media (orientation:landscape){.sgpin .hsign{width:min(210px,24vw)}}
 .inset{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(240px,60vw)}
 .inset-map{position:relative;height:170px;overflow:hidden}
 #insetRot{position:absolute;left:50%;top:60%;width:560px;height:560px;transform:translate(-50%,-50%) rotate(var(--irot,0deg))}
@@ -1189,7 +1190,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 02:15";
+const BUILD="2026-10-14 02:40";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1437,9 +1438,9 @@ function syncNav(){
   // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）。
   // 続く分岐は、600m以上離れていればそれぞれの地点に立てる（最大3枚、奥のものは小さく）。近いものは手前の看板に「その先」として1行足す
   const signOk=navOn&&!off&&onRouteF&&hw&&$("tunCard").hidden;
-  const sj=signOk?GUIDE.filter(j=>j.km>curKm+0.03&&j.km-curKm<=2.2&&JCT_TY.includes(j.ty)&&(j.name||j.sig)):[];
+  const sj=signOk?GUIDE.filter(j=>j.km>curKm+0.15&&j.km-curKm<=2.2&&JCT_TY.includes(j.ty)&&(j.name||j.sig)):[];
   const groups=[];for(const j of sj){const gp=groups[groups.length-1];if(gp&&j.km-gp[gp.length-1].km<0.6)gp.push(j);else groups.push([j]);}
-  const shown=groups.slice(0,3),showSign=shown.length>0;
+  const shown=groups.slice(0,1),showSign=shown.length>0; // 次に進む1か所だけ
   document.body.classList.toggle("hsg",showSign);
   const pins=shown.map((gp,gi)=>{const head=gp[0],dd=head.km-curKm,ar=arrowOf(head.text,head.ty);
     return{nj:head,html:signHtmlOf(head,dd,gp.slice(1)),side:/↖|↰|↶/.test(ar)?"r":"l",far:gi>0};});
