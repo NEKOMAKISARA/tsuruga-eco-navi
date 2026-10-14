@@ -290,6 +290,16 @@ body:not(.nav) #rerouteSheet{display:none}
 .results button:last-child{border-bottom:0}
 .results small{display:block;font-weight:400;color:#5f6368;font-size:12px;margin-top:2px}
 .results .msg{padding:12px 14px;color:#5f6368;font-size:14px}
+.results button.rw{display:grid;grid-template-columns:32px minmax(0,1fr) auto;column-gap:12px;align-items:center;padding:9px 14px}
+.results .ic{width:32px;height:32px;border-radius:50%;background:#f1f3f4;color:#5f6368;display:grid;place-items:center}
+.results .ic svg{width:18px;height:18px;fill:currentColor}
+.ic.pk,.pkb{background:#1a73e8;color:#fff;border-radius:8px;font:700 17px/1 var(--num)}
+.pkb{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;font-size:13px;margin-right:4px;vertical-align:-3px}
+.results .tx{min-width:0}
+.results .tx b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.results .tx small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.results .ds{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:#5f6368;white-space:nowrap}
+@media (orientation:portrait){body.pv.srch #preview{display:none}} /* 縦画面：候補を見ている間は経路の確認を隠す（地図に触れば戻る） */
 .rebtn{position:fixed;z-index:7;left:50%;transform:translateX(-50%);bottom:calc(max(8px,env(safe-area-inset-bottom)) + 104px);width:auto;padding:10px 18px;border-radius:24px;border:0;background:#fff;color:#1a73e8;font-size:16px;font-weight:700;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 @media (orientation:landscape){.rebtn{left:auto;right:max(12px,env(safe-area-inset-right));transform:none;bottom:calc(max(8px,env(safe-area-inset-bottom)) + 160px)}}
 .locbtn{position:fixed;z-index:5;right:max(12px,env(safe-area-inset-right));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 12px);width:48px;height:48px;padding:0;border-radius:50%;background:#fff;color:#1a73e8;border:0;font-size:24px;box-shadow:0 2px 10px rgba(0,0,0,.35)}
@@ -324,7 +334,9 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 #endNav{border-color:var(--warn);color:var(--warn)}
 @media (orientation:landscape){
   .plan,.preview{right:auto;width:min(400px,42vw)}
-  .results{max-height:60vh}
+  .preview{box-sizing:border-box;max-height:calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
+  body.pv .plan{left:auto;right:max(8px,env(safe-area-inset-right));width:min(400px,calc(58vw - 32px))}
+  .results{max-height:calc(100dvh - 90px)}
 }
 </style>
 
@@ -342,7 +354,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="pv-head"><b id="pvName"></b><small id="pvAddr"></small></div>
   <div class="pv-sum" id="pvSum"></div>
   <label class="pv-target">目標到着<input type="time" id="pvTarget"><button type="button" id="pvTargetClear">なし</button></label>
-  <div class="pv-btns"><button id="pvCancel">やめる</button><button id="pvPark">🅿 駐車場</button><button class="go" id="pvGo" disabled>出発</button></div>
+  <div class="pv-btns"><button id="pvCancel">やめる</button><button id="pvPark"><span class="pkb">P</span>駐車場</button><button class="go" id="pvGo" disabled>出発</button></div>
 </div>
 <div class="hsign" id="hSign" hidden></div>
 <div class="nav-stack" id="navStack">
@@ -1212,7 +1224,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 11:10";
+const BUILD="2026-10-14 11:40";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1750,6 +1762,10 @@ function decodeShape(s){let i=0,la=0,lo=0;const out=[];
 const cleanIns=t=>(t||"").replace(/\/[A-Za-z][A-Za-z0-9 .\-']*/g,"").replace(/[(（][A-Za-z][A-Za-z0-9 .\-']*[)）]/g,"").replace(/です。?$/,"").replace(/です。/g,"、").replace(/^[、 ]+|[、 ]+$/g,"");
 // 検索：施設名はOpenStreetMap（Nominatim）、住所・地名は国土地理院。どちらも無料・キー不要
 let searchSeq=0;
+const IC={pl:'<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>',
+  hi:'<svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L15 10h7V3l-2.64 2.64A8.96 8.96 0 0 0 13 3zm-1 5v5l4.25 2.52.77-1.28L13.5 12.2V8z"/></svg>'};
+const fmtD=d=>d<1?Math.round(d*1000)+" m":(d<10?d.toFixed(1):Math.round(d))+" km";
+function rowHtml(kind,name,sub,d){return`<span class="ic ${kind}">${kind==="pk"?"P":IC[kind]}</span><span class="tx"><b>${esc(name)}</b>${sub?`<small>${esc(sub)}</small>`:""}</span><span class="ds">${fmtD(d)}</span>`;}
 /* ---- 駐車場：OpenStreetMapの amenity=parking を、指定した場所の周りから探す（私有地は除く） ---- */
 const PARK_RE=/駐車場|コインパーキング|パーキング(?!エリア)/;
 async function findParking(c,radius){
@@ -1773,8 +1789,7 @@ function showParking(list,c,box){
   list.forEach(x=>x.d=distKm(c,[x.lat,x.lon]));list.sort((a,b)=>a.d-b.d);
   box.innerHTML='<div class="hh">駐車場</div>';
   for(const x of list.slice(0,15)){const bt=document.createElement("button");
-    const dm=x.d<1?Math.round(x.d*1000)+" m":x.d.toFixed(1)+" km";
-    bt.innerHTML=`🅿 ${esc(x.name)}<small>${esc(x.addr)}${x.addr?" ・ ":""}${dm}</small>`;
+    bt.className="rw";bt.innerHTML=rowHtml("pk",x.name,x.addr,x.d);
     bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);}
 }
 async function searchParking(q,seq,box){
@@ -1811,7 +1826,7 @@ async function search(q){
   if(!list.length){box.innerHTML='<div class="msg">見つかりませんでした</div>';return;}
   box.innerHTML="";
   for(const x of list.slice(0,12)){const bt=document.createElement("button");
-    bt.innerHTML=`${esc(x.name)}<small>${esc(x.addr)}${x.addr?" ・ ":""}${x.d<10?x.d.toFixed(1):Math.round(x.d)} km</small>`;
+    bt.className="rw";bt.innerHTML=rowHtml(PARK_RE.test(x.name)?"pk":"pl",x.name,x.addr,x.d);
     bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);}
 }
 function mapCenter(){if(gmap){const c=gmap.getCenter();return[c.lat(),c.lng()];}if(map){const c=map.getCenter();return[c.lat,c.lng];}return[35.68,139.6];}
@@ -1830,7 +1845,7 @@ function showHist(){
   const c=curPos||mapCenter();
   box.insertAdjacentHTML("beforeend",'<div class="hh">最近の行き先</div>');
   a.forEach((x,i)=>{const d=distKm(c,[x.lat,x.lon]),row=document.createElement("div");row.className="hr";
-    row.innerHTML=`<button type="button">${esc(x.name)}<small>${esc(x.addr)}${x.addr?" ・ ":""}${d<10?d.toFixed(1):Math.round(d)} km</small></button><button type="button" class="del" aria-label="履歴から消す">×</button>`;
+    row.innerHTML=`<button type="button" class="rw">${rowHtml("hi",x.name,x.addr,d)}</button><button type="button" class="del" aria-label="履歴から消す">×</button>`;
     row.children[0].addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});
     row.children[1].addEventListener("click",e=>{e.preventDefault();histPut(histGet().filter(y=>!(y.lat===x.lat&&y.lon===x.lon)));showHist();$("q").focus();});
     box.appendChild(row);});
