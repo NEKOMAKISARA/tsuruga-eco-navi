@@ -1170,7 +1170,7 @@ function usageBump(k){const u=usageGet();u[k]=(u[k]||0)+1;try{localStorage.setIt
 function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回<br>Googleの経路（料金・渋滞） <b>${u.groute}</b> / ${SET.gCap}回　経路検索 <b>${u.route}</b>回`;}
 showUsage();
 const openSheet=()=>document.body.classList.add("sheet");
-$("menuBtn").addEventListener("click",openSheet);$("menuBtn2").addEventListener("click",openSheet);
+$("menuBtn").addEventListener("click",()=>{openSheet();checkUpdate();});$("menuBtn2").addEventListener("click",openSheet);
 $("closeSheet").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("sheetBg").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute();});
@@ -1324,7 +1324,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 15:05";
+const BUILD="2026-10-14 15:25";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -2997,5 +2997,7 @@ if(hasRoute()&&ATTR.some(s=>s.lim)&&!MANS.some(m=>m[8]))loadLanes();
 if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct();loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
 $("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",()=>{location.replace(location.pathname+"?v="+Date.now());});setTimeout(checkUpdate,3000);
+// 開きっぱなしの間も15分ごとに確かめる（開いた時・戻った時だけだと、使っている間の更新に気づかない）
+setInterval(()=>{if(!document.hidden)checkUpdate();},15*60e3);
 </script>
 </body></html>
