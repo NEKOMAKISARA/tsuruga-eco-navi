@@ -121,6 +121,29 @@ input[type=range]{width:100%;accent-color:var(--glide)}
 .mapbox{display:block;position:fixed;inset:0;z-index:0;background:#e9e5dc}
 #map{position:absolute;inset:0}
 #rot{transform:translate(-50%,-50%) perspective(900px) rotateX(var(--tilt,0deg)) rotate(var(--rot,0deg))}
+.facic{line-height:0;transform:rotate(calc(-1*var(--rot,0deg)))}
+.sapan{background:#0f7d45;color:#fff;border-radius:12px;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(300px,74vw)}
+.sp-hd{display:flex;gap:8px;align-items:center;padding:7px 10px}
+.sp-hd .kd{flex-shrink:0;background:#fff;color:#0f7d45;border-radius:4px;font:700 12px/1 var(--num);padding:4px 5px}
+.sp-hd .n{flex:1;min-width:0;font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-hd .k{font:700 20px/1 var(--num);white-space:nowrap}.sp-hd .k small{font-size:12px;margin-left:1px}
+.sp-map{position:relative;height:230px;overflow:hidden;background:#f1f3f4}
+#spRot{position:absolute;left:50%;top:50%;width:620px;height:620px;transform:translate(-50%,-50%) rotate(var(--srot,0deg))}
+#spL{width:100%;height:100%;background:#f1f3f4}
+#spRot .facic{transform:rotate(calc(-1*var(--srot,0deg)))}
+.sp-leg{display:flex;flex-wrap:wrap;gap:4px 10px;padding:6px 10px;background:#fff;color:#202124;font-size:12px;font-weight:700}
+.sp-leg span{display:flex;align-items:center;gap:3px;white-space:nowrap}
+.sp-leg svg{flex-shrink:0}
+.sp-hd button{flex:0 0 auto;width:auto;margin:0;background:#fff;color:#1a73e8;border:0;border-radius:16px;font-size:13px;font-weight:700;line-height:1;padding:7px 12px}
+/* 横画面：地図と一覧を横に並べ、地図を高くする */
+@media (orientation:landscape){.sapan{width:min(440px,50vw)}.sp-hd{padding:4px 10px}.sp-body{display:flex}
+  .sp-map{flex:1;min-width:0;height:min(210px,calc(100vh - 210px))}
+  .sp-leg{flex-direction:column;flex-wrap:nowrap;width:118px;flex-shrink:0;font-size:12px;padding:6px 8px;gap:3px;overflow:hidden}.sp-leg svg{width:16px;height:16px}}
+/* 見取り図を出している間は、案内のバナーと下のバーだけ残して見やすく（ルート外れの再検索は出す） */
+body.spon #hSign,body.spon .sgpin,body.spon #sapaCard,body.spon #tunCard,body.spon #jamCard,body.spon #detCard,body.spon #navEco{display:none!important}
+body.spon #nvToast{display:none!important} /* ルート外れの再検索は見取り図の見出しに出す */
+.sapa .nm{display:block;overflow:hidden;text-overflow:ellipsis}
+.sapa .fi{display:flex;gap:4px;margin-top:3px}
 #mapNote{left:auto;top:auto;right:8px;bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px)}
 .app{display:none}
 /* 詳細画面は余白込みで画面幅に収める（余白のぶん左がはみ出していた） */
@@ -376,6 +399,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap"><b id="insetAr"></b><span id="insetTxt"></span></div></div>
+  <div class="sapan" id="saPanel" hidden><div class="sp-hd"><b class="kd" id="spKd">SA</b><span class="n" id="spName"></span><span class="k" id="spDist"></span><button type="button" id="spRe" hidden>再検索</button></div><div class="sp-body"><div class="sp-map"><div id="spRot"><div id="spL"></div></div></div><div class="sp-leg" id="spLeg"></div></div></div>
   <div class="detour" id="detCard" hidden></div>
   <div class="jamc" id="jamCard" hidden></div>
   <div class="sapa tun" id="tunCard" hidden></div>
@@ -556,7 +580,7 @@ function buildGeom(){
 // 案内・SA・高速の線・時間の補正を作り直す（ルートや道路の情報が変わるたびに呼ぶ）
 function buildIndex(){
   GUIDE=MANS.map(m=>({name:m[6]||"",sig:m[7]||null,x:m[8]||null,text:m[2],ty:m[3],stop:m[5]==="stop",km:m[4]!=null&&RCUM[m[4]]!=null?RCUM[m[4]]:project(m[0],m[1]).km})).sort((a,b)=>a.km-b.km);
-  SAKM=SAS.map(s=>{const q=project(s.lat,s.lon);return{name:s.name,lat:s.lat,lon:s.lon,km:q.km,d:q.d,f:""};}).filter(s=>s.d<0.5).sort((a,b)=>a.km-b.km);
+  SAKM=SAS.map(s=>{const q=project(s.lat,s.lon);return{name:s.name,lat:s.lat,lon:s.lon,km:q.km,d:q.d,f:"",fc:s.fc||null};}).filter(s=>s.d<0.5).sort((a,b)=>a.km-b.km);
   if(STOP){const g=GUIDE.find(x=>x.stop);STOP.km=g?g.km:null;}
   // トンネル（300m以上）ごとに、中にある案内（分岐・出口）を順番に。出てすぐ（300m以内）の案内も含める
   TUN=[];for(const a of ATTR){if(!a.tun)continue;const p=TUN[TUN.length-1];if(p&&a.a-p.b<0.05)p.b=a.b;else TUN.push({a:a.a,b:a.b});}
@@ -1014,6 +1038,7 @@ function drawRouteLine(){
 // 目的地とSA・PAの印
 function drawMarks(){
   setTimeout(()=>{wxDrawn="";drawWx();},0); // 地図が切り替わった時も天気の印を描き直す
+  setTimeout(()=>{try{drawFac(true);}catch(e){}},0);
   if(destMk){destMk.setMap?destMk.setMap(null):destMk.remove();destMk=null;}
   saMks.forEach(m=>m.setMap?m.setMap(null):m.remove());saMks=[];
   if(gmap){
@@ -1029,6 +1054,64 @@ function drawMarks(){
   for(const s of SAS){const on=STOP&&STOP.name===s.name;saMks.push(L.circleMarker([s.lat,s.lon],{radius:on?8:5,color:"#fff",weight:on?3:2,fillColor:on?"#f29900":"#2e9e44",fillOpacity:1}).bindTooltip(s.name).addTo(map));}
   if(SET.orbis)for(const c of CAMS)saMks.push(L.circleMarker([c.lat,c.lon],{radius:5,color:"#fff",weight:2,fillColor:"#7b1fa2",fillOpacity:1}).bindTooltip("速度取り締まり機").addTo(map));
 }
+/* ---- SA・PAの設備のアイコン（自作のSVG、24×24の枠で描く。色は currentColor） ---- */
+const PIC={
+  t:'<circle cx="7" cy="4.6" r="2.2"/><path d="M4.5 8h5v7.5H8.6V21H5.4v-5.5H4.5z"/><circle cx="17" cy="4.6" r="2.2"/><path d="M15 8h4l2.5 8H19v5h-4v-5h-2.5z"/><path d="M12 3v18" fill="none" stroke="currentColor" stroke-width="1.2"/>',
+  f:'<path fill-rule="evenodd" d="M5.5 3h7A1.5 1.5 0 0 1 14 4.5V20H4V4.5A1.5 1.5 0 0 1 5.5 3zM6.5 5.5V10h5V5.5z"/><path d="M2.5 20h13v2h-13z"/><path d="M14 9h2l2.2 2.2v6.3a1.6 1.6 0 0 0 3.2 0V8.2L19 5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  e:'<path d="M13.5 1.5 4.5 13.5h6.2L9 22.5l10.5-13.3h-6.3z"/>',
+  r:'<path d="M4.8 2h1.3v5.8h1.1V2h1.3v5.8h1.1V2h1.3v6.6a2.7 2.7 0 0 1-2 2.6V22H6.8V11.2a2.7 2.7 0 0 1-2-2.6z"/><path d="M15.4 2c2.7 1 4.2 4.4 4.2 8.8h-2.3V22h-1.9z"/>',
+  s:'<path d="M4.3 8.5h15.4l-1.3 13.3H5.6z"/><path d="M8.6 10.5V6.9a3.4 3.4 0 0 1 6.8 0v3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  i:'<circle cx="12" cy="4.7" r="2.4"/><path d="M8.6 9h5.2v9.6h2.6V21H8.1v-2.4h2.6v-7.2H8.6z"/>',
+  p:'<path fill-rule="evenodd" d="M6.5 2.5h6.8a6.3 6.3 0 0 1 0 12.6H10v6.4H6.5zM10 5.8v6h3.3a3 3 0 0 0 0-6z"/>',
+  h:'<path d="M1.5 5.5h12.6v11H1.5z"/><path d="M15.2 9h4.1l3.2 4v3.5h-7.3z"/><circle cx="5.6" cy="18.4" r="2.3"/><circle cx="18.6" cy="18.4" r="2.3"/>',
+  m:'<circle cx="5" cy="16.6" r="3.4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="19" cy="16.6" r="3.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 16.6 9.6 11h5.6l3.8 5.6M13.8 6.5h3l2.2 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.6 8.8h6l1 2.4H8.6z"/>'
+};
+// 地図の印・一覧の色と名前
+const FAC={t:["#455a64","トイレ"],p:["#1a73e8","駐車場"],h:["#0b57d0","大型車"],m:["#5e35b1","二輪"],f:["#d93025","給油"],e:["#188038","EV充電"],r:["#e8710a","食事"],s:["#8e24aa","店"],i:["#00796b","案内所"]};
+const picSvg=(k,sz)=>`<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${PIC[k]}</svg>`;
+// 角の丸い四角に白い絵（地図の印）
+const facSvg=(k,sz=24)=>`<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 28 28" color="#fff"><rect x="1" y="1" width="26" height="26" rx="6" fill="${FAC[k][0]}" stroke="#fff" stroke-width="2"/><g transform="translate(4.4 4.4) scale(.8)" fill="currentColor">${PIC[k]}</g></svg>`;
+// SA・PAの設備の数 {記号:数}、給油のブランド
+function facCount(fc){const n={};let brand="";if(!fc)return{n,brand};
+  for(const f of fc[3]){n[f[0]]=(n[f[0]]||0)+1;if(f[0]==="f"&&f[5]&&!brand)brand=f[5];}return{n,brand};}
+
+/* ---- SA・PAの中の地図：地図を大きくした時（16以上）、近くのSA・PAのトイレ・駐車場・給油・EV充電と建物の形を出す。
+   データは sapa.json（地図のデータに入っている所だけ。地方のPAはトイレの位置が無いことが多い） ---- */
+let facMks=[],facSig="";
+// 1か所のSA・PAの形（建物・駐車場）と印。食事・店は数が多く重なるので印にしない
+function facItems(s){
+  const out=[];if(!s.fc)return out;const [c0,c1,,fac]=s.fc;
+  const P=a=>{const r=[];for(let i=0;i+1<a.length;i+=2)r.push([(c0+a[i])/1e5,(c1+a[i+1])/1e5]);return r;};
+  for(const [k,dl,dn,name,shape,extra] of fac){
+    if(k==="r"||k==="s")continue;
+    const park=k==="p"||k==="h"||k==="m";
+    if(shape&&(k==="b"||park))out.push({poly:P(shape),k});
+    if(k==="b")continue;
+    out.push({pos:[(c0+dl)/1e5,(c1+dn)/1e5],k,title:(name||FAC[k][1])+(extra?`（${park?extra+"台":extra}）`:"")});}
+  return out;
+}
+function drawFacOn(target,gm,items,list,cls){
+  for(const it of items){
+    if(it.poly){const b=it.k==="b",col=b?"#9aa0a6":FAC[it.k][0];
+      if(gm)list.push(new google.maps.Polygon({paths:it.poly.map(p=>({lat:p[0],lng:p[1]})),map:target,clickable:false,zIndex:0,strokeColor:col,strokeWeight:1,strokeOpacity:.8,fillColor:col,fillOpacity:b?.25:.12}));
+      else list.push(L.polygon(it.poly,{interactive:false,color:col,weight:1,opacity:.8,fillColor:col,fillOpacity:b?.25:.12}).addTo(target));
+      continue;}
+    const sz=24;
+    if(gm)list.push(new google.maps.Marker({position:{lat:it.pos[0],lng:it.pos[1]},map:target,title:it.title,zIndex:1,
+      icon:{url:"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(facSvg(it.k,sz)),scaledSize:new google.maps.Size(sz,sz),anchor:new google.maps.Point(sz/2,sz/2)}}));
+    else list.push(L.marker(it.pos,{icon:L.divIcon({className:"",html:`<div class="${cls}">${facSvg(it.k,sz)}</div>`,iconSize:[sz,sz]}),title:it.title,keyboard:false,interactive:false}).addTo(target));
+  }
+}
+function drawFac(force){
+  const m=gmap||map;if(!m)return;
+  const z=m.getZoom(),c=m.getCenter(),ctr=[typeof c.lat==="function"?c.lat():c.lat,typeof c.lng==="function"?c.lng():c.lng];
+  // 地図の中心から3km以内のSA・PAだけ
+  const near=z>=16?SAS.filter(s=>s.fc&&distKm(ctr,[s.lat,s.lon])<3):[];
+  const sig=(gmap?"g":"l")+near.map(s=>s.name+s.lat).join("|");if(!force&&sig===facSig)return;facSig=sig;
+  facMks.forEach(o=>o.setMap?o.setMap(null):o.remove());facMks=[];
+  for(const s of near)drawFacOn(gmap||map,!!gmap,facItems(s),facMks,"facic");
+}
+setInterval(()=>{if(!document.hidden)try{drawFac();}catch(e){}},2000);
 /* ---- 地図画像のキャッシュ（IndexedDB）：一度表示した所と「保存」した所は電波なしでも出る ---- */
 // OSM・CARTOは参照元のないアクセス（端末に保存したHTML）を拒否するので、キー不要の国土地理院（淡色地図）を使う
 const TILE_URL=(z,x,y)=>`https://cyberjapandata.gsi.go.jp/xyz/pale/${z}/${x}/${y}.png`;
@@ -1241,7 +1324,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 12:55";
+const BUILD="2026-10-14 14:40";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1560,7 +1643,9 @@ function syncNav(){
   // 曲がる所・IC・JCTが近い時は拡大ポップアップ、高速走行中は次のSA・PA
   const city=isCity(),nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
   const navOn=(curPos&&performance.now()-A.fixT<15000)||!!timer||drOn(); // GPSが途切れて推定位置で走っている間も出す
-  const showInset=navOn&&nj&&!off&&onRouteF&&d>0&&d<(city?0.3:1.0)&&insetClosed!==nj.km;
+  const sp=navOn?saPanelFor():null;
+  $("saPanel").hidden=!sp;if(sp)updateSaPanel(sp);document.body.classList.toggle("spon",!!sp);$("spRe").hidden=!(sp&&off&&curPos&&!rerouting);
+  const showInset=!sp&&navOn&&nj&&!off&&onRouteF&&d>0&&d<(city?0.3:1.0)&&insetClosed!==nj.km;
   $("inset").hidden=!showInset;
   insetFor=showInset?nj.km:null;
   if(showInset)updateInset(nj,d);
@@ -1614,7 +1699,7 @@ function syncNav(){
     if(h!==detHtml){detHtml=h;$("detCard").innerHTML=h;}}
   if(!$("sapaCard").hidden){
     const h=next.map(x=>{const on=STOP&&STOP.name===x.name,d=x.km-curKm;
-      return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n">${esc(saShort(x.name))}</span>${on?'<span class="yr">寄る</span>':""}${(w=>w?`<span class="w">${wxTxt(w)}</span>`:"")(wxAt(x.km,etaAt(x.km)))}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
+      return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n"><span class="nm">${esc(saShort(x.name))}</span>${saIcons(x)}</span>${on?'<span class="yr">寄る</span>':""}${(w=>w?`<span class="w">${wxTxt(w)}</span>`:"")(wxAt(x.km,etaAt(x.km)))}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
     if(h!==sapaHtml){sapaHtml=h;$("sapaCard").innerHTML=h;} // 毎回作り直すとタッチが外れるので、変わった時だけ
   }
   remindTick(curKm); // 念押しを先に（言った距離はふつうの案内で繰り返さない）
@@ -1625,6 +1710,9 @@ function syncNav(){
     else if(t-ecoCand.t>8000&&e!==lastEcoSay){if(lastEcoSay)speak(`指定速度${T("set")}`);lastEcoSay=e;}}
 }
 // SA・PAの看板：種類（SA/PA）と、上り・下りやSA/PAを除いた名前
+// 名前の下の設備のアイコン：トイレ（どこにもある）・給油・EV充電・食事・店。地図のデータにある物だけ
+function saIcons(x){const {n}=facCount(x.fc);
+  return`<span class="fi">${["t","f","e","r","s"].filter(k=>k==="t"||n[k]).map(k=>picSvg(k,16)).join("")}</span>`;}
 let sapaHtml="",tunHtml="",detHtml="",wxTick=0,progHtml="",progSaid=true;
 const fmtKm=d=>d<1?Math.round(d*10)*100+"m":(d<10?d.toFixed(1):d.toFixed(0))+"km";
 const saKind=n=>/SA|ＳＡ|サービスエリア/.test(n)?"SA":"PA";
@@ -1772,6 +1860,64 @@ function placeSign(){
   el.style.left=Math.round(best.x)+"px";el.style.top=Math.round(best.y)+"px";
 }
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
+/* ---- 立ち寄り先のSA・PAの見取り図（拡大ポップアップの代わり）：建物・駐車場・トイレ・給油・EV充電・案内所の位置と、設備の一覧。
+   Googleマップの読み込み回数を使わないよう、いつも国土地理院の地図（Leaflet）で出す ---- */
+let spL=null,spMe=null,spLay=[],spKey="",spClosed=null;
+// 出す時：①SA・PAの敷地（地図データの範囲）の中をゆっくり（60km/h未満）走っている・止まっている時（立ち寄りを選んでいなくても）
+// ②立ち寄り先へ向かう時は、SA・PAへの分岐を過ぎてから。本線を走っている間（分岐の前）は出さない
+function inSaArea(s,p){
+  const [c0,c1,line]=s.fc;if(!line.length)return distKm(p,[s.lat,s.lon])<0.15;
+  const y=p[0]*1e5-c0,x=p[1]*1e5-c1;let inside=false;
+  for(let i=0,j=line.length-2;i<line.length;j=i,i+=2){const yi=line[i],xi=line[i+1],yj=line[j],xj=line[j+1];
+    if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;}
+  return inside;
+}
+function saPanelFor(){
+  const pos=curPos&&performance.now()-A.fixT<15000?curPos:(timer?posAt(curKm):null);
+  if(pos&&(A.spd||0)<60){const s=SAKM.find(x=>x.fc&&distKm(pos,[x.lat,x.lon])<1&&inSaArea(x,pos));if(s)return spClosed===s.name?null:s;}
+  if(!STOP||STOP.km==null||spClosed===STOP.name)return null;
+  const s=SAKM.find(x=>x.name===STOP.name);if(!s||!s.fc)return null;
+  const g=GUIDE.filter(x=>!x.stop&&x.km<STOP.km&&x.km>STOP.km-2&&attrAt(Math.max(0,x.km-0.05)).hw).pop(); // SA・PAへの分岐（本線の上にある最後の案内）
+  const from=g?g.km+0.03:STOP.km-0.4;
+  return curKm>from&&curKm<STOP.km+0.5?s:null;
+}
+function updateSaPanel(s){
+  if(!window.L)return;
+  const d=STOP&&STOP.name===s.name&&STOP.km!=null?Math.max(0,STOP.km-curKm):0;
+  $("spKd").textContent=saKind(s.name);$("spName").textContent=saShort(s.name);$("spName").dataset.n=s.name;
+  $("spDist").innerHTML=d<0.05?"":d<1?Math.round(d*100)*10+"<small>m</small>":d.toFixed(1)+"<small>km</small>";
+  // 本線の向きを上に
+  const hd=bearing(posAt(Math.max(0,s.km-0.1)),posAt(s.km+0.1));
+  if(!spL){spL=L.map("spL",{zoomControl:false,attributionControl:false,dragging:false,touchZoom:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,zoomSnap:0});
+    new CachedTiles({maxZoom:18}).addTo(spL);
+    spMe=L.marker([s.lat,s.lon],{zIndexOffset:1000,icon:L.divIcon({className:"",iconSize:[26,26],html:'<svg class="me-ar" style="width:26px;height:26px" viewBox="0 0 34 34"><path d="M17 3 L29 30 L17 23 L5 30 Z" fill="#1a73e8" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>'})}).addTo(spL);}
+  const key=s.name+"|"+routeKey()+"|"+(innerWidth>innerHeight); // 縦横が変わったら拡大率を出し直す
+  if(key!==spKey){spKey=key;spLay.forEach(l=>l.remove());spLay=[];spL.invalidateSize();
+    const [c0,c1,line]=s.fc,P=a=>{const r=[];for(let i=0;i+1<a.length;i+=2)r.push([(c0+a[i])/1e5,(c1+a[i+1])/1e5]);return r;};
+    const ol=line.length?P(line):[[s.lat,s.lon]];
+    if(line.length)spLay.push(L.polygon(ol,{interactive:false,color:"#0f7d45",weight:2,dashArray:"5 4",fill:false}).addTo(spL));
+    spLay.push(...routePolys(false,spL,6));
+    drawFacOn(spL,false,facItems(s),spLay,"facic");
+    // 範囲の対角が枠の短い辺に収まる拡大率（回しても切れないように）
+    // 本線の向きを上にした時の範囲の幅・高さ（m）で枠に収める
+    const h=hd*Math.PI/180,o0=ol[0],kx=111320*Math.cos(o0[0]*Math.PI/180),ky=110570;
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+    for(const [a,b] of ol){const x=(b-o0[1])*kx,y=(a-o0[0])*ky,rx=x*Math.cos(h)-y*Math.sin(h),ry=x*Math.sin(h)+y*Math.cos(h);
+      x0=Math.min(x0,rx);x1=Math.max(x1,rx);y0=Math.min(y0,ry);y1=Math.max(y1,ry);}
+    const mx=(x0+x1)/2,my=(y0+y1)/2,ctr=[o0[0]+(-mx*Math.sin(h)+my*Math.cos(h))/ky,o0[1]+(mx*Math.cos(h)+my*Math.sin(h))/kx];
+    const box=$("saPanel").querySelector(".sp-map"),bw=box.clientWidth||300,bh=box.clientHeight||230;
+    const mpp=Math.max(Math.max(60,x1-x0)/(bw*0.85),Math.max(60,y1-y0)/(bh*0.8)); // 1pxあたりのm
+    spL.setView(ctr,Math.max(15,Math.min(18,Math.log2(156543.03*Math.cos(ctr[0]*Math.PI/180)/mpp))),{animate:false});
+    const {n,brand}=facCount(s.fc),it=(k,t)=>`<span>${facSvg(k,18)}${t}</span>`,L2=[];
+    L2.push(it("t",n.t?"トイレ "+n.t:"トイレ"));
+    if(n.p)L2.push(it("p","小型"));if(n.h)L2.push(it("h","大型"));if(n.m)L2.push(it("m","二輪"));
+    if(n.f)L2.push(it("f",brand||"給油"));if(n.e)L2.push(it("e","EV "+n.e));
+    if(n.r)L2.push(it("r","食事 "+n.r));if(n.s)L2.push(it("s","店 "+n.s));if(n.i)L2.push(it("i","案内所"));
+    $("spLeg").innerHTML=L2.join("");}
+  $("spRot").style.setProperty("--srot",(-hd)+"deg");
+  const p=A.lastP||(snapF?posAt(A.dispKm??curKm):(curPos||posAt(curKm)));
+  spMe.setLatLng(p);{const e=spMe.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${rotAcc||0}deg)`;}
+}
 function updateInset(nj,d){
   const city=isCity(),k0=Math.min(A.dispKm??curKm,nj.km-0.01),k1=nj.km+(city?0.04:0.2);
   const from=posAt(Math.max(0,Math.min(k0,nj.km-0.05))),hd=bearing(from,posAt(nj.km));
@@ -2526,10 +2672,26 @@ async function loadCams(){
     }catch(e){}
   }
 }
+/* 全国のSA・PAと中の施設（トイレ・駐車場など）は sapa.json（tools/make_sapa.py で OpenStreetMap の全国データから作る）。
+   Overpass は混むと全部504になるので、読めない時だけ使う */
+let SAPA_DB=null;
+function sapaDb(){
+  if(!SAPA_DB)SAPA_DB=fetch("sapa.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(d=>d.s||[]).catch(e=>{SAPA_DB=null;throw e;});
+  return SAPA_DB;
+}
 async function loadSA(retry){
   const key=routeKey();if(!key)return;
   const pts=[];for(let k=0;k<=TOTAL;k+=1)if(attrAt(k).hw)pts.push(posAt(k));
   if(pts.length<5)return;
+  try{
+    const rows=await sapaDb();if(key!==routeKey())return;
+    // 高速の部分の1kmごとの点の近く（格子で大まかに）にあるものだけ
+    const C=0.02,cell=new Set();for(const p of pts){const gx=Math.floor(p[1]/C),gy=Math.floor(p[0]/C);for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)cell.add((gx+i)+","+(gy+j));}
+    const els=[];
+    for(const r of rows){const lat=r[2]/1e5,lon=r[3]/1e5;if(!cell.has(Math.floor(lon/C)+","+Math.floor(lat/C)))continue;
+      els.push({lat,lon,tags:{name:r[0],highway:r[1]?"rest_area":"services"},row:r});}
+    pickSA(els);return;
+  }catch(e){}
   const q=`[out:json][timeout:60];nwr["highway"~"^(services|rest_area)$"](around:350,${pts.map(p=>p[0].toFixed(5)+","+p[1].toFixed(5)).join(",")});out center tags;`;
   for(const u of OVERPASS){
     try{
@@ -2537,36 +2699,41 @@ async function loadSA(retry){
       const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(q),signal:ctl.signal});
       clearTimeout(tm);if(!r.ok)continue;
       const els=(await r.json()).elements||[];if(key!==routeKey())return;
-      // 本線からの横のずれ（km、左が＋）を出し、上り・下りの組は左にある方だけ残す
-      const cand=[];
-      for(const e of els){
-        const lat=e.lat??(e.center&&e.center.lat),lon=e.lon??(e.center&&e.center.lon);if(lat==null)continue;
-        const pr=project(lat,lon);if(pr.d>0.4||!attrAt(pr.km).hw)continue;
-        const a=xy(...posAt(Math.max(0,pr.km-0.05))),b=xy(...posAt(pr.km+0.05)),c=xy(lat,lon),L=Math.hypot(b[0]-a[0],b[1]-a[1])||1;
-        const side=((b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]))/L;
-        const name=(e.tags&&e.tags.name)||(e.tags&&e.tags.highway==="services"?"SA":"PA");
-        cand.push({name,base:name.replace(/[\s　]*[（(](上り|下り|内回り|外回り|東行き?|西行き?|南行き?|北行き?)[)）]/g,"").replace(/ＳＡ/g,"SA").replace(/ＰＡ/g,"PA"),lat,lon,km:pr.km,side});
-      }
-      // 上り・下りの組ごとに「左にある方」の向きを数え、多い方をこの旅の向きとする（地図データの位置がずれている所があるため）
-      const dirOf=n=>(n.match(/[（(](上り|下り|内回り|外回り)[)）]/)||[])[1]||"";
-      const vote={};
-      for(const x of cand){const grp=cand.filter(y=>y.base===x.base&&Math.abs(y.km-x.km)<3);
-        if(grp.length<2||grp[0]!==x)continue;const b=grp.reduce((p,y)=>y.side>p.side?y:p),d=dirOf(b.name);if(d)vote[d]=(vote[d]||0)+1;}
-      const myDir=Object.keys(vote).sort((a,b)=>vote[b]-vote[a])[0]||"";
-      const got=[];
-      for(const x of cand){
-        const grp=cand.filter(y=>y.base===x.base&&Math.abs(y.km-x.km)<3);
-        const mine=myDir&&grp.filter(y=>dirOf(y.name)===myDir);
-        const best=mine&&mine.length?mine.reduce((p,y)=>y.side>p.side?y:p):grp.reduce((p,y)=>y.side>p.side?y:p);
-        const dx=dirOf(x.name);
-        if(best!==x||(myDir&&dx&&dx!==myDir)||(!(myDir&&dx===myDir)&&x.side<-0.03))continue; // 反対車線側
-        if(got.some(g=>g.base===x.base&&Math.abs(g.km-x.km)<3))continue;
-        got.push(x);
-      }
-      SAS=got.map(({name,lat,lon})=>({name,lat,lon}));buildIndex();drawMarks();saveRoute();render(curKm);if(MODE==="preview"&&!$("pvGo").disabled)showPreview();return;
+      pickSA(els);return;
     }catch(e){}
   }
   if(!retry)setTimeout(()=>{if(key===routeKey()&&!SAS.length)loadSA(true);},120000); // どこも取れなかったら2分後にもう1回だけ
+}
+// 取れたSA・PAから、進む向きの側にあるものを選ぶ
+function pickSA(els){
+  // 本線からの横のずれ（km、左が＋）を出し、上り・下りの組は左にある方だけ残す
+  const cand=[];
+  for(const e of els){
+    const lat=e.lat??(e.center&&e.center.lat),lon=e.lon??(e.center&&e.center.lon);if(lat==null)continue;
+    const pr=project(lat,lon);if(pr.d>0.4||!attrAt(pr.km).hw)continue;
+    const a=xy(...posAt(Math.max(0,pr.km-0.05))),b=xy(...posAt(pr.km+0.05)),c=xy(lat,lon),L=Math.hypot(b[0]-a[0],b[1]-a[1])||1;
+    const side=((b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]))/L;
+    const name=(e.tags&&e.tags.name)||(e.tags&&e.tags.highway==="services"?"SA":"PA");
+    cand.push({row:e.row,name,base:name.replace(/[\s　]*[（(](上り|下り|内回り|外回り|東行き?|西行き?|南行き?|北行き?)[)）]/g,"").replace(/ＳＡ/g,"SA").replace(/ＰＡ/g,"PA"),lat,lon,km:pr.km,side});
+  }
+  // 上り・下りの組ごとに「左にある方」の向きを数え、多い方をこの旅の向きとする（地図データの位置がずれている所があるため）
+  const dirOf=n=>(n.match(/[（(](上り|下り|内回り|外回り)[)）]/)||[])[1]||"";
+  const vote={};
+  for(const x of cand){const grp=cand.filter(y=>y.base===x.base&&Math.abs(y.km-x.km)<3);
+    if(grp.length<2||grp[0]!==x)continue;const b=grp.reduce((p,y)=>y.side>p.side?y:p),d=dirOf(b.name);if(d)vote[d]=(vote[d]||0)+1;}
+  const myDir=Object.keys(vote).sort((a,b)=>vote[b]-vote[a])[0]||"";
+  const got=[];
+  for(const x of cand){
+    const grp=cand.filter(y=>y.base===x.base&&Math.abs(y.km-x.km)<3);
+    const mine=myDir&&grp.filter(y=>dirOf(y.name)===myDir);
+    const best=mine&&mine.length?mine.reduce((p,y)=>y.side>p.side?y:p):grp.reduce((p,y)=>y.side>p.side?y:p);
+    const dx=dirOf(x.name);
+    if(best!==x||(myDir&&dx&&dx!==myDir)||(!(myDir&&dx===myDir)&&x.side<-0.03))continue; // 反対車線側
+    if(got.some(g=>g.base===x.base&&Math.abs(g.km-x.km)<3))continue;
+    got.push(x);
+  }
+  SAS=got.map(({name,lat,lon,row})=>row?{name,lat,lon,fc:row[4].length||row[5].length?[row[2],row[3],row[4],row[5]]:null}:{name,lat,lon});
+  buildIndex();drawMarks();saveRoute();render(curKm);if(MODE==="preview"&&!$("pvGo").disabled)showPreview();
 }
 /* ---- ルートの保存：ページを開き直しても、案内中ならそのまま続ける ---- */
 function saveRoute(){
@@ -2817,6 +2984,8 @@ $("zoomReset").addEventListener("click",()=>{userZoom=null;try{localStorage.remo
 $("compassBtn").addEventListener("click",()=>initCompass()); // iPhoneはボタンを押した中でしか許可を聞けない
 {const r=$("setMeY");r.value=SET.meY||0;r.addEventListener("input",()=>{SET.meY=+r.value;saveSet();lay.t=0;});}
 $("inset").addEventListener("click",()=>{insetClosed=insetFor;$("inset").hidden=true;}); // タップで閉じる（次の案内では また出る）
+$("spRe").addEventListener("click",e=>{e.stopPropagation();reroute(true);});
+$("saPanel").addEventListener("click",()=>{spClosed=$("spName").dataset.n||null;$("saPanel").hidden=true;}); // タップで閉じる（そのSA・PAでは もう出さない）
 restoreRoute();
 applyMapMode();syncMap();startGps();
 if(MODE==="preview"&&DEST){showPreview();setTimeout(()=>slideTo([DEST.lat,DEST.lon],16),500);}
