@@ -224,8 +224,8 @@ body.sheet .app .jct{display:none}
 .sdeck .hsign.gone{z-index:4;transform:translateY(-24px);opacity:0}
 /* 看板から分岐の地点への線（ルートの線より細く） */
 .slead{position:fixed;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;overflow:visible}
-.slead{opacity:.6}.slead .o{stroke:#fff;stroke-width:2.5;stroke-linecap:round}.slead .i{stroke:#0b7a3e;stroke-width:1.2;stroke-linecap:round}
-.slead circle{r:4px;fill:#0b7a3e;stroke:#fff;stroke-width:2px}
+.slead{opacity:.85}.slead path{fill:none;stroke-linecap:round;stroke-linejoin:round}.slead .o{stroke:#fff;stroke-width:4}.slead .i{stroke:#0b7a3e;stroke-width:1.8}
+.slead circle{r:4px;fill:#0b7a3e;stroke:#fff;stroke-width:2px}.slead circle.a{r:2.5px;stroke-width:1.5px}
 .slead.cty .i{stroke:#1d4fa3}.slead.cty circle{fill:#1d4fa3}
 .sgpin .rot{position:absolute;left:0;top:0;transform-origin:0 0}
 .sgpin .pole{position:absolute;left:0;top:-2.5px;width:26px;height:5px;border-radius:3px;background:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.45);transform-origin:0 50%}
@@ -412,7 +412,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="pv-btns"><button id="pvCancel">やめる</button><button id="pvPark"><span class="pkb">P</span>駐車場</button><button class="go" id="pvGo" disabled>出発</button></div>
 </div>
 <div class="hsign" id="hSign" hidden></div>
-<svg class="slead" id="sLead" style="display:none"><line class="o"/><line class="i"/><circle/></svg>
+<svg class="slead" id="sLead" style="display:none"><path class="o"/><path class="i"/><circle class="a"/><circle class="t"/></svg>
 <div class="sdeck" id="sDeck" hidden></div>
 <div class="nav-stack" id="navStack">
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
@@ -1322,7 +1322,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 21:00";
+const BUILD="2026-10-14 23:00";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1858,16 +1858,25 @@ function drawDeck(items){
   drawLead(f,items[0]);
 }
 // 看板（いちばん前）から分岐の地点へ線を引く。分岐が画面の外・地図の下に隠れる時は引かない
+// 2枚目の看板に隠れない縁（左の辺か、下の辺の2枚目より左）から出し、2枚目が間にある時は2枚目の左を回る
 function drawLead(card,it){
   const ln=$("sLead"),dk=$("sDeck");
   const p=scrPt(it.km);
   if(!p||p[0]<0||p[1]<0||p[0]>innerWidth||p[1]>innerHeight){ln.style.display="none";return;}
-  const r=card.getBoundingClientRect();
-  // 看板の縁のうち分岐に近い点から（左の辺か下の辺）
-  const x0=Math.max(r.left,Math.min(r.right,p[0])),y0=Math.max(r.top,Math.min(r.bottom,p[1]));
+  const r=card.getBoundingClientRect(),R=10,bk=dk.querySelector(".hsign.back"),rb=bk?bk.getBoundingClientRect():null;
+  const bx=rb?Math.min(r.right-R,rb.left-6):r.right-R; // 下の辺で隠れない右端
+  const cand=[[r.left+1,Math.max(r.top+R,Math.min(r.bottom-R,p[1]))]];
+  if(bx>r.left+R&&p[1]>r.bottom)cand.push([Math.max(r.left+R,Math.min(bx,p[0])),r.bottom-1]);
+  const d=q=>Math.hypot(q[0]-p[0],q[1]-p[1]),a=cand.reduce((m,q)=>d(q)<d(m)?q:m);
+  const hits=(q0,q1)=>{if(!rb)return false;for(let i=1;i<20;i++){const x=q0[0]+(q1[0]-q0[0])*i/20,y=q0[1]+(q1[1]-q0[1])*i/20;
+    if(x>rb.left-4&&x<rb.right+4&&y>rb.top-4&&y<rb.bottom+4)return true;}return false;};
+  let pts=[a,p];
+  if(hits(a,p)){const x=Math.max(r.left+R,Math.min(bx,rb.left-8)),y=rb.bottom+10;pts=[[x,r.bottom-1],[x,y],p];}
   ln.style.display="";ln.setAttribute("class","slead"+(it.cls?" "+it.cls:""));
-  for(const l of ln.querySelectorAll("line")){l.setAttribute("x1",x0);l.setAttribute("y1",y0);l.setAttribute("x2",p[0]);l.setAttribute("y2",p[1]);}
-  const c=ln.querySelector("circle");c.setAttribute("cx",p[0]);c.setAttribute("cy",p[1]);
+  const dd="M"+pts.map(q=>q[0].toFixed(1)+" "+q[1].toFixed(1)).join("L");
+  for(const l of ln.querySelectorAll("path"))l.setAttribute("d",dd);
+  const ca=ln.querySelector("circle.a"),ct=ln.querySelector("circle.t");
+  ca.setAttribute("cx",pts[0][0]);ca.setAttribute("cy",pts[0][1]);ct.setAttribute("cx",p[0]);ct.setAttribute("cy",p[1]);
 }
 let deckSig="",deckT=0;
 // 速度の表示（指定・自車速度・高速）を下へスライドして隠す／戻す。位置は隠す前の上端で判定する
