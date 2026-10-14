@@ -377,6 +377,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
     <label>指定速度の変化も読み上げ<input type="checkbox" id="setVoiceEco"></label>
     <label>次のSA・PAを表示<input type="checkbox" id="setSapa" checked></label>
     <label>市区町村に入った時に表示<input type="checkbox" id="setArea" checked></label>
+    <label>速度取り締まり機を知らせる<input type="checkbox" id="setOrbis" checked></label>
     <label>交通状況を地図に表示<input type="checkbox" id="setTraffic" checked></label>
     <label>燃費優先<input type="checkbox" id="setEcoRest"></label>
     <label>確保する休憩（合計・分）<input type="number" id="setRestMin" min="0" max="240" step="5" inputmode="numeric" style="width:5.5em"></label>
@@ -450,7 +451,7 @@ const R=6371;
 const $=id=>document.getElementById(id);
 const VAL="https://valhalla1.openstreetmap.de"; // 経路・道路の種類・標高（無料・キー不要）
 /* ---- 設定（この端末に保存） ---- */
-const SET={voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30,traffic:true};
+const SET={orbis:true,voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30,traffic:true};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}catch(e){}
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 let XLAT=35.3; // 平面に直す時の基準の緯度（ルートの平均）
@@ -991,11 +992,13 @@ function drawMarks(){
       icon:{path:google.maps.SymbolPath.CIRCLE,scale,fillColor:color,fillOpacity:1,strokeColor:"#fff",strokeWeight:2}});
     if(DEST)destMk=dot(DEST.lat,DEST.lon,"#d93025",8,DEST.name,2);
     for(const s of SAS)saMks.push(STOP&&STOP.name===s.name?dot(s.lat,s.lon,"#f29900",8,s.name,2):dot(s.lat,s.lon,"#2e9e44",5,s.name,1));
+    if(SET.orbis)for(const c of CAMS)saMks.push(dot(c.lat,c.lon,"#7b1fa2",5,"速度取り締まり機"+(c.lim?` ${c.lim}km/h`:""),1));
     return;
   }
   if(!map)return;
   if(DEST)destMk=L.circleMarker([DEST.lat,DEST.lon],{radius:8,color:"#fff",weight:3,fillColor:"#d93025",fillOpacity:1}).addTo(map);
   for(const s of SAS){const on=STOP&&STOP.name===s.name;saMks.push(L.circleMarker([s.lat,s.lon],{radius:on?8:5,color:"#fff",weight:on?3:2,fillColor:on?"#f29900":"#2e9e44",fillOpacity:1}).bindTooltip(s.name).addTo(map));}
+  if(SET.orbis)for(const c of CAMS)saMks.push(L.circleMarker([c.lat,c.lon],{radius:5,color:"#fff",weight:2,fillColor:"#7b1fa2",fillOpacity:1}).bindTooltip("速度取り締まり機").addTo(map));
 }
 /* ---- 地図画像のキャッシュ（IndexedDB）：一度表示した所と「保存」した所は電波なしでも出る ---- */
 // OSM・CARTOは参照元のないアクセス（端末に保存したHTML）を拒否するので、キー不要の国土地理院（淡色地図）を使う
@@ -1060,8 +1063,8 @@ $("closeSheet").addEventListener("click",()=>document.body.classList.remove("she
 $("sheetBg").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute();});
 $("rerouteSheet").addEventListener("click",()=>{if(MODE!=="nav"||!hasRoute())return;document.body.classList.remove("sheet");reroute(true);});
-for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setEcoRest","ecoRest"],["setTraffic","traffic"]]){
-  $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="traffic")applyTraffic();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
+for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setOrbis","orbis"],["setEcoRest","ecoRest"],["setTraffic","traffic"]]){
+  $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="orbis")drawMarks();if(k==="traffic")applyTraffic();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
 $("voiceTest").addEventListener("click",()=>speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true));
 let saving=false;
@@ -1209,7 +1212,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 11:35";
+const BUILD="2026-10-14 11:50";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1446,7 +1449,7 @@ function speak(t,force){
   u.lang="ja-JP";u.rate=1.05;speechSynthesis.speak(u);
 }
 const spoken=new Set();let lastEcoSay="",ecoCand={v:"",t:0};
-function fmtSay(km){return km>=1?`${km.toFixed(km<10?1:0).replace(/\.0$/,"")}キロ先`:`${Math.round(km*10)*100}メートル先`;}
+function fmtSay(km){return km>=0.95?`${km.toFixed(km<10?1:0).replace(/\.0$/,"")}キロ先`:`${Math.round(km*10)*100}メートル先`;}
 // 左右の言葉（看板風の文言には左右が入らないので、読み上げでは必ず足す）
 function dirWord(g){const a=TY_AR[g.ty]||"";return/↗|↱/.test(a)?"右方向":/↖|↰/.test(a)?"左方向":/↶/.test(a)?"Uターン":"";}
 function phraseOf(g){const dw=/^(左|右)方向/.test(g.text)?"":dirWord(g);return(dw?dw+"、":"")+(g.name?g.name+"、":"")+g.text;}
@@ -1454,6 +1457,12 @@ function phraseOf(g){const dw=/^(左|右)方向/.test(g.text)?"":dirWord(g);retu
 function remind(msg,say){NOTE={t:Date.now()+5000,msg};if(say&&SET.voice)speak(say);} // 画面の一言は10秒
 function remindTick(km){
   if(MODE!=="nav"||!hasRoute())return;
+  if(SET.orbis){const hw=onHighway(),ths=hw?[1,0.3]:[0.5,0.15];
+    for(const c of CAMS){const d=c.km-km;if(d<=0||d>ths[0])continue;
+      const th=ths.filter(x=>d<=x).pop(),key="cam@"+c.km.toFixed(2)+"@"+th;if(spoken.has(key))continue;
+      ths.filter(x=>x>=th).forEach(x=>spoken.add("cam@"+c.km.toFixed(2)+"@"+x));
+      const lim=c.lim||attrAt(c.km).lim;
+      remind(`📷 ${fmtKm(d)}先 速度取り締まり機${lim?` 制限${lim}km/h`:""}`,`${fmtSay(d)}、速度取り締まり機があります${lim?`。制限速度${lim}キロです`:""}`);}}
   for(const c of CLOSE){const d=c.a-km;if(d>0&&d<=5){const key="close@"+c.a.toFixed(2);if(!spoken.has(key)){spoken.add(key);
     remind(`⚠ ${fmtKm(d)}先 ${c.name} 冬期閉鎖（${c.txt}）`,`${fmtSay(d)}、${c.name}は、冬期閉鎖の区間です。通れない場合は再検索してください`);}}}
   const nextAfter=k=>GUIDE.find(j=>j.km>k+0.02&&!j.stop);
@@ -1988,12 +1997,12 @@ async function takeDetour(){
 function setRoute(t,keepSA){
   if(MODE==="nav"&&hasRoute())TRIPBASE+=Math.max(0,curKm); // 案内中の引き直し：ここまで走った分を足しておき、旅全体の進み具合を出す
   if(typeof LASTCHK!=="undefined")LASTCHK=null; // 迂回の比べた結果は前のルートのものなので捨てる
-  ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};TOLLS=[];CLOSE=[];if(!keepSA)SAS=[];
+  ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};TOLLS=[];CLOSE=[];CAMS=[];if(!keepSA)SAS=[];
   buildGeom();
   ATTR=t.ms.map(m=>({a:RCUM[m.b]||0,b:RCUM[m.e]??TOTAL,hw:m.hw,lim:null,v:m.v})).filter(s=>s.b>s.a);
   buildIndex();spoken.clear();DEC.said.clear();hist=[];arrived=false;A.dispKm=null;
   drawRouteLine();drawMarks();saveRoute();scheduleElev();wxDrawn="";drawWx();
-  loadAttr().then(()=>{loadJct();loadClosures();if(!SAS.length)loadSA();});
+  loadAttr().then(()=>{loadJct();loadClosures();loadCams();if(!SAS.length)loadSA();});
 }
 let planSeq=0;
 async function planRoute(){
@@ -2220,6 +2229,35 @@ async function loadClosures(){
     }catch(e){}
   }
 }
+/* ---- オービス（速度取り締まり機）：OpenStreetMapの highway=speed_camera と、取り締まり（enforcement）の機器。
+   ルートの線から12m以内のものだけ（反対車線・並行する道のものは除く）。データのある所だけ ---- */
+let CAMS=[]; // {km,lat,lon,lim}
+async function loadCams(){
+  const key=routeKey();if(!key)return;
+  const pts=[];for(let k=0;k<=TOTAL;k+=0.5)pts.push(posAt(k));pts.push(posAt(TOTAL));
+  const P=pts.slice(0,2000).map(p=>p[0].toFixed(5)+","+p[1].toFixed(5)).join(",");
+  const q=`[out:json][timeout:60];(node(around:300,${P})["highway"="speed_camera"];relation(around:300,${P})["type"="enforcement"]["enforcement"~"maxspeed|average_speed"];);out body;>;out skel qt;`;
+  for(const u of OVERPASS){
+    try{
+      const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),90000);
+      const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(q),signal:ctl.signal});
+      clearTimeout(tm);if(!r.ok)continue;
+      const els=(await r.json()).elements||[];if(key!==routeKey())return;
+      const nodes={};for(const e of els)if(e.type==="node")nodes[e.id]=e;
+      const cand=[];
+      for(const e of els){
+        if(e.type==="node"&&e.tags&&e.tags.highway==="speed_camera")cand.push({lat:e.lat,lon:e.lon,lim:e.tags.maxspeed});
+        if(e.type==="relation")for(const m of e.members||[])if(m.role==="device"&&m.type==="node"&&nodes[m.ref])cand.push({lat:nodes[m.ref].lat,lon:nodes[m.ref].lon,lim:(e.tags||{}).maxspeed});
+      }
+      const out=[];
+      for(const c of cand){const pr=project(c.lat,c.lon);if(pr.d>0.012)continue;if(out.some(o=>Math.abs(o.km-pr.km)<0.2))continue;
+        const lim=parseInt(c.lim,10);out.push({km:pr.km,lat:c.lat,lon:c.lon,lim:lim>0&&lim<200?lim:null});}
+      out.sort((a,b)=>a.km-b.km);
+      if(key!==routeKey())return;CAMS=out;saveRoute();drawMarks();
+      return;
+    }catch(e){}
+  }
+}
 async function loadSA(retry){
   const key=routeKey();if(!key)return;
   const pts=[];for(let k=0;k<=TOTAL;k+=1)if(attrAt(k).hw)pts.push(posAt(k));
@@ -2265,12 +2303,12 @@ async function loadSA(retry){
 /* ---- ルートの保存：ページを開き直しても、案内中ならそのまま続ける ---- */
 function saveRoute(){
   try{if(!DEST){localStorage.removeItem("navRoute");return;}
-    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,tripBase:TRIPBASE,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT,tolls:TOLLS,close:CLOSE}));}catch(e){}
+    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,tripBase:TRIPBASE,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT,tolls:TOLLS,close:CLOSE,cams:CAMS}));}catch(e){}
 }
 function restoreRoute(){
   try{const v=JSON.parse(localStorage.getItem("navRoute")||"null");if(!v||!v.dest||Date.now()-v.t>12*3600e3)return;
     DEST=v.dest;STOP=v.stop||null;TRIPBASE=v.tripBase||0;GINFO=v.ginfo||null;JAMRAW=v.jamraw||[];
-    if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];TOLLS=v.tolls||[];CLOSE=v.close||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
+    if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];TOLLS=v.tolls||[];CLOSE=v.close||[];CAMS=v.cams||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
     MODE=v.mode==="nav"&&hasRoute()?"nav":"preview";
   }catch(e){}
 }
@@ -2515,7 +2553,7 @@ restoreRoute();
 applyMapMode();syncMap();startGps();
 if(MODE==="preview"&&DEST){showPreview();setTimeout(()=>slideTo([DEST.lat,DEST.lon],16),500);}
 if(MODE==="nav")render(0);
-if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct();loadClosures();if(!SAS.length)loadSA();});
+if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
 $("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",()=>{location.replace(location.pathname+"?v="+Date.now());});setTimeout(checkUpdate,3000);
 </script>
