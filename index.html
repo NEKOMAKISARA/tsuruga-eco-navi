@@ -138,7 +138,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
   .sp-map{flex:1;min-width:0;height:min(210px,calc(100vh - 210px))}
   .sp-leg{flex-direction:column;flex-wrap:nowrap;width:118px;flex-shrink:0;font-size:12px;padding:6px 8px;gap:3px;overflow:hidden}.sp-leg svg{width:16px;height:16px}}
 /* 見取り図を出している間は、案内のバナーと下のバーだけ残して見やすく（ルート外れの再検索は出す） */
-body.spon #hSign,body.spon .sgpin,body.spon #sapaCard,body.spon #tunCard,body.spon #jamCard,body.spon #detCard,body.spon #navEco{display:none!important}
+body.spon #hSign,body.spon #sDeck,body.spon #sLead,body.spon .sgpin,body.spon #sapaCard,body.spon #tunCard,body.spon #jamCard,body.spon #detCard,body.spon #navEco{display:none!important}
 body.spon #nvToast{display:none!important} /* ルート外れの再検索は見取り図の見出しに出す */
 .sapa .nm{display:block;overflow:hidden;text-overflow:ellipsis}
 .sapa .fi{display:flex;gap:4px;margin-top:3px}
@@ -169,7 +169,8 @@ body.sheet .app .jct{display:none}
 .nav-top .dist small{font-size:16px;margin-left:2px}
 .nav-top .txt{font-size:17px;font-weight:700;line-height:1.35;min-width:0}
 .nav-top .nm{display:block;font-size:12px;font-weight:400;opacity:.85}
-.area-pop{position:fixed;z-index:6;right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));background:#fff;color:#202124;border-radius:12px;padding:8px 14px;box-shadow:0 3px 12px rgba(0,0,0,.35);font-weight:700;text-align:right;max-width:60vw}
+.area-pop{position:fixed;z-index:6;right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));background:#fff;color:#202124;border-radius:12px;padding:8px 14px;box-shadow:0 3px 12px rgba(0,0,0,.35);font-weight:700;text-align:right;max-width:60vw;transform:translateX(calc(100% + 24px));transition:transform .35s ease;pointer-events:none}
+.area-pop.on{transform:none}
 .area-pop small{display:block;font-size:12px;color:#5f6368;font-weight:400}
 .area-pop b{display:block;font-size:20px;line-height:1.25}
 .upd-bar{position:fixed;z-index:30;left:50%;transform:translateX(-50%);top:calc(max(8px,env(safe-area-inset-top)) + 4px);background:#1a73e8;color:#fff;border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;width:auto;box-shadow:0 3px 12px rgba(0,0,0,.35)}
@@ -208,6 +209,20 @@ body.sheet .app .jct{display:none}
 .hsign .kmr{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto}.hsign .kmr .km{font-size:18px;margin-left:0}.hsign .kmr .ar{font-size:24px}
 /* 地図に貼る看板：分かれ道の地点に支柱を立て、その上に看板。ルートの反対側に立てる */
 .sgpin{position:relative;width:0;height:0;pointer-events:none}
+/* 看板の束（画面右上）：今の看板の後ろに次の看板が少しのぞく。過ぎたら消えて次が前に出る */
+.sdeck{position:fixed;z-index:6;width:min(160px,40vw);pointer-events:none;transition:opacity .25s,top .35s ease}
+.sdeck.thru{opacity:.55} /* ルートにかぶっている間 */
+@media (orientation:landscape){.sdeck{width:min(190px,24vw)}}
+.sdeck .hsign{position:absolute;left:0;top:0;width:100%;box-sizing:border-box;transform-origin:50% 100%;transition:transform .35s ease,opacity .35s ease}
+.sdeck .hsign.front{z-index:3}
+.sdeck .hsign.back{z-index:2;transform:translateY(11px) scale(.92);filter:brightness(.8)}
+.sdeck .hsign.hide,.sdeck .hsign.new{z-index:1;transform:translateY(11px) scale(.92);opacity:0}
+.sdeck .hsign.gone{z-index:4;transform:translateY(-24px);opacity:0}
+/* 看板から分岐の地点への線（ルートの線より細く） */
+.slead{position:fixed;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;overflow:visible}
+.slead .o{stroke:#fff;stroke-width:4;stroke-linecap:round}.slead .i{stroke:#0b7a3e;stroke-width:2;stroke-linecap:round}
+.slead circle{r:5px;fill:#0b7a3e;stroke:#fff;stroke-width:2.5px}
+.slead.cty .i{stroke:#1d4fa3}.slead.cty circle{fill:#1d4fa3}
 .sgpin .rot{position:absolute;left:0;top:0;transform-origin:0 0}
 .sgpin .pole{position:absolute;left:0;top:-2.5px;width:26px;height:5px;border-radius:3px;background:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.45);transform-origin:0 50%}
 .sgpin.r .pole{transform:none}.sgpin.l .pole{transform:rotate(180deg)}
@@ -238,6 +253,7 @@ body.sheet .app .jct{display:none}
 #insetRot{position:absolute;left:50%;top:60%;width:560px;height:560px;transform:translate(-50%,-50%) rotate(var(--irot,0deg))}
 #insetG,#insetL{width:100%;height:100%}
 .inset-cap{display:flex;gap:8px;align-items:center;padding:6px 10px;color:#202124;font-size:13px;font-weight:700;line-height:1.3}
+.inset-cap[hidden]{display:none}
 .inset-cap b{font-size:24px;color:#0f7d45}
 /* 次のSA・PA */
 /* 高速のSA・PAの看板風：緑地に白の縁取り、白抜きの文字。タッチで「寄る」 */
@@ -377,7 +393,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
 <button class="upd-bar" id="updBar" hidden></button>
-<div class="area-pop" id="areaPop" hidden><small id="areaPref"></small><b id="areaCity"></b></div>
+<div class="area-pop" id="areaPop"><small id="areaPref"></small><b id="areaCity"></b></div>
 <!-- 目的地を決める：検索・地図の長押し -->
 <div class="plan" id="plan">
   <form class="search" id="searchForm"><input id="q" type="search" placeholder="目的地を検索" enterkeyhint="search" autocomplete="off" aria-label="目的地を検索"><button type="button" id="menuBtn2" aria-label="詳細">≡</button></form>
@@ -392,10 +408,12 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="pv-btns"><button id="pvCancel">やめる</button><button id="pvPark"><span class="pkb">P</span>駐車場</button><button class="go" id="pvGo" disabled>出発</button></div>
 </div>
 <div class="hsign" id="hSign" hidden></div>
+<svg class="slead" id="sLead" style="display:none"><line class="o"/><line class="i"/><circle/></svg>
+<div class="sdeck" id="sDeck" hidden></div>
 <div class="nav-stack" id="navStack">
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
-  <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap"><b id="insetAr"></b><span id="insetTxt"></span></div></div>
+  <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap" hidden><b id="insetAr"></b><span id="insetTxt"></span></div></div>
   <div class="sapan" id="saPanel" hidden><div class="sp-hd"><b class="kd" id="spKd">SA</b><span class="n" id="spName"></span><span class="k" id="spDist"></span><button type="button" id="spRe" hidden>再検索</button></div><div class="sp-body"><div class="sp-map"><div id="spRot"><div id="spL"></div></div></div><div class="sp-leg" id="spLeg"></div></div></div>
   <div class="detour" id="detCard" hidden></div>
   <div class="jamc" id="jamCard" hidden></div>
@@ -1001,8 +1019,9 @@ function routePolys(gm,target,w){
     return[new google.maps.Polyline({path:P(ROUTE),strokeColor:"#fff",strokeWeight:w+3,strokeOpacity:.95,map:target}),
       ...routeRuns().map(r=>new google.maps.Polyline({path:P(r.pts),strokeColor:r.hw?HW_COLOR:RD_COLOR,strokeWeight:w,strokeOpacity:.95,map:target})),
       ...JAMS.map(j=>new google.maps.Polyline({path:P(ptsBetween(j.a,j.b)),strokeColor:jamColor(j),strokeWeight:w,strokeOpacity:1,map:target}))];}
-  return[L.polyline(ROUTE,{color:"#fff",weight:w+3,opacity:.95}),...routeRuns().map(r=>L.polyline(r.pts,{color:r.hw?HW_COLOR:RD_COLOR,weight:w,opacity:.95})),
-    ...JAMS.map(j=>L.polyline(ptsBetween(j.a,j.b),{color:jamColor(j),weight:w,opacity:1}))].map(l=>l.addTo(target));
+  const c=target===map?"rtline":""; // メインの地図のルートの線（看板と重なるか調べる）
+  return[L.polyline(ROUTE,{color:"#fff",weight:w+3,opacity:.95,className:c}),...routeRuns().map(r=>L.polyline(r.pts,{color:r.hw?HW_COLOR:RD_COLOR,weight:w,opacity:.95,className:c})),
+    ...JAMS.map(j=>L.polyline(ptsBetween(j.a,j.b),{color:jamColor(j),weight:w,opacity:1,className:c}))].map(l=>l.addTo(target));
 }
 const jamColor=j=>j.speed==="TRAFFIC_JAM"?"#d93025":"#f29900";
 function drawRouteLine(){
@@ -1299,7 +1318,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 17:30";
+const BUILD="2026-10-14 19:40";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1382,12 +1401,12 @@ function drawFrame(p){
     gMe.setVisible(true);gMe.setPosition({lat:p[0],lng:p[1]});
     if(!holding)setCam(cam,true);else if(A.panC&&!vectorMode)setCam({c:A.panC,z:zoom,h:hd},true);
     setMeIcon(vectorMode?hd-mapHd():hd); // 枠ごと回す時（Map IDなし）は北基準の向き
-    signPinRot(hd);
+    signPinRot(hd);deckFrame();
     return;
   }
   if(!map)return;
   meMk.setOpacity(1);meMk.setLatLng(p);{const e=meMk.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${hd}deg)`;}
-  signPinRot(hd);
+  signPinRot(hd);deckFrame();
   if(!holding)setCam(cam,true);else if(A.panC)setCam({c:A.panC,z:zoom,h:hd},true);
 }
 // 矢印を置く高さ（地図の上端からのpx）。速度カードと下のバーの上端から55px上、設定で上下に調整できる
@@ -1501,10 +1520,10 @@ async function checkArea(pos){
 }
 function showArea(m){
   $("areaPref").textContent=m.pref;$("areaCity").textContent=m.city;
-  // 縦向きは緑の案内の下、横向きは右上
-  const land=innerWidth>innerHeight,nt=$("navStack").getBoundingClientRect();
+  // 右からスライドで出る（縦向きは緑の案内の下、横向きは右上）。看板が出ていれば看板がその分下へずれる
+  const land=innerWidth>innerHeight,nt=$("navTop").getBoundingClientRect();
   $("areaPop").style.top=land?"":(nt.bottom+8)+"px";
-  $("areaPop").hidden=false;clearTimeout(AREA.timer);AREA.timer=setTimeout(()=>{$("areaPop").hidden=true;},10000);
+  $("areaPop").classList.add("on");clearTimeout(AREA.timer);AREA.timer=setTimeout(()=>{$("areaPop").classList.remove("on");},10000);
   if(SET.voice)speak(`${m.pref}${m.city}に入りました`);
 }
 function updateMap(){updOnRoute();if(A.dispKm==null)A.dispKm=curKm;startLoop();}
@@ -1646,15 +1665,10 @@ function syncNav(){
   const sj=signOk?GUIDE.filter(j=>j.km>curKm+0.15&&j.km-curKm<=2.2&&JCT_TY.includes(j.ty)&&(j.name||j.sig)):[];
   // 分かれ道ごとに1枚（2.2km先までの最大4か所）。中身は自分が進む方向の案内だけ
   const shown=sj.slice(0,4).map(j=>[j]);
-  const cj=navOn&&!off&&onRouteF&&!hw&&$("tunCard").hidden&&!shown.length?GUIDE.filter(j=>j.km>curKm+0.02&&j.km-curKm<=0.35&&CITY_TY.includes(j.ty)&&!j.stop).slice(0,1):[];
+  const cj=navOn&&!off&&onRouteF&&!hw&&$("tunCard").hidden&&!shown.length?GUIDE.filter(j=>j.km>curKm+0.02&&j.km-curKm<=0.35&&CITY_TY.includes(j.ty)&&!j.stop).slice(0,1).filter(citySignHas):[];
   const showSign=shown.length>0||cj.length>0;
   document.body.classList.toggle("hsg",showSign);
-  const pins=shown.map((gp,gi)=>{const head=gp[0],dd=head.km-curKm,ar=arrowOf(head.text,head.ty);
-    return{nj:head,html:signHtmlOf(head,dd,[]),side:/↖|↰|↶/.test(ar)?"r":"l",far:gi>0};}).concat(cj.map(j=>{const ar=arrowOf(j.text,j.ty);
-    return{nj:j,html:citySignHtml(j,j.km-curKm),side:/↖|↰|↶/.test(ar)?"r":"l",far:false,cls:"cty"};}));
-  if(showSign&&showSignPins(pins)){$("hSign").hidden=true;unstackPins(pins);}
-  else if(showSign){hideSignPin();$("hSign").hidden=false;$("hSign").className="hsign"+(pins[0].cls?" "+pins[0].cls:"");if(pins[0].html!==signHtml){signHtml=pins[0].html;$("hSign").innerHTML=signHtml;}placeSign();}
-  else{hideSignPin();$("hSign").hidden=true;}
+  drawDeck(shown.map(gp=>({key:"h"+gp[0].km.toFixed(3),km:gp[0].km,html:signHtmlOf(gp[0],gp[0].km-curKm,[])})).concat(cj.map(j=>({key:"c"+j.km.toFixed(3),km:j.km,html:citySignHtml(j,j.km-curKm),cls:"cty"}))));
   $("sapaCard").hidden=!(SET.sapa&&hw&&!showInset&&!showSign&&next.length&&$("tunCard").hidden);
   // 次の渋滞（30km先まで）：どこから・長さ・通過にかかる時間。2km手前で1回読む
   const jm=GINFO&&Date.now()-GINFO.t<30*60e3?JAMS.find(j=>j.b>curKm&&j.a-curKm<30):null;
@@ -1737,6 +1751,9 @@ function shieldSvg(n,k,x,y){
   const i=k==="k"?`M${-h+2} -9 H${h-2} L${h-6.5} 9 H${-h+6.5} Z`:`M${-h+2.5} 0 L${-h+8.5} -9 H${h-8.5} L${h-2.5} 0 L${h-8.5} 9 H${-h+8.5} Z`;
   return`<g transform="translate(${x},${y})"><path d="${o}" fill="#fff"/><path d="${i}" fill="#1d4fa3"/><text y="4.5" text-anchor="middle" font-size="12.5" font-weight="800" fill="#fff">${esc(String(n))}</text></g>`;}
 // 一般道の看板の中身。x.br＝交差点から出る道（a＝来た向きからの角度、go＝行く道、lab＝番号・名前）
+// 一般道の看板に出すものがあるか（交差点名・道の番号や方面・車線のどれか）。無ければ看板を出さない
+function citySignHas(nj){const x=nj.x||{};
+  return!!(x.nm||x.lanes||(x.br||[]).some(b=>b.lab&&(b.lab.sh||(b.lab.t||[]).length)));}
 function citySignHtml(nj,d){
   const x=nj.x||{},W=200,H=150,cx=100,cy=96;
   let br=(x.br&&x.br.length)?x.br:[{a:nj.dl!=null?nj.dl:(/↰|↖/.test(arrowOf(nj.text,nj.ty))?-90:/↱|↗/.test(arrowOf(nj.text,nj.ty))?90:0),go:true}];
@@ -1804,8 +1821,8 @@ function unstackPins(list){
   const last={r:null,l:null};
   list.forEach((it,i)=>{const q=SGP[i];if(!q||!q.on)return;
     const sg=q.el.querySelector(".hsign"),h=sg.offsetHeight*(it.far?0.82:1)*PIN_S,y=screenOf(posAt(it.nj.km))[1];
-    let dy=0;const L=last[it.side];
-    if(L){const need=L.y-L.h/2-6-h/2;if(y>need)dy=y-need;}
+    let dy=it.up||0;const L=last[it.side];
+    if(L){const need=L.y-L.h/2-6-h/2;if(y-dy>need)dy=y-need;}
     last[it.side]={y:y-dy,h};
     const len=Math.hypot(26,dy),ang=Math.atan2(-dy,26)*180/Math.PI;
     const pole=q.el.querySelector(".pole");pole.style.width=len+"px";pole.style.transform=`rotate(${it.side==="r"?ang:180-ang}deg)`;
@@ -1813,28 +1830,81 @@ function unstackPins(list){
 
   });
 }
-function routeScreenPts(){
-  const p=A.lastP||posAt(curKm),hd=((rotAcc||0)%360+360)%360*Math.PI/180,zoom=curZoom(),W=innerWidth,H=innerHeight;
-  const kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,zoom)/1000,Lo=layoutNow(),mr=$("map").getBoundingClientRect();
-  const ax=W>H?W*0.62:W/2,ay=mr.top+Lo.ty,out=[];
-  for(let k=(A.dispKm??curKm);k<Math.min(TOTAL,(A.dispKm??curKm)+3);k+=0.05){
-    const q=posAt(k),x=(q[1]-p[1])*111.32*Math.cos(p[0]*Math.PI/180),y=(q[0]-p[0])*110.57; // 東・北（km）
-    const rx=x*Math.cos(hd)-y*Math.sin(hd),ry=x*Math.sin(hd)+y*Math.cos(hd); // 進む向きを上に
-    const sx=ax+rx/kpp,sy=ay-ry/kpp*0.75; // 斜めに見ているので奥は詰まる（おおよそ）
-    if(sy<-50)break;out.push([sx,sy]);}
-  return out;
+/* ---- 看板がルートの線にかぶらないように ----
+   画面に描かれた線と重なっていないかを直接調べる（国土地理院の地図：その点にある要素にルートの線があるか。
+   Googleの地図は線が画像なので、計算した画面の位置で余白を大きめに）。重なったら ①反対側 ②上へずらす
+   ③反対側の上 の順に置き直し、全部だめならその案内では出さない。置き直す間は隠すので、かぶった姿は出ない */
+const DECK=new Map(); // 看板の束：案内ごとの要素（作り直さず使い回すので、前に出る動きがなめらか）
+function drawDeck(items){
+  const dk=$("sDeck");items=items.slice(0,3);dk.hidden=!items.length;DECK.front=items[0]||null;
+  const keep=new Set(items.map(it=>it.key));
+  for(const [k,el] of DECK)if(!keep.has(k)){DECK.delete(k);el.className=el.className.replace(/ (front|back|hide)/g,"")+" gone";setTimeout(()=>el.remove(),400);} // 過ぎた看板は上へ消える
+  items.forEach((it,i)=>{let el=DECK.get(it.key);
+    if(!el){el=document.createElement("div");el.className="hsign new";dk.appendChild(el);DECK.set(it.key,el);}
+    if(el._h!==it.html){el._h=it.html;el.innerHTML=it.html;}
+    el.className="hsign"+(it.cls?" "+it.cls:"")+(i===0?" front":i===1?" back":" hide");});
+  if(!items.length){$("sLead").style.display="none";return;}
+  const f=DECK.get(items[0].key);dk.style.height=(f.offsetHeight+(items.length>1?11:0))+"px";
+  // かぶりを調べるのは0.1秒ごと（毎フレームは重い）。看板が替わった時はすぐ
+  const sig=items.map(it=>it.key).join(),t=performance.now();
+  if(sig!==deckSig||t-deckT>100){deckSig=sig;deckT=t;placeDeck();}
+  drawLead(f,items[0]);
 }
-function placeSign(){
-  const el=$("hSign");if(el.hidden)return;
-  const W=innerWidth,H=innerHeight,land=W>H,r=el.getBoundingClientRect(),sw=r.width,sh=r.height;
+// 看板（いちばん前）から分岐の地点へ線を引く。分岐が画面の外・地図の下に隠れる時は引かない
+function drawLead(card,it){
+  const ln=$("sLead"),dk=$("sDeck");
+  const p=scrPt(it.km);
+  if(!p||p[0]<0||p[1]<0||p[0]>innerWidth||p[1]>innerHeight){ln.style.display="none";return;}
+  const r=card.getBoundingClientRect();
+  // 看板の縁のうち分岐に近い点から（左の辺か下の辺）
+  const x0=Math.max(r.left,Math.min(r.right,p[0])),y0=Math.max(r.top,Math.min(r.bottom,p[1]));
+  ln.style.display="";ln.setAttribute("class","slead"+(it.cls?" "+it.cls:""));
+  for(const l of ln.querySelectorAll("line")){l.setAttribute("x1",x0);l.setAttribute("y1",y0);l.setAttribute("x2",p[0]);l.setAttribute("y2",p[1]);}
+  const c=ln.querySelector("circle");c.setAttribute("cx",p[0]);c.setAttribute("cy",p[1]);
+}
+let deckSig="",deckT=0;
+// 地図が回ったり動いたりしている間も：かぶりは0.1秒ごと、線は毎フレーム
+function deckFrame(){
+  const dk=$("sDeck");if(dk.hidden||!DECK.front)return;
+  const t=performance.now();if(t-deckT>100){deckT=t;placeDeck();}
+  const f=DECK.get(DECK.front.key);if(f)drawLead(f,DECK.front);
+}
+/* 束の置き場所はいつも右上（縦は案内のバナーの下）。ルートの線にかぶっている間は、読める程度に半透明にして下の線を見せる。
+   線とのかぶりは、地図に置いた見えない印の画面の位置で調べる（回転・傾き込み。Googleの地図は計算でおおよそ） */
+const PROBES=[];
+function probeAt(i){while(PROBES.length<=i){const e=document.createElement("div");e.style.cssText="position:absolute;left:0;top:0;width:0;height:0;pointer-events:none";map.getPane("markerPane").appendChild(e);PROBES.push(e);}return PROBES[i];}
+// kmの地点の画面の位置（Googleの地図は計算でおおよそ）
+function scrPt(km){
+  if(gmap||!map)return screenOf(posAt(km));
+  const e=probeAt(0);L.DomUtil.setPosition(e,map.latLngToLayerPoint(posAt(km)));const r=e.getBoundingClientRect();return[r.left,r.top];
+}
+// 画面に映るルートの画面の位置。ルートの先の方でも、回り込んで近くを通る所は映るので、
+// 今の位置からの直線距離で映る範囲（傾けた地図は遠くまで映る）にある点を全部。点と点が離れたら線を切る（null）
+function rtScreen(){
+  if(gmap||!map)return routeScreenPts();
+  const c=A.dispKm??curKm,me=posAt(c),mpp=156543.03*Math.cos(me[0]*Math.PI/180)/Math.pow(2,map.getZoom());
+  const R=Math.max(4,mpp*3500/1000),step=Math.max(0.015,mpp*10/1000),pts=[];let gap=false;
+  for(let k=Math.max(0,c-0.5);k<=TOTAL&&pts.length<600;k+=step){const q=posAt(k);
+    if(distKm(me,q)>R){gap=true;continue;}
+    if(gap&&pts.length)pts.push(null);gap=false;pts.push(q);}
+  let j=0;for(const q of pts)if(q)L.DomUtil.setPosition(probeAt(++j),map.latLngToLayerPoint(q));
+  j=0;return pts.map(q=>{if(!q)return null;const r=PROBES[++j].getBoundingClientRect();return[r.left,r.top];});
+}
+// 四角とルートの線（太さの半分＋余白）が重なるか。点と点の間も細かく調べる
+function rtHit(rc){
+  const M=gmap?16:8,l=rc.left-M,t=rc.top-M,r=rc.right+M,b=rc.bottom+M,pts=rtScreen();
+  const inR=(x,y)=>x>l&&x<r&&y>t&&y<b;
+  for(let i=0;i<pts.length;i++){if(!pts[i])continue;const [x,y]=pts[i];if(inR(x,y))return true;if(!i||!pts[i-1])continue;
+    const [px,py]=pts[i-1],n=Math.ceil(Math.hypot(x-px,y-py)/4);for(let j=1;j<n;j++)if(inR(px+(x-px)*j/n,py+(y-py)*j/n))return true;}
+  return false;
+}
+function placeDeck(){
+  const dk=$("sDeck"),W=innerWidth,H=innerHeight,land=W>H,w=dk.offsetWidth,h=dk.offsetHeight;
   const safeT=parseFloat(getComputedStyle(document.documentElement).paddingTop)||0;
-  const nb=$("navTop").getBoundingClientRect(),st=$("navStack").getBoundingClientRect();
-  const top0=land?Math.max(8,safeT+8):nb.bottom+8,eco=$("navEco").getBoundingClientRect();
-  const cands=[{x:W-sw-8,y:top0},{x:W-sw-8,y:Math.min(top0+sh+16,(land?eco.top:H*0.6)-sh-8)},{x:st.left,y:st.bottom+8,left:true}];
-  const pts=routeScreenPts(),M=14;
-  const hits=c=>pts.filter(([x,y])=>x>c.x-M&&x<c.x+sw+M&&y>c.y-M&&y<c.y+sh+M).length;
-  let best=cands[cands.length-1];for(const c of cands){if(!hits(c)){best=c;break;}}
-  el.style.left=Math.round(best.x)+"px";el.style.top=Math.round(best.y)+"px";
+  const y=land?Math.max(8,safeT+8):$("navTop").getBoundingClientRect().bottom+8,x=W-w-Math.max(8,parseFloat(getComputedStyle(document.documentElement).paddingRight)||0);
+  const ap=$("areaPop"),dy=ap.classList.contains("on")?ap.offsetHeight+8:0; // 市区町村が出ている間は、その下へ
+  dk.style.left=x+"px";dk.style.top=(y+dy)+"px";
+  dk.classList.toggle("thru",rtHit({left:x,top:y+dy,right:x+w,bottom:y+dy+h}));
 }
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
 /* ---- 立ち寄り先のSA・PAの見取り図（拡大ポップアップの代わり）：建物・駐車場・トイレ・給油・EV充電・案内所の位置と、設備の一覧。
