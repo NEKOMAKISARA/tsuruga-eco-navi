@@ -1331,7 +1331,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 01:00";
+const BUILD="2026-10-15 01:30";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1845,6 +1845,7 @@ function unstackPins(list){
 }
 /* ---- 流れる看板：近づくと右から出て、残りの距離に合わせて下へ動き、分岐を通る時に画面の真ん中。過ぎたら右へ戻る ---- */
 const DECK=new Map(),SIGN_WIN=2.2,SIGN_WIN_C=0.35; // 看板を出す距離（高速・一般道）
+let SIGN_END=0.4; // 分岐を通る時の看板の真ん中の高さ（画面の高さに対して）
 function drawDeck(items){
   const dk=$("sDeck");items=items.slice(0,4);DECK.items=items;
   const keep=new Set(items.map(it=>it.key));
@@ -1875,20 +1876,21 @@ let deckT=0;
 let ECO_TOP=null;
 function ecoAway(on){const e=$("navEco");if(on===e.classList.contains("away"))return;
   if(on)ECO_TOP=e.getBoundingClientRect().top;else ECO_TOP=null;e.classList.toggle("away",on);}
-// 毎フレーム：看板の高さを残りの距離から決める（出す距離で上の端、分岐を通る時に画面の真ん中）。
+// 毎フレーム：看板の高さを残りの距離から決める（2枚以上ある時）（出す距離で上の端、分岐を通る時に画面の真ん中）。
 // 速く走れば速く下りてくる。先の看板は手前の看板の上に重ならないよう押し上げ、上に入りきらない間は右の外で待つ。
 // ルートの線とのかぶり（半透明）・速度の表示を隠すかは0.1秒ごと
 function deckFrame(force){
   const dk=$("sDeck"),items=DECK.items||[];if(!items.length)return;
   const W=innerWidth,H=innerHeight,land=W>H,cs=getComputedStyle(document.documentElement);
   const ap=$("areaPop"),dy=ap.classList.contains("on")?ap.offsetHeight+8:0; // 市区町村が出ている間は、その下から
-  const yTop=(land?Math.max(8,(parseFloat(cs.paddingTop)||0)+8):$("navTop").getBoundingClientRect().bottom+8)+dy,yMid=H*0.5;
+  const yTop=(land?Math.max(8,(parseFloat(cs.paddingTop)||0)+8):$("navTop").getBoundingClientRect().bottom+8)+dy,yMid=H*SIGN_END;
   dk.style.left=(W-dk.offsetWidth-Math.max(8,parseFloat(cs.paddingRight)||0))+"px";
   const now=A.dispKm??curKm,t=performance.now(),dt=Math.min(0.1,(t-(DECK.t||t))/1000);DECK.t=t;
   let floor=Infinity;const vis=[];
   items.forEach((it,i)=>{const el=DECK.get(it.key);if(!el)return;const h=el.offsetHeight;
     const f=Math.max(0,Math.min(1,(it.km-now)/(it.cls==="cty"?SIGN_WIN_C:SIGN_WIN))),y0=Math.max(yTop,yMid-h/2);
-    const y=Math.min(y0+(yTop-y0)*f,floor-6-h);floor=Math.min(floor,y);
+    // 1枚だけの時は下へ動かさない（出た所、または今の所にとどまる）
+    const y=items.length===1?Math.max(yTop,el._y??yTop):Math.min(y0+(yTop-y0)*f,floor-6-h);floor=Math.min(floor,y);
     const ok=y>=yTop-1;el.classList.toggle("wait",!ok);el.classList.toggle("far",i>0);
     if(!ok){el._y=null;el.style.top=yTop+"px";return;}
     el._y=el._y==null?y:el._y+(y-el._y)*Math.min(1,dt*6);el.style.top=el._y.toFixed(1)+"px";vis.push(el);});
