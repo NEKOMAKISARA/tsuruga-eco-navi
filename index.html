@@ -645,7 +645,7 @@ function remainMin(km,to,tr,f){
    4) 燃費の計算式：車重・空気抵抗・転がり抵抗・坂から燃料を見積もる（GG3W、100km/h平坦で約12km/Lになるよう合わせてある） */
 const CAR={m:2000,crr:0.010,cda:0.85,kwhPerL:1.97,aux:0.5,regen:0.55};
 // 記録から学んだ補正：s＝効率（燃料1Lで走れる仕事の倍率）、k＝空気抵抗の倍率、dist＝学習に使った距離
-let CAL={s:1,k:1,dist:0};try{Object.assign(CAL,JSON.parse(localStorage.getItem("carCal")||"{}"));}catch(e){}
+let CAL={s:1,k:1,dist:0};try{localStorage.removeItem("carCal");localStorage.removeItem("ecoFuel");}catch(e){} // 燃費の記録はやめた（効果がほぼないため）。前の補正も消す
 function fuelPerKmK(vkmh,gPct,k){
   const v=vkmh/3.6,F=CAR.m*9.81*(CAR.crr+gPct/100)+0.6*CAR.cda*k*v*v; // N（0.6＝空気の密度/2）
   const wh=F/3.6,aux=CAR.aux*1000/Math.max(vkmh,5); // 1kmあたりWh
@@ -916,7 +916,6 @@ function render(km){
   {const tf=tripFuel(km),parts=[ECO.state==="ok"?`坂データ あり（坂${ECO.segs.length}か所）`:ECO.state==="loading"?"坂データ 取得中":ECO.state==="fail"?"坂データ 取得できず（GPSの高度で判定）":""];
    if(ECO.B)parts.push(`燃費優先 基準${ECO.B}km/h（休憩 残り${Math.max(0,Math.round((+SET.restMin||0)-ECO.stopMin))}分を確保）`);
    if(tf)parts.push(`この先の予想燃費 約${tf.kmL.toFixed(1)}km/L・ガソリン約${tf.L.toFixed(0)}L`+((CAL.s!==1||CAL.k!==1)?`（記録で補正：効率×${CAL.s.toFixed(2)}・空気抵抗×${CAL.k.toFixed(2)}）`:""));
-   if(FUEL.log.length){const l=FUEL.log[FUEL.log.length-1];parts.push(`燃費の記録 ${FUEL.log.length}回・最新 ${l.kmL}km/L`);}
    $("pace").textContent+=(parts.filter(Boolean).length?" ・ ":"")+parts.filter(Boolean).join(" ・ ");}
 
   // 休憩
@@ -1203,7 +1202,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 08:20";
+const BUILD="2026-10-14 10:40";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -2315,7 +2314,6 @@ function onFix0(p){
   try{checkArea(curPos);}catch(e){showErr("市区町村",e);}trackStop(s);
   if(FUEL.needStart){FUEL.needStart=false;FUEL.startKm=pr.km;fuelStore();}
   if(offD<0.1)recordSpeed(pr.km,s);
-  fuelAskCheck(s);
   gpsSpeed=s;addSample(pr.km,s,alt);
   const off=$("offroute");
   if(pr.d>0.1){off.hidden=false;off.textContent=rerouting?"ルートを再検索中…":rerouteMsg||"ルートから外れています";}else{off.hidden=true;rerouteMsg="";}
