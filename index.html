@@ -564,6 +564,11 @@ function buildGeom(){
 // 案内・SA・高速の線・時間の補正を作り直す（ルートや道路の情報が変わるたびに呼ぶ）
 function buildIndex(){
   GUIDE=MANS.map(m=>({name:m[6]||"",sig:m[7]||null,x:m[8]||null,text:m[2],ty:m[3],stop:m[5]==="stop",km:m[4]!=null&&RCUM[m[4]]!=null?RCUM[m[4]]:project(m[0],m[1]).km})).sort((a,b)=>a.km-b.km);
+  // 高速に乗る所（手前は一般道・SA・PA、先は高速）：IC・SAから本線に戻るランプを「出口」と言わない
+  if(ATTR.length)for(const g of GUIDE){const sg=g.sig;
+    if(!sg||sg.jct||sg.sa||attrAt(Math.max(0,g.km-0.05)).hw||!attrAt(Math.min(TOTAL,g.km+0.3)).hw)continue;
+    g.sig=Object.assign({},sg,{jct:true,ent:true});
+    const br=(sg.br||[]).join("・");g.text=(sg.tw||[]).length?[br,sg.tw.join("・")+"方面"].filter(Boolean).join(" "):"本線"+(br?" "+br:"");}
   SAKM=SAS.map(s=>{const q=project(s.lat,s.lon);return{name:s.name,lat:s.lat,lon:s.lon,km:q.km,d:q.d,f:"",fc:s.fc||null};}).filter(s=>s.d<0.5).sort((a,b)=>a.km-b.km);
   if(STOP){const g=GUIDE.find(x=>x.stop);STOP.km=g?g.km:null;}
   // トンネル（300m以上）ごとに、中にある案内（分岐・出口）を順番に。出てすぐ（300m以内）の案内も含める
@@ -833,7 +838,8 @@ function decelFor(km,v){
   const d=(nj.km-km)*1000;if(d>2500)return null;
   if(![9,16,18,19,20,21,23,24].includes(nj.ty))return null;
   // その先も高速なら分岐（JCT）、一般道になるなら出口
-  const branch=attrAt(Math.min(TOTAL,nj.km+1.5)).hw,vt=branch?80:70,what=branch?"分岐":"出口";
+  const branch=attrAt(Math.min(TOTAL,nj.km+1.5)).hw,vt=branch?80:70,sa=(nj.sig&&nj.sig.sa)||exitKind(nj.name,[],branch)==="sa";
+  const what=sa?saKind(nj.name||"SA")+"入口":branch||(nj.sig&&nj.sig.jct)?"分岐":"出口";
   if(v<vt+8)return null;
   const ms=v/3.6,mt=vt/3.6,lift=(ms*ms-mt*mt)/(2*0.45);
   if(d>lift+40)return null;
@@ -1290,7 +1296,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 16:10";
+const BUILD="2026-10-14 16:40";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1696,15 +1702,15 @@ const kmTxt=d=>d<1?`${Math.round(d*100)*10}<small>m</small>`:`${d.toFixed(1)}<sm
 // 1枚の看板の中身。more＝すぐ先（600m以内）に続く分岐
 function signHtmlOf(nj,d,more){
   const g=nj.sig||{},jct=g.jct!=null?g.jct:/JCT|ジャンクション/.test(nj.name),ar=arrowOf(nj.text,nj.ty);
-  const dest=jct?((g.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(g.tw||[]).join("・")||nj.text):((g.tw||[]).join("・")||nj.text.replace(/^出口\s*/,"").replace(/（.*?）/g,"").replace(/方面$/,"")||"出口");
+  const dest=g.sa?noParen(nj.name)||"SA・PA":jct?((g.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(g.tw||[]).join("・")||nj.text):((g.tw||[]).join("・")||nj.text.replace(/^出口\s*/,"").replace(/（.*?）/g,"").replace(/方面$/,"")||"出口");
   const sub=jct&&(g.br||[]).some(x=>!/^[A-Z]{1,2}\d/.test(x))?(g.tw||[]).join("・"):"";
   const shields=(g.br||[]).filter(x=>/^[A-Z]{1,2}\d|^R\d|^国道/.test(x)).slice(0,2).map(x=>`<span class="sh">${esc(x)}</span>`).join("");
   const nx=(more||[]).map(m=>{const mg=m.sig||{},mj=mg.jct!=null?mg.jct:/JCT|ジャンクション/.test(m.name),
       md=mj?((mg.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(mg.tw||[]).join("・")):((mg.tw||[]).join("・")||"出口");
     return`<div class="nx"><span>その先 ${kmTxt(m.km-nj.km).replace(/<\/?small>/g,"")}</span><b>${arIcon(arrowOf(m.text,m.ty))}</b><span class="nn">${esc(m.name||"")} ${esc(md)}</span></div>`;}).join("");
-  return`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="kmr"><span class="km">${kmTxt(d)}</span><b class="ar">${arIcon(ar)}</b></span></div>`+
+  return`<div class="in"><div class="r">${jct&&!g.ent?"":`<span class="ex">${g.sa?saKind(nj.name||""):g.ent?"入口":"出口"}</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="kmr"><span class="km">${kmTxt(d)}</span><b class="ar">${arIcon(ar)}</b></span></div>`+
     `<div class="ds${dest.length>6?" sm":""}">${esc(dest)}</div>${sub?`<div style="font-size:12px;opacity:.9">${esc(sub)}</div>`:""}`+
-    `<div class="r2">${shields}<span class="nm">${esc(nj.name||"")}</span></div>${nx}</div>${nj.x&&nj.x.lanes?laneRow(nj.x.lanes):""}`;
+    `<div class="r2">${shields}<span class="nm">${esc(g.sa?"入口":nj.name||"")}</span></div>${nx}</div>${nj.x&&nj.x.lanes?laneRow(nj.x.lanes):""}`;
 }
 /* ---- 車線と一般道の看板 ---- */
 const GO="#ff8c1a";
@@ -2092,6 +2098,16 @@ async function getOrigin(){
 // 方面名のローマ字（Chigasaki など）：日本語の方面名がある時は外す。E1 など数字入りの路線番号は残す
 const isRoman=t=>/^[A-Za-z][A-Za-z\s.'’\-]*$/.test(t);
 const noRoman=a=>a.some(t=>!isRoman(t))?a.filter(t=>!isRoman(t)):a;
+// 高速の分かれ道の種類：SA・PAの入口（sa）／別の高速へ乗り換え（jct）／一般道へ降りる（ex）。
+// SA・PAの入口やJCTで「出口」と言うと高速を降りると勘違いするので、名前で見分ける（スマートICは出口）
+const SA_RE=/(SA|PA|ＳＡ|ＰＡ|サービスエリア|パーキングエリア)/;
+const noParen=n=>(n||"").replace(/[\s　]*[（(][^()（）]*[)）]\s*$/,"");
+function exitKind(name,tw,jct){const n=noParen(name);
+  if(/スマート/.test(n))return"ex";
+  if(SA_RE.test(n)||(!n&&(tw||[]).some(t=>SA_RE.test(t))))return"sa";
+  if(/(JCT|ＪＣＴ|ジャンクション)$/i.test(n))return"jct";
+  return jct?"jct":"ex";}
+const IC_END=/(IC|JCT|ＩＣ|ＪＣＴ|インター|ジャンクション|SA|PA|ＳＡ|ＰＡ|スマート|TB|料金所)$/i;
 function signText(m,all,i){
   const sg=m.sign;if(!sg||![17,18,19,20,21,22,23,24].includes(m.type))return null;
   const el=k=>noRoman([...new Set((sg[k]||[]).map(e=>cleanIns(e.text||"")).filter(Boolean))]);
@@ -2100,13 +2116,15 @@ function signText(m,all,i){
   // この先が高速なら分岐（JCT）、一般道なら出口（IC）。ランプ・分かれ道は飛ばして、その先の道で決める
   let jct=false;for(let k=i+1;k<all.length&&k<i+5;k++){const n=all[k];if([17,18,19,20,21,22,23,24].includes(n.type))continue;jct=!!n.highway||[25,37,38].includes(n.type);break;}
   if([22,23,24].includes(m.type)&&m.highway)jct=true; // 本線上の分かれ道
-  let name=names[0]||"";
-  if(name&&!/(IC|JCT|ＩＣ|ＪＣＴ|インター|ジャンクション|SA|PA|スマート|TB|料金所)$/i.test(name))name+=jct?"JCT":"IC";
+  const kind=exitKind(names[0],tw,jct);jct=kind==="jct";
+  let name=names[0]||(kind==="sa"?tw.find(t=>SA_RE.test(t))||"":"");
+  if(name&&kind!=="sa"&&!IC_END.test(noParen(name)))name+=jct?"JCT":"IC";
   const dir=tw.length?tw.slice(0,3).join("・")+"方面":"";
   const num=nums.length?`（${nums[0]}）`:""; // 読み上げでは括弧の中を読まない
-  const text=jct?[br.slice(0,2).join("・"),dir].filter(Boolean).join(" ")||"分岐"
-                :["出口",dir].filter(Boolean).join(" ")+num;
-  return{name,text:text.trim(),sig:{num:nums[0]||"",tw:tw.slice(0,3),br:br.slice(0,2),jct}};
+  const text=kind==="sa"?"入口"
+    :jct?[br.slice(0,2).join("・"),dir].filter(Boolean).join(" ")||"分岐"
+    :["出口",dir].filter(Boolean).join(" ")+num;
+  return{name,text:text.trim(),sig:{num:kind==="sa"?"":nums[0]||"",tw:tw.slice(0,3),br:br.slice(0,2),jct,sa:kind==="sa"}};
 }
 function parseTrip(d){
   let sh=[];const mans=[],ms=[],legs=d.trip.legs;
@@ -2411,13 +2429,13 @@ async function loadJct(){
         let best=null,bd=1e9;
         for(const e of els){const pr=project(e.lat,e.lon);if(pr.d>0.3||pr.km<x.km-1.2||pr.km>x.km+0.3)continue;const d=distKm([e.lat,e.lon],[x.m[0],x.m[1]]);if(d<bd){bd=d;best=e;}}
         if(!best)continue;
-        const jct=afterRampHw(x.km);
         let name=cleanIns(best.tags.name||"");
-        if(name&&!/(IC|JCT|ＩＣ|ＪＣＴ|インター|ジャンクション|SA|PA|スマート|TB|料金所)$/i.test(name))name+=jct?"JCT":"IC";
-        const t=x.m[2],num=best.tags.ref||((t.match(/([0-9A-Za-z\-]+)番出口/)||[])[1])||"";
-        let rest=t.replace(/^(左|右)方向、?/,"").replace(/[0-9A-Za-z\-]+番出口、?/,"").replace(/^[、 ]+|[、 ]+$/g,"").replace(/、その先/,"　");
-        const text=(jct?(rest||"分岐"):("出口"+(rest?" "+rest:"")))+(num?`（${num}）`:"");
-        if(name||num){x.m[6]=name;x.m[2]=text;x.m[7]=Object.assign({tw:[],br:[]},x.m[7]||{},{num,jct});changed=true;}
+        const kind=exitKind(name,[],afterRampHw(x.km)),jct=kind==="jct",sa=kind==="sa";
+        if(name&&!sa&&!IC_END.test(noParen(name)))name+=jct?"JCT":"IC";
+        const t=x.m[2],num=sa?"":best.tags.ref||((t.match(/([0-9A-Za-z\-]+)番出口/)||[])[1])||"";
+        let rest=t.replace(/^(左|右)方向、?/,"").replace(/[0-9A-Za-z\-]+番出口、?/,"").replace(/^出口\s*/,"").replace(/^[、 ]+|[、 ]+$/g,"").replace(/、その先/,"　");
+        const text=sa?"入口":(jct?(rest||"分岐"):("出口"+(rest?" "+rest:"")))+(num?`（${num}）`:"");
+        if(name||num){x.m[6]=name;x.m[2]=text;x.m[7]=Object.assign({tw:[],br:[]},x.m[7]||{},{num,jct,sa});changed=true;}
       }
       if(changed){buildIndex();saveRoute();render(curKm);}
       return;
