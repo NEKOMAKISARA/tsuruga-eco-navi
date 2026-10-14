@@ -212,16 +212,19 @@ body.sheet .app .jct{display:none}
 .hsign .kmr{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto}.hsign .kmr .km{font-size:18px;margin-left:0}.hsign .kmr .ar{font-size:24px}
 /* 地図に貼る看板：分かれ道の地点に支柱を立て、その上に看板。ルートの反対側に立てる */
 .sgpin{position:relative;width:0;height:0;pointer-events:none}
-/* 看板の束（画面右上）：今の看板の後ろに次の看板が少しのぞく。過ぎたら消えて次が前に出る */
-.sdeck{position:fixed;z-index:6;width:min(160px,40vw);pointer-events:none;transition:opacity .25s,top .35s ease}
-.sdeck.thru{opacity:.55} /* ルートにかぶっている間 */
-@media (orientation:landscape){.sdeck{width:min(190px,24vw)}}
-.sdeck .hsign{position:absolute;left:0;top:0;width:100%;box-sizing:border-box;transform-origin:50% 100%;transition:transform .35s ease,opacity .35s ease}
-.sdeck .hsign.front{z-index:3}
-.sdeck .hsign{transition:transform .35s ease,opacity .35s ease,top .35s ease}
-.sdeck .hsign.back{z-index:2;transform-origin:100% 0;transform:scale(.86)} /* 次の看板：1枚目の下に少し小さく */
-.sdeck .hsign.hide,.sdeck .hsign.new{z-index:1;transform-origin:100% 0;transform:scale(.86);opacity:0}
-.sdeck .hsign.gone{z-index:4;transform:translateY(-24px);opacity:0}
+/* 流れる看板（画面の右）：近づくと右から出て、残りの距離に合わせて下へ動き、分岐を通る時に画面の真ん中。過ぎたら右へ戻る */
+.sdeck{position:fixed;left:0;top:0;height:0;z-index:6;width:min(144px,36vw);pointer-events:none}
+@media (orientation:landscape){.sdeck{width:min(170px,22vw)}}
+/* 少し小さめの看板（地図に貼る看板・バナーと同じ作りで、字と余白だけ詰める） */
+.sdeck .hsign{padding:4px}.sdeck .hsign .in{border-width:2.5px;padding:4px 6px}
+.sdeck .hsign .ds{font-size:19px}.sdeck .hsign .ds.sm{font-size:15px}.sdeck .hsign .nm,.sdeck .hsign .chd b{font-size:12px}
+.sdeck .hsign .ex{font-size:12px;padding:0 5px}.sdeck .hsign .no{font-size:13px;padding:0 4px}.sdeck .hsign .sh{font-size:12px}
+.sdeck .hsign .kmr .km,.sdeck .hsign .chd .km{font-size:16px}.sdeck .hsign .kmr .ar{font-size:21px}
+.sdeck .hsign .ln span svg{max-width:22px}
+.sdeck .hsign{position:absolute;left:0;top:0;width:100%;box-sizing:border-box;z-index:2;transition:transform .45s ease,opacity .45s ease,filter .35s ease}
+.sdeck .hsign.far{z-index:1;filter:brightness(.72)} /* 2枚目から先：少し暗く */
+.sdeck .hsign.thru{opacity:.55} /* ルートにかぶっている間 */
+.sdeck .hsign.wait,.sdeck .hsign.gone{transform:translateX(calc(100% + 24px));opacity:0}
 /* 看板から分岐の地点への線（ルートの線より細く） */
 .slead{position:fixed;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;overflow:visible}
 .slead{opacity:.85}.slead path{fill:none;stroke-linecap:round;stroke-linejoin:round}.slead .o{stroke:#fff;stroke-width:4}.slead .i{stroke:#0b7a3e;stroke-width:1.8}
@@ -1328,7 +1331,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 23:30";
+const BUILD="2026-10-15 01:00";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1672,10 +1675,10 @@ function syncNav(){
       speak(`この先のトンネル内で、分岐が${tun.g.length}か所あります。`+tun.g.map(g=>`${g.ord}つ目、${g.text}`).join("。"));}}
   // 看板：高速の出口・分岐の2.2km手前から（トンネル内の分岐のまとめが出ている時は出さない）。奥の看板は小さく薄く
   const signOk=navOn&&!off&&onRouteF&&hw&&$("tunCard").hidden;
-  const sj=signOk?GUIDE.filter(j=>j.km>curKm+0.15&&j.km-curKm<=2.2&&JCT_TY.includes(j.ty)&&(j.name||j.sig)):[];
+  const sj=signOk?GUIDE.filter(j=>j.km>curKm+0.02&&j.km-curKm<=SIGN_WIN&&JCT_TY.includes(j.ty)&&(j.name||j.sig)):[];
   // 分かれ道ごとに1枚（2.2km先までの最大4か所）。中身は自分が進む方向の案内だけ
   const shown=sj.slice(0,4).map(j=>[j]);
-  const cj=navOn&&!off&&onRouteF&&!hw&&$("tunCard").hidden&&!shown.length?GUIDE.filter(j=>j.km>curKm+0.02&&j.km-curKm<=0.35&&CITY_TY.includes(j.ty)&&!j.stop).slice(0,1).filter(citySignHas):[];
+  const cj=navOn&&!off&&onRouteF&&!hw&&$("tunCard").hidden&&!shown.length?GUIDE.filter(j=>j.km>curKm+0.02&&j.km-curKm<=SIGN_WIN_C&&CITY_TY.includes(j.ty)&&!j.stop).slice(0,1).filter(citySignHas):[];
   const showSign=shown.length>0||cj.length>0;
   document.body.classList.toggle("hsg",showSign);
   drawDeck(shown.map(gp=>({key:"h"+gp[0].km.toFixed(3),km:gp[0].km,html:signHtmlOf(gp[0],gp[0].km-curKm,[])})).concat(cj.map(j=>({key:"c"+j.km.toFixed(3),km:j.km,html:citySignHtml(j,j.km-curKm),cls:"cty"}))));
@@ -1840,62 +1843,63 @@ function unstackPins(list){
 
   });
 }
-/* ---- 看板がルートの線にかぶらないように ----
-   画面に描かれた線と重なっていないかを直接調べる（国土地理院の地図：その点にある要素にルートの線があるか。
-   Googleの地図は線が画像なので、計算した画面の位置で余白を大きめに）。重なったら ①反対側 ②上へずらす
-   ③反対側の上 の順に置き直し、全部だめならその案内では出さない。置き直す間は隠すので、かぶった姿は出ない */
-const DECK=new Map(); // 看板の束：案内ごとの要素（作り直さず使い回すので、前に出る動きがなめらか）
+/* ---- 流れる看板：近づくと右から出て、残りの距離に合わせて下へ動き、分岐を通る時に画面の真ん中。過ぎたら右へ戻る ---- */
+const DECK=new Map(),SIGN_WIN=2.2,SIGN_WIN_C=0.35; // 看板を出す距離（高速・一般道）
 function drawDeck(items){
-  const dk=$("sDeck");items=items.slice(0,3);dk.hidden=!items.length;DECK.front=items[0]||null;
+  const dk=$("sDeck");items=items.slice(0,4);DECK.items=items;
   const keep=new Set(items.map(it=>it.key));
-  for(const [k,el] of DECK)if(!keep.has(k)){DECK.delete(k);el.className=el.className.replace(/ (front|back|hide)/g,"")+" gone";setTimeout(()=>el.remove(),400);} // 過ぎた看板は上へ消える
-  items.forEach((it,i)=>{let el=DECK.get(it.key);
-    if(!el){el=document.createElement("div");el.className="hsign new";dk.appendChild(el);DECK.set(it.key,el);}
+  for(const [k,el] of DECK)if(!keep.has(k)){DECK.delete(k);el.classList.add("gone");setTimeout(()=>{el.remove();if(!DECK.size)dk.hidden=true;},500);} // 過ぎた看板は右へ戻る
+  items.forEach(it=>{let el=DECK.get(it.key);
+    if(!el){el=document.createElement("div");el.className="hsign wait";dk.appendChild(el);DECK.set(it.key,el);el._y=null;}
     if(el._h!==it.html){el._h=it.html;el.innerHTML=it.html;}
-    el.className="hsign"+(it.cls?" "+it.cls:"")+(i===0?" front":i===1?" back":" hide");});
+    el.classList.toggle("cty",it.cls==="cty");});
+  if(items.length)dk.hidden=false;
   if(!items.length){$("sLead").style.display="none";ecoAway(false);return;}
-  // 1枚目は上、2枚目はその下（少し小さく）、3枚目は2枚目の位置で隠して待つ
-  const f0=DECK.get(items[0].key),h0=f0.offsetHeight;
-  items.forEach((it,i)=>{const el=DECK.get(it.key);el.style.top=(i===0?0:h0+6)+"px";});
-  const f=f0;dk.style.height=(h0+(items.length>1?6+DECK.get(items[1].key).offsetHeight*0.86:0))+"px";
-  // かぶりを調べるのは0.1秒ごと（毎フレームは重い）。看板が替わった時はすぐ
-  const sig=items.map(it=>it.key).join(),t=performance.now();
-  if(sig!==deckSig||t-deckT>100){deckSig=sig;deckT=t;placeDeck();}
-  drawLead(f,items[0]);
+  deckFrame(true);
 }
-// 看板（いちばん前）から分岐の地点へ線を引く。分岐が画面の外・地図の下に隠れる時は引かない
-// 2枚目の看板に隠れない縁（左の辺か、下の辺の2枚目より左）から出し、2枚目が間にある時は2枚目の左を回る
+// いちばん先に通る看板から分岐の地点へ線を引く（下の辺か左の辺の、分岐に近い点から）。分岐が画面の外・地図の下に隠れる時は引かない
 function drawLead(card,it){
-  const ln=$("sLead"),dk=$("sDeck");
+  const ln=$("sLead");
   const p=scrPt(it.km);
-  if(!p||p[0]<0||p[1]<0||p[0]>innerWidth||p[1]>innerHeight){ln.style.display="none";return;}
-  const r=card.getBoundingClientRect(),R=10,bk=dk.querySelector(".hsign.back"),rb=bk?bk.getBoundingClientRect():null;
-  const bx=rb?Math.min(r.right-R,rb.left-6):r.right-R; // 下の辺で隠れない右端
-  const cand=[[r.left+1,Math.max(r.top+R,Math.min(r.bottom-R,p[1]))]];
-  if(bx>r.left+R&&p[1]>r.bottom)cand.push([Math.max(r.left+R,Math.min(bx,p[0])),r.bottom-1]);
-  const d=q=>Math.hypot(q[0]-p[0],q[1]-p[1]),a=cand.reduce((m,q)=>d(q)<d(m)?q:m);
-  const hits=(q0,q1)=>{if(!rb)return false;for(let i=1;i<20;i++){const x=q0[0]+(q1[0]-q0[0])*i/20,y=q0[1]+(q1[1]-q0[1])*i/20;
-    if(x>rb.left-4&&x<rb.right+4&&y>rb.top-4&&y<rb.bottom+4)return true;}return false;};
-  let pts=[a,p];
-  if(hits(a,p)){const x=Math.max(r.left+R,Math.min(bx,rb.left-8)),y=rb.bottom+10;pts=[[x,r.bottom-1],[x,y],p];}
+  if(!p||p[0]<0||p[1]<0||p[0]>innerWidth||p[1]>innerHeight||card.classList.contains("wait")){ln.style.display="none";return;}
+  const r=card.getBoundingClientRect(),R=10,cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const a=p[1]>r.bottom?[cl(p[0],r.left+R,r.right-R),r.bottom-1]:[r.left+1,cl(p[1],r.top+R,r.bottom-R)];
   ln.style.display="";ln.setAttribute("class","slead"+(it.cls?" "+it.cls:""));
-  const dd="M"+pts.map(q=>q[0].toFixed(1)+" "+q[1].toFixed(1)).join("L");
+  const dd=`M${a[0].toFixed(1)} ${a[1].toFixed(1)}L${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
   for(const l of ln.querySelectorAll("path"))l.setAttribute("d",dd);
   const ca=ln.querySelector("circle.a"),ct=ln.querySelector("circle.t");
-  ca.setAttribute("cx",pts[0][0]);ca.setAttribute("cy",pts[0][1]);ct.setAttribute("cx",p[0]);ct.setAttribute("cy",p[1]);
+  ca.setAttribute("cx",a[0]);ca.setAttribute("cy",a[1]);ct.setAttribute("cx",p[0]);ct.setAttribute("cy",p[1]);
 }
-let deckSig="",deckT=0;
+let deckT=0;
 // 速度の表示（指定・自車速度・高速）を下へスライドして隠す／戻す。位置は隠す前の上端で判定する
 let ECO_TOP=null;
 function ecoAway(on){const e=$("navEco");if(on===e.classList.contains("away"))return;
   if(on)ECO_TOP=e.getBoundingClientRect().top;else ECO_TOP=null;e.classList.toggle("away",on);}
-// 地図が回ったり動いたりしている間も：かぶりは0.1秒ごと、線は毎フレーム
-function deckFrame(){
-  const dk=$("sDeck");if(dk.hidden||!DECK.front)return;
-  const t=performance.now();if(t-deckT>100){deckT=t;placeDeck();}
-  const f=DECK.get(DECK.front.key);if(f)drawLead(f,DECK.front);
+// 毎フレーム：看板の高さを残りの距離から決める（出す距離で上の端、分岐を通る時に画面の真ん中）。
+// 速く走れば速く下りてくる。先の看板は手前の看板の上に重ならないよう押し上げ、上に入りきらない間は右の外で待つ。
+// ルートの線とのかぶり（半透明）・速度の表示を隠すかは0.1秒ごと
+function deckFrame(force){
+  const dk=$("sDeck"),items=DECK.items||[];if(!items.length)return;
+  const W=innerWidth,H=innerHeight,land=W>H,cs=getComputedStyle(document.documentElement);
+  const ap=$("areaPop"),dy=ap.classList.contains("on")?ap.offsetHeight+8:0; // 市区町村が出ている間は、その下から
+  const yTop=(land?Math.max(8,(parseFloat(cs.paddingTop)||0)+8):$("navTop").getBoundingClientRect().bottom+8)+dy,yMid=H*0.5;
+  dk.style.left=(W-dk.offsetWidth-Math.max(8,parseFloat(cs.paddingRight)||0))+"px";
+  const now=A.dispKm??curKm,t=performance.now(),dt=Math.min(0.1,(t-(DECK.t||t))/1000);DECK.t=t;
+  let floor=Infinity;const vis=[];
+  items.forEach((it,i)=>{const el=DECK.get(it.key);if(!el)return;const h=el.offsetHeight;
+    const f=Math.max(0,Math.min(1,(it.km-now)/(it.cls==="cty"?SIGN_WIN_C:SIGN_WIN))),y0=Math.max(yTop,yMid-h/2);
+    const y=Math.min(y0+(yTop-y0)*f,floor-6-h);floor=Math.min(floor,y);
+    const ok=y>=yTop-1;el.classList.toggle("wait",!ok);el.classList.toggle("far",i>0);
+    if(!ok){el._y=null;el.style.top=yTop+"px";return;}
+    el._y=el._y==null?y:el._y+(y-el._y)*Math.min(1,dt*6);el.style.top=el._y.toFixed(1)+"px";vis.push(el);});
+  if(force||t-deckT>100){deckT=t;
+    const rcs=vis.map(el=>{const rc=el.getBoundingClientRect();el.classList.toggle("thru",rtHit(rc,2));return rc;});
+    // 看板が下の速度の表示にかかる時は、速度の表示を下へスライドして隠す。位置は隠す前の上端で判定する
+    const eb=$("navEco").getBoundingClientRect(),bot=Math.max(...rcs.map(rc=>rc.bottom),0),R=Math.max(...rcs.map(rc=>rc.right),0),Lf=Math.min(...rcs.map(rc=>rc.left),1e9);
+    ecoAway(bot>(ECO_TOP??eb.top)-6&&Lf<eb.right&&R>eb.left);}
+  const f0=DECK.get(items[0].key);if(f0)drawLead(f0,items[0]);
 }
-/* 束の置き場所はいつも右上（縦は案内のバナーの下）。ルートの線にかぶっている間は、読める程度に半透明にして下の線を見せる。
+/* 看板がルートの線にかぶっている間は、読める程度に半透明にして下の線を見せる。
    線とのかぶりは、地図に置いた見えない印の画面の位置で調べる（回転・傾き込み。Googleの地図は計算でおおよそ） */
 const PROBES=[];
 function probeAt(i){while(PROBES.length<=i){const e=document.createElement("div");e.style.cssText="position:absolute;left:0;top:0;width:0;height:0;pointer-events:none";map.getPane("markerPane").appendChild(e);PROBES.push(e);}return PROBES[i];}
@@ -1923,18 +1927,6 @@ function rtHit(rc,m){
   for(let i=0;i<pts.length;i++){if(!pts[i])continue;const [x,y]=pts[i];if(inR(x,y))return true;if(!i||!pts[i-1])continue;
     const [px,py]=pts[i-1],n=Math.ceil(Math.hypot(x-px,y-py)/4);for(let j=1;j<n;j++)if(inR(px+(x-px)*j/n,py+(y-py)*j/n))return true;}
   return false;
-}
-function placeDeck(){
-  const dk=$("sDeck"),W=innerWidth,H=innerHeight,land=W>H,w=dk.offsetWidth,h=dk.offsetHeight;
-  const safeT=parseFloat(getComputedStyle(document.documentElement).paddingTop)||0;
-  const y=land?Math.max(8,safeT+8):$("navTop").getBoundingClientRect().bottom+8,x=W-w-Math.max(8,parseFloat(getComputedStyle(document.documentElement).paddingRight)||0);
-  const ap=$("areaPop"),dy=ap.classList.contains("on")?ap.offsetHeight+8:0; // 市区町村が出ている間は、その下へ
-  dk.style.left=x+"px";dk.style.top=(y+dy)+"px";
-  const cards=[...dk.querySelectorAll(".hsign.front,.hsign.back")].map(e=>e.getBoundingClientRect());
-  dk.classList.toggle("thru",cards.some(rc=>rtHit(rc,2)));
-  // 2枚で下の速度の表示にかかる時は、速度の表示を下へスライドして隠す
-  const eb=$("navEco").getBoundingClientRect(),bot=Math.max(...cards.map(rc=>rc.bottom),0),R=Math.max(...cards.map(rc=>rc.right),0),Lf=Math.min(...cards.map(rc=>rc.left),1e9);
-  const eco0=ECO_TOP??eb.top;ecoAway(bot>eco0-6&&Lf<eb.right&&R>eb.left);
 }
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
 /* ---- 立ち寄り先のSA・PAの見取り図（拡大ポップアップの代わり）：建物・駐車場・トイレ・給油・EV充電・案内所の位置と、設備の一覧。
