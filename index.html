@@ -186,7 +186,7 @@ body.sheet .app .jct{display:none}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
 /* 指定速度：標識と見間違えないよう、丸や赤は使わず青いカードに */
 .road{align-self:flex-end;background:#fff;color:#3c4043;border-radius:10px;padding:5px 10px;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:nowrap}
-.road.hw{background:#0f7d45;color:#fff}
+.road.hw{background:#0f7d45;color:#fff;max-width:9em;overflow:hidden;text-overflow:ellipsis}
 .road.dr{background:#f29900;color:#fff} /* GPSが途切れて推定位置で案内している間 */
 /* 指定速度・自車速度は1行の薄い箱（数字＋km/h） */
 .setv{background:#1a73e8;color:#fff;border-radius:10px;padding:3px 10px;display:flex;align-items:baseline;gap:3px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
@@ -551,6 +551,12 @@ function projectTrack(lat,lon,t){
     }
   }
   trackKm=r.km;trackT=t;return r;
+}
+// 高速の札に出す短い呼び名（新東名高速道路→新東名、京都縦貫自動車道→京都縦貫道）
+const RD_ABBR={"首都圏中央連絡自動車道":"圏央道","東京外環自動車道":"外環道","名古屋第二環状自動車道":"名二環","首都高速道路":"首都高","阪神高速道路":"阪神高速"};
+function shortRoad(n){
+  if(!n)return"";n=n.replace(/[（(].*?[)）]/g,"").trim();if(RD_ABBR[n])return RD_ABBR[n];
+  return n.replace(/^首都高速(?!道路)/,"首都高").replace(/高速道路$/,"").replace(/自動車道$/,"道").replace(/道路$/,"")||n;
 }
 // 道路の区間（kmの順に並んでいる）から、その位置の高速/一般道・制限速度・想定速度を引く
 const NOATTR={hw:false,lim:null,v:40};
@@ -1648,7 +1654,7 @@ function syncNav(){
   insetFor=showInset?nj.km:null;
   if(showInset)updateInset(nj,d);
   $("nvDr").hidden=!drOn();
-  $("nvRoad").textContent="高速";$("nvRoad").hidden=!hw;$("nvRoad").classList.toggle("hw",hw);
+  {const t=hw?shortRoad(attrAt(curKm).nm):"";if($("nvRoad").textContent!==t)$("nvRoad").textContent=t||"高速";}$("nvRoad").hidden=!hw;$("nvRoad").classList.toggle("hw",hw);
   if(curPos&&hwOn!=null&&hwSaid!==hwOn&&!timer){if(hwSaid!=null&&SET.voice)speak(hwOn?"高速道路に入りました":"一般道に入りました");hwSaid=hwOn;}
   const next=SAKM.filter(x=>x.km>curKm+0.3).slice(0,3);
   if(STOP&&!next.some(x=>x.name===STOP.name)){const st=SAKM.find(x=>x.name===STOP.name&&x.km>curKm);if(st)next.push(st);}
@@ -2481,17 +2487,17 @@ async function loadAttr(){
     for(let a=0;a<TOTAL-0.01;a+=60){
       const b=Math.min(TOTAL,a+60);
       const q={encoded_polyline:encPoly(ptsBetween(a,b)),shape_match:"edge_walk",costing:"auto",
-        filters:{attributes:["edge.road_class","edge.use","edge.speed_limit","edge.speed","edge.length","edge.tunnel","node.type"],action:"include"}};
+        filters:{attributes:["edge.road_class","edge.use","edge.speed_limit","edge.speed","edge.length","edge.tunnel","edge.names","node.type"],action:"include"}};
       const r=await fetch(VAL+"/trace_attributes?json="+encodeURIComponent(JSON.stringify(q)));
       if(!r.ok)throw new Error(r.status);
       const es=(await r.json()).edges||[],tot=es.reduce((s,e)=>s+(e.length||0),0);if(!tot)throw new Error("empty");
       let x=a;for(const e of es){const L=(e.length||0)/tot*(b-a),lim=+e.speed_limit;
-        out.push({a:x,b:x+L,hw:e.road_class==="motorway",ramp:e.use==="ramp",lim:lim>0&&lim<200?lim:null,v:e.speed||30,tun:!!e.tunnel});x+=L;if(e.end_node&&/toll_booth/.test(e.end_node.type||""))tb.push(x);}
+        out.push({a:x,b:x+L,hw:e.road_class==="motorway",ramp:e.use==="ramp",lim:lim>0&&lim<200?lim:null,v:e.speed||30,tun:!!e.tunnel,nm:(e.names||[]).find(n=>/[^\x00-\x7f]/.test(n))||""});x+=L;if(e.end_node&&/toll_booth/.test(e.end_node.type||""))tb.push(x);}
       if(key!==routeKey())return;
       await new Promise(r=>setTimeout(r,300));
     }
     // 同じ種類・制限速度が続く所はまとめる
-    const m=[];for(const s of out){const p=m[m.length-1];if(p&&p.hw===s.hw&&p.lim===s.lim&&p.tun===s.tun&&Math.abs(p.v-s.v)<1){p.b=s.b;}else m.push(Object.assign({},s));}
+    const m=[];for(const s of out){const p=m[m.length-1];if(p&&p.hw===s.hw&&p.lim===s.lim&&p.tun===s.tun&&p.nm===s.nm&&Math.abs(p.v-s.v)<1){p.b=s.b;}else m.push(Object.assign({},s));}
     TOLLS=[];for(const k of tb)if(!TOLLS.length||k-TOLLS[TOLLS.length-1]>0.3)TOLLS.push(k);
     ATTR=m;buildIndex();drawRouteLine();saveRoute();scheduleElev();
     if(MODE==="preview")showPreview();render(curKm);
