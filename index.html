@@ -286,6 +286,8 @@ body:not(.nav) #rerouteSheet{display:none}
 .results button:last-child{border-bottom:0}
 .results small{display:block;font-weight:400;color:#5f6368;font-size:12px;margin-top:2px}
 .results .msg{padding:12px 14px;color:#5f6368;font-size:14px}
+.rebtn{position:fixed;z-index:7;left:50%;transform:translateX(-50%);bottom:calc(max(8px,env(safe-area-inset-bottom)) + 104px);width:auto;padding:10px 18px;border-radius:24px;border:0;background:#fff;color:#1a73e8;font-size:16px;font-weight:700;box-shadow:0 3px 12px rgba(0,0,0,.35)}
+@media (orientation:landscape){.rebtn{left:auto;right:max(12px,env(safe-area-inset-right));transform:none;bottom:calc(max(8px,env(safe-area-inset-bottom)) + 160px)}}
 .locbtn{position:fixed;z-index:5;right:max(12px,env(safe-area-inset-right));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 12px);width:48px;height:48px;padding:0;border-radius:50%;background:#fff;color:#1a73e8;border:0;font-size:24px;box-shadow:0 2px 10px rgba(0,0,0,.35)}
 body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 .preview{position:fixed;z-index:6;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));background:#fff;color:#202124;border-radius:16px;padding:12px 14px;box-shadow:0 3px 12px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:8px}
@@ -331,6 +333,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="results" id="results" hidden></div>
 </div>
 <button class="locbtn" id="locBtn" aria-label="現在地">◎</button>
+<button class="rebtn" id="reBtn" hidden>➤ 現在地</button>
 <div class="preview" id="preview">
   <div class="pv-head"><b id="pvName"></b><small id="pvAddr"></small></div>
   <div class="pv-sum" id="pvSum"></div>
@@ -1115,7 +1118,7 @@ function initGmap(){
   gmap.addListener("renderingtype_changed",rtype);setTimeout(rtype,1500);
   drawRouteLine();drawMarks();applyTraffic();
   gMe=makeMe(gmap);gMe.setPosition({lat:p[0],lng:p[1]});gMe.setVisible(!!curPos);
-  gmap.addListener("dragstart",()=>{if(Date.now()-A.pinchT>1500)holdUntil=Date.now()+30000;}); // 1本指で動かしたら30秒は追いかけない
+  gmap.addListener("dragstart",()=>{if(MODE==="nav"&&Date.now()-A.pinchT>1500)holdFollow();}); // 1本指で動かしたら追いかけない（「現在地」ボタンか60秒で戻る）
   gmap.addListener("zoom_changed",()=>{if(!progMove&&MODE==="nav")setUserZoom(gmap.getZoom());}); // ピンチした拡大率を保存
   const pin=e=>{if(e.touches&&e.touches.length>1)A.pinchT=Date.now();};$("gmap").addEventListener("touchstart",pin,{passive:true,capture:true});$("gmap").addEventListener("touchmove",pin,{passive:true,capture:true});
   // 画面の位置→緯度経度に使う（長押しで目的地を選ぶ時）
@@ -1179,7 +1182,7 @@ function applyMapMode(){
   const rs=$("rot").style;if(!nav){rs.setProperty("--rot","0deg");rs.setProperty("--tilt","0deg");}
   if(map){map.options.touchZoom=nav?"center":true;if(nav)map.dragging.disable();else map.dragging.enable();map.invalidateSize();}
   if(gmap){gmap.setOptions({gestureHandling:nav&&!vectorMode?"none":"greedy"});if(!nav&&vectorMode)gmap.moveCamera({heading:0,tilt:0});}
-  $("locBtn").hidden=nav;
+  $("locBtn").hidden=nav;syncReBtn();
 }
 // 2点間の方位（北=0、時計回り）
 function bearing(a,b){const r=Math.PI/180,y=Math.sin((b[1]-a[1])*r)*Math.cos(b[0]*r),x=Math.cos(a[0]*r)*Math.sin(b[0]*r)-Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos((b[1]-a[1])*r);return(Math.atan2(y,x)/r+360)%360;}
@@ -1202,7 +1205,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 10:40";
+const BUILD="2026-10-14 11:00";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1275,12 +1278,15 @@ function drawFrame(p){
   const kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,zoom)/1000; // 1pxあたりのkm
   let c=destPt(p,hd,(Lo.ty-h/2)*kpp*(vectorMode?1.15:1));
   if(vectorMode&&w>h)c=destPt(c,hd-90,w*0.12*kpp); // 横向きは現在地を右寄りに（中心を左へずらす）
+  // 追従のカメラ（指で動かした後に戻る時・案内を始めた時は0.7秒かけて移る）
+  let cam={c,z:zoom,h:hd};
+  const holding=Date.now()<holdUntil;
+  if(A.wasHold&&!holding){A.panC=null;startBlend();syncReBtn();}A.wasHold=holding;
+  if(A.blendFrom&&!holding){const t=(performance.now()-A.blendT)/700;if(t<1)cam=lerpCam(A.blendFrom,cam,ease(t));else A.blendFrom=null;}
+  if(!vectorMode)rs.setProperty("--rot",(-cam.h)+"deg");
   if(gmap&&gMe){
     gMe.setVisible(true);gMe.setPosition({lat:p[0],lng:p[1]});
-    if(Date.now()>holdUntil){progMove=true;
-      if(vectorMode)gmap.moveCamera({center:{lat:c[0],lng:c[1]},zoom,heading:hd,tilt:45});
-      else{const zi=Math.round(zoom);if(gmap.getZoom()!==zi)gmap.setZoom(zi);gmap.setCenter({lat:c[0],lng:c[1]});}
-      progMove=false;}
+    if(!holding)setCam(cam,true);else if(A.panC&&!vectorMode)setCam({c:A.panC,z:zoom,h:hd},true);
     setMeIcon(vectorMode?hd-mapHd():hd); // 枠ごと回す時（Map IDなし）は北基準の向き
     signPinRot(hd);
     return;
@@ -1288,7 +1294,7 @@ function drawFrame(p){
   if(!map)return;
   meMk.setOpacity(1);meMk.setLatLng(p);{const e=meMk.getElement();if(e&&e.firstChild)e.firstChild.style.transform=`rotate(${hd}deg)`;}
   signPinRot(hd);
-  if(Date.now()>holdUntil){progMove=true;map.setView(c,zoom,{animate:false});progMove=false;}
+  if(!holding)setCam(cam,true);else if(A.panC)setCam({c:A.panC,z:zoom,h:hd},true);
 }
 // 矢印を置く高さ（地図の上端からのpx）。速度カードと下のバーの上端から55px上、設定で上下に調整できる
 let lay={t:0};
@@ -1300,6 +1306,60 @@ function layoutNow(){
   const ty=Math.max(h*0.45,Math.min(h*0.85,bottom-mr.top-55+(+SET.meY||0)));
   lay={t,h,w,ty};return lay;
 }
+/* ---- 地図のカメラ（中心・拡大率・向き）。大きく動く時は0.7秒かけてなめらかに ---- */
+const HOLD_MS=60000; // 指で動かした後、追従に戻るまで
+function getCam(){
+  try{
+    if(gmap){const c=gmap.getCenter();return{c:[c.lat(),c.lng()],z:gmap.getZoom(),h:vectorMode?(gmap.getHeading()||0):((rotAcc||0)%360+360)%360};}
+    if(map){const c=map.getCenter();return{c:[c.lat,c.lng],z:map.getZoom(),h:((rotAcc||0)%360+360)%360};}
+  }catch(e){}
+  return null;
+}
+function setCam(cam,nav){
+  progMove=true;
+  try{
+    if(gmap){
+      if(vectorMode)gmap.moveCamera({center:{lat:cam.c[0],lng:cam.c[1]},zoom:cam.z,heading:nav?cam.h:0,tilt:nav?45:0});
+      else{const zi=Math.round(cam.z);if(gmap.getZoom()!==zi)gmap.setZoom(zi);gmap.setCenter({lat:cam.c[0],lng:cam.c[1]});}
+    }else if(map)map.setView(cam.c,cam.z,{animate:false});
+  }catch(e){}
+  progMove=false;
+}
+const ease=t=>t<0?0:t>1?1:t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+function lerpCam(a,b,t){
+  const dh=((b.h-a.h)%360+540)%360-180;
+  return{c:[a.c[0]+(b.c[0]-a.c[0])*t,a.c[1]+(b.c[1]-a.c[1])*t],z:a.z+(b.z-a.z)*t,h:(a.h+dh*t+360)%360};
+}
+// 案内中：次のフレームから0.7秒かけて、今の地図の位置から追従の位置へ移る
+function startBlend(){const c=getCam();if(c){A.blendFrom=c;A.blendT=performance.now();}}
+// 案内中以外：0.7秒かけて目的の位置へ
+let camAnim=0;
+function animCam(to,ms){
+  const from=getCam();if(!from){setCam(to,false);return;}
+  if(distKm(from.c,to.c)>300){setCam(to,false);return;} // 遠すぎる時は飛ぶ
+  const t0=performance.now(),id=++camAnim;ms=ms||700;
+  const step=now=>{if(id!==camAnim)return;const t=ease((now-t0)/ms);setCam(lerpCam(from,to,t),false);if(t<1)requestAnimationFrame(step);};
+  requestAnimationFrame(step);
+}
+// 案内中に指で動かした：追従を止めて「現在地」ボタンを出す
+function holdFollow(){holdUntil=Date.now()+HOLD_MS;camAnim++;syncReBtn();}
+function resumeFollow(){holdUntil=0;A.panC=null;startBlend();syncReBtn();}
+// 枠ごと回している地図（ラスター・国土地理院）：案内中も1本指で動かせるように
+(function(){
+  let st=null;
+  const down=e=>{if(MODE!=="nav"||(vectorMode&&gmap))return;const t=e.touches?e.touches:[e];if(t.length!==1){st=null;return;}st={x:t[0].clientX,y:t[0].clientY,moved:false};};
+  const move=e=>{if(!st)return;const t=e.touches?e.touches:[e];if(t.length!==1){st=null;return;}
+    const dx=t[0].clientX-st.x,dy=t[0].clientY-st.y;if(!st.moved&&Math.hypot(dx,dy)<8)return;
+    if(!st.moved){st.moved=true;holdFollow();if(!A.panC){const c=getCam();A.panC=c?c.c:null;}}
+    if(!A.panC)return;st.x=t[0].clientX;st.y=t[0].clientY;
+    const hd=((rotAcc||0)%360+360)%360,kpp=156543.03*Math.cos(A.panC[0]*Math.PI/180)/Math.pow(2,curZoom())/1000;
+    A.panC=destPt(destPt(A.panC,hd+90,-dx*kpp),hd,dy*kpp/0.77); // 画面の右・上を地図の向きに直して動かす（斜めに見ているぶん縦は伸ばす）
+    holdUntil=Date.now()+HOLD_MS;if(e.cancelable)e.preventDefault();};
+  const up=()=>{st=null;};
+  const m=$("map");m.addEventListener("touchstart",down,{passive:true});m.addEventListener("touchmove",move,{passive:false});m.addEventListener("touchend",up);
+  m.addEventListener("mousedown",down);addEventListener("mousemove",e=>{if(e.buttons&1)move(e);});addEventListener("mouseup",up);
+})();
+function syncReBtn(){const b=$("reBtn");if(b)b.hidden=!(MODE==="nav"&&Date.now()<holdUntil);}
 // 地図を動かす（目的地を決める間）
 // 目的地へ地図をスライド：上の検索欄と下の経路カードの間の真ん中に来るようにずらす
 function slideTo(p,z){
@@ -1307,10 +1367,11 @@ function slideTo(p,z){
   const pr=$("preview").getBoundingClientRect(),top=($("plan").getBoundingClientRect().bottom||60),bot=pr.height?pr.top:innerHeight-260; // 経路カードの上まで
   const off=innerHeight/2-(top+bot)/2,kpp=156543.03*Math.cos(p[0]*Math.PI/180)/Math.pow(2,z)/1000;
   const c=destPt(p,180,off*kpp);
-  if(gmap){if(gmap.getZoom()!==z)gmap.setZoom(z);gmap.panTo({lat:c[0],lng:c[1]});}
-  else if(map)map.flyTo(c,z,{duration:0.6});
+  if(gmap)animCam({c,z,h:0});
+  else if(map)map.flyTo(c,z,{duration:0.7});
 }
-function centerOn(p,z){progMove=true;if(gmap){gmap.setCenter({lat:p[0],lng:p[1]});if(z)gmap.setZoom(z);}else if(map)map.setView(p,z||map.getZoom(),{animate:false});progMove=false;}
+function centerOn(p,z,jump){const cur=getCam();const to={c:p,z:z||(cur?cur.z:15),h:0};if(jump||!cur)setCam(to,false);else animCam(to);}
+$("reBtn").addEventListener("click",()=>resumeFollow());
 $("locBtn").addEventListener("click",()=>{if(curPos)centerOn(curPos,15);else startGps();});
 
 /* ---- 市区町村に入った時の案内：国土地理院の住所検索（無料・キー不要。Googleの使用量は使わない）で今いる市区町村を調べる ----
@@ -1991,7 +2052,7 @@ function startNav(){
   ECO.stopMin=0;ECO.lastFixT=0;saveStop();DEC.said.clear();spoken.clear();arrived=false;
   if(!FUEL.log.length||Date.now()-FUEL.log[FUEL.log.length-1].t>12*3600e3){if(FUEL.trip){CAL.dist=(FUEL.prior?FUEL.prior.dist:CAL.dist||0)+FUEL.trip.dNew;try{localStorage.setItem("carCal",JSON.stringify(CAL));}catch(e){}FUEL.trip=null;}FUEL.log=[];FUEL.sv={};FUEL.sc={};FUEL.prior={s:CAL.s,k:CAL.k,dist:CAL.dist||0};FUEL.needStart=true;FUEL.cal=CAL.s;} // 前回の記録が12時間以上前なら新しい旅として始める
   initCompass();initMotion();keepAwake();setTimeout(()=>{gpsRestartT=0;restartGps("start");},2000);if(SET.voice)speak("案内を開始します");
-  simOffset=0;hist=[];trackKm=null;TRIPBASE=0;progSaid=false;addHist(DEST);hwOn=hwSaid=null;hwIn=hwOut=0;holdUntil=0;rotAcc=null;
+  simOffset=0;hist=[];trackKm=null;TRIPBASE=0;progSaid=false;addHist(DEST);hwOn=hwSaid=null;hwIn=hwOut=0;holdUntil=0;rotAcc=null;A.panC=null;startBlend();syncReBtn();
   if(curPos){const pr=projectTrack(curPos[0],curPos[1],Date.now());offD=pr.d;feedFix(pr.km,curPos,gpsSpeed);render(pr.km);}else render(0);
   saveRoute();
 }
@@ -2301,7 +2362,7 @@ function onFix0(p){
   setStatus("ok",`GPS受信中（精度±${Math.round(c.accuracy)}m・向き ${gpsHeading!=null?Math.round(gpsHeading)+"°":"—"}・速さ ${s!=null?Math.round(s):"—"}km/h${c.speed!=null&&c.speed>=0?"":"（推定）"}・更新 ${GPSI.iv!=null?GPSI.iv.toFixed(1):"—"}秒・遅れ ${(GPSI.age/1000).toFixed(1)}秒・画面 ${GPSI.fps!=null?Math.round(GPSI.fps):"—"}fps）`+(GPSI.err?`　⚠${GPSI.err}`:""));
   if(MODE!=="nav"||!hasRoute()){
     curPos=[c.latitude,c.longitude];gpsSpeed=s;feedFix(null,curPos,s,p.timestamp);
-    if(firstFix&&MODE==="browse")centerOn(curPos,15);
+    if(firstFix&&MODE==="browse")centerOn(curPos,15,true);
     firstFix=false;return;
   }
   firstFix=false;
