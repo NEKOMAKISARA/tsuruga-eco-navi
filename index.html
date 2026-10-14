@@ -1318,7 +1318,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 20:00";
+const BUILD="2026-10-14 20:30";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -2358,7 +2358,7 @@ function setRoute(t,keepSA){
   ATTR=t.ms.map(m=>({a:RCUM[m.b]||0,b:RCUM[m.e]??TOTAL,hw:m.hw,lim:null,v:m.v})).filter(s=>s.b>s.a);
   buildIndex();spoken.clear();DEC.said.clear();hist=[];arrived=false;A.dispKm=null;
   drawRouteLine();drawMarks();saveRoute();scheduleElev();wxDrawn="";drawWx();
-  loadAttr().then(()=>{loadJct();loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
+  loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 }
 let planSeq=0;
 async function planRoute(){
@@ -2509,6 +2509,46 @@ async function loadJct(){
         let rest=t.replace(/^(左|右)方向、?/,"").replace(/[0-9A-Za-z\-]+番出口、?/,"").replace(/^出口\s*/,"").replace(/^[、 ]+|[、 ]+$/g,"").replace(/、その先/,"　");
         const text=sa?"入口":(jct?(rest||"分岐"):("出口"+(rest?" "+rest:"")))+(num?`（${num}）`:"");
         if(name||num){x.m[6]=name;x.m[2]=text;x.m[7]=Object.assign({tw:[],br:[]},x.m[7]||{},{num,jct,sa});changed=true;}
+      }
+      if(changed){buildIndex();saveRoute();render(curKm);}
+      return;
+    }catch(e){}
+  }
+}
+/* ---- 方面名が無い高速の分岐・出口を、地図のデータ（OpenStreetMap）のランプの方面で補う ----
+   経路検索の標識に方面が入っていない所（鶴ヶ島JCTの「分岐」だけ、など）。分かれた先のランプのうち、ルートが通るものの
+   destination（方面）・destination:lanes（車線ごとの方面）・destination:ref（路線番号）と、JCTならランプの名前（圏央道など）を使う */
+async function loadDest(){
+  const key=routeKey();if(!key)return;
+  const need=MANS.map((m,i)=>({m,km:m[4]!=null&&RCUM[m[4]]!=null?RCUM[m[4]]:null})).filter(x=>x.km!=null&&x.m[5]!=="stop"&&JCT_TY.includes(x.m[3])&&
+    attrAt(Math.max(0,x.km-0.3)).hw&&!((x.m[7]&&x.m[7].tw&&x.m[7].tw.length)||(x.m[7]&&x.m[7].sa)));
+  if(!need.length)return;
+  const q=`[out:json][timeout:40];way(around:300,${need.map(x=>x.m[0].toFixed(5)+","+x.m[1].toFixed(5)).join(",")})["highway"~"^(motorway_link|trunk_link)$"];out tags geom;`;
+  for(const u of OVERPASS){
+    try{
+      const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),60000);
+      const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(q),signal:ctl.signal});
+      clearTimeout(tm);if(!r.ok)continue;
+      const ways=((await r.json()).elements||[]).filter(w=>w.geometry&&w.geometry.length>1);if(key!==routeKey())return;
+      const near=(w,p)=>{let d=1e9;for(let i=1;i<w.geometry.length;i++){const a=w.geometry[i-1],b=w.geometry[i];d=Math.min(d,segDist(p,[a.lat,a.lon],[b.lat,b.lon]));}return d;};
+      let changed=false;
+      for(const x of need){
+        // 分かれた先のルート（50m〜1.2km）の上を通るランプを、近い順に
+        const smp=[];for(let k=x.km+0.05;k<=Math.min(TOTAL,x.km+1.2);k+=0.05)smp.push([k,posAt(k)]);
+        const on=ways.map(w=>{const hit=smp.filter(([,p])=>near(w,p)<20);return hit.length>=2?{w,k:hit[0][0]}:null;}).filter(Boolean).sort((a,b)=>a.k-b.k);
+        let tw=[],br=[],nm="";
+        for(const {w} of on){const t=w.tags||{};
+          if(!nm&&t.name)nm=cleanIns(t.name);
+          if(!br.length&&t["destination:ref"])br=t["destination:ref"].split(";").map(s=>s.trim()).filter(Boolean);
+          if(!tw.length){const v=t.destination||t["destination:lanes"]||"";tw=noRoman([...new Set(v.split(/[;|]/).map(s=>cleanIns(s.trim())).filter(Boolean))]);}
+          if(tw.length)break;}
+        if(!tw.length&&!br.length)continue;
+        const sg=Object.assign({tw:[],br:[]},x.m[7]||{}),jct=sg.jct!=null?sg.jct:afterRampHw(x.km);
+        if(jct&&!br.length&&nm)br=[nm.replace(/首都圏中央連絡自動車道/,"圏央道")]; // JCTのランプの名前は乗り換える先の路線
+        sg.tw=tw.slice(0,3);if(!sg.br.length)sg.br=br.slice(0,2);sg.jct=jct;
+        const dir=sg.tw.length?sg.tw.join("・")+"方面":"";
+        x.m[2]=jct?[sg.br.join("・"),dir].filter(Boolean).join(" ")||x.m[2]:["出口",dir].filter(Boolean).join(" ")+(sg.num?`（${sg.num}）`:"");
+        x.m[7]=sg;changed=true;
       }
       if(changed){buildIndex();saveRoute();render(curKm);}
       return;
@@ -3092,7 +3132,7 @@ applyMapMode();syncMap();startGps();
 if(MODE==="preview"&&DEST){showPreview();setTimeout(()=>slideTo([DEST.lat,DEST.lon],16),500);}
 if(MODE==="nav")render(0);
 if(hasRoute()&&ATTR.some(s=>s.lim)&&!MANS.some(m=>m[8]))loadLanes();
-if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct();loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
+if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
 $("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",()=>{location.replace(location.pathname+"?v="+Date.now());});setTimeout(checkUpdate,3000);
 // 開きっぱなしの間も15分ごとに確かめる（開いた時・戻った時だけだと、使っている間の更新に気づかない）
