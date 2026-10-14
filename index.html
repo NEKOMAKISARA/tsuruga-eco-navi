@@ -164,6 +164,7 @@ body.sheet .app .jct{display:none}
 .nav-top{background:#0f7d45;color:#fff;border-radius:14px;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 .nav-top.soon{background:#0b6a3a}
 .nav-top .ar{font-size:44px;line-height:1;min-width:44px;text-align:center}
+.arw{width:1em;height:1em;display:inline-block;vertical-align:-.12em;overflow:visible}
 .nav-top .dist{font-family:var(--num);font-size:30px;font-weight:700;white-space:nowrap}
 .nav-top .dist small{font-size:16px;margin-left:2px}
 .nav-top .txt{font-size:17px;font-weight:700;line-height:1.35;min-width:0}
@@ -1289,7 +1290,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 15:50";
+const BUILD="2026-10-14 16:10";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1576,7 +1577,7 @@ function syncNav(){
   const T=id=>$(id).textContent;
   if(MODE!=="nav"||!hasRoute())return;
   const has=!$("jctBox").hidden;
-  $("nvAr").textContent=arrived?"⚑":has?T("jctArrow"):"⚑";
+  $("nvAr").innerHTML=arIcon(arrived?"⚑":has?T("jctArrow"):"⚑");
   $("nvDist").innerHTML=!arrived&&has?`${T("jctKm")}<small>${T("jctUnit")}</small>`:"";
   {const g=GUIDE.find(j=>j.km>curKm+0.02);$("nvName").textContent=!arrived&&has?(g&&g.tun?`トンネル内 ${g.ord}/${g.tun.g.length}`:T("jctName")):"";}
   $("nvTxt").textContent=arrived?"目的地に到着しました":has?T("jctText"):(curPos&&offD>0.1)?"ルートから外れています":"まもなく目的地";
@@ -1624,7 +1625,7 @@ function syncNav(){
   if(!$("tunCard").hidden){
     const rest=tun.g.filter(g=>g.km>curKm+0.02),inT=curKm>=tun.a;
     const h=`<div class="th">${inT?"トンネル内の分岐":`この先${fmtKm(tun.a-curKm)} トンネル内の分岐`} ${tun.g.length}か所</div>`+
-      rest.map(g=>`<div class="tr"><b class="kd">${g.ord}</b><b class="ta">${arrowOf(g.text,g.ty)}</b><span class="n">${esc(g.text)}</span><span class="k">${fmtKm(g.km-curKm)}</span></div>`).join("");
+      rest.map(g=>`<div class="tr"><b class="kd">${g.ord}</b><b class="ta">${arIcon(arrowOf(g.text,g.ty))}</b><span class="n">${esc(g.text)}</span><span class="k">${fmtKm(g.km-curKm)}</span></div>`).join("");
     if(h!==tunHtml){tunHtml=h;$("tunCard").innerHTML=h;}
   }
   // 入口の1km手前（高速）・300m手前（一般道）で、中の分岐をまとめて読む
@@ -1700,8 +1701,8 @@ function signHtmlOf(nj,d,more){
   const shields=(g.br||[]).filter(x=>/^[A-Z]{1,2}\d|^R\d|^国道/.test(x)).slice(0,2).map(x=>`<span class="sh">${esc(x)}</span>`).join("");
   const nx=(more||[]).map(m=>{const mg=m.sig||{},mj=mg.jct!=null?mg.jct:/JCT|ジャンクション/.test(m.name),
       md=mj?((mg.br||[]).filter(x=>!/^[A-Z]{1,2}\d/.test(x)).join("・")||(mg.tw||[]).join("・")):((mg.tw||[]).join("・")||"出口");
-    return`<div class="nx"><span>その先 ${kmTxt(m.km-nj.km).replace(/<\/?small>/g,"")}</span><b>${arrowOf(m.text,m.ty)}</b><span class="nn">${esc(m.name||"")} ${esc(md)}</span></div>`;}).join("");
-  return`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="kmr"><span class="km">${kmTxt(d)}</span><b class="ar">${ar}</b></span></div>`+
+    return`<div class="nx"><span>その先 ${kmTxt(m.km-nj.km).replace(/<\/?small>/g,"")}</span><b>${arIcon(arrowOf(m.text,m.ty))}</b><span class="nn">${esc(m.name||"")} ${esc(md)}</span></div>`;}).join("");
+  return`<div class="in"><div class="r">${jct?"":`<span class="ex">出口</span>`}${g.num?`<span class="no">${esc(g.num)}</span>`:""}<span class="kmr"><span class="km">${kmTxt(d)}</span><b class="ar">${arIcon(ar)}</b></span></div>`+
     `<div class="ds${dest.length>6?" sm":""}">${esc(dest)}</div>${sub?`<div style="font-size:12px;opacity:.9">${esc(sub)}</div>`:""}`+
     `<div class="r2">${shields}<span class="nm">${esc(nj.name||"")}</span></div>${nx}</div>${nj.x&&nj.x.lanes?laneRow(nj.x.lanes):""}`;
 }
@@ -1709,12 +1710,14 @@ function signHtmlOf(nj,d,more){
 const GO="#ff8c1a";
 // 車線の矢印。g は向きの集まり（L 左, sL 斜め左, S 直進, sR 斜め右, R 右, U Uターン）
 function laneSvg(g,on){const c=on?"#fff":"rgba(255,255,255,.45)",w=4.5;let p="";
-  const up=`<path d="M20 40 V12" stroke="${c}" stroke-width="${w}" fill="none"/><path d="M20 3 l-7 10 h14 z" fill="${c}"/>`;
-  const lt=`<path d="M20 40 V24 Q20 16 12 16 H9" stroke="${c}" stroke-width="${w}" fill="none"/><path d="M2 16 l10 -7 v14 z" fill="${c}"/>`;
-  const rt=`<path d="M20 40 V24 Q20 16 28 16 H31" stroke="${c}" stroke-width="${w}" fill="none"/><path d="M38 16 l-10 -7 v14 z" fill="${c}"/>`;
-  const sr=`<path d="M20 40 V28 L30 12" stroke="${c}" stroke-width="${w}" fill="none"/><path d="M34 4 l-1 12 l-10 -6 z" fill="${c}"/>`;
-  const sl=`<path d="M20 40 V28 L10 12" stroke="${c}" stroke-width="${w}" fill="none"/><path d="M6 4 l1 12 l10 -6 z" fill="${c}"/>`;
-  const ut=`<path d="M14 40 V16 Q14 7 22 7 Q30 7 30 16 V24" stroke="${c}" stroke-width="${w}" fill="none"/><path d="M30 33 l-7 -10 h14 z" fill="${c}"/>`;
+  // 案内の矢印と同じ作り方（線の端から向きどおりに矢じり）。40×42の枠
+  const one=(d,x,y,a)=>`<path d="${d}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linejoin="round"/><path d="${arHead(x,y,a,9,7)}" fill="${c}"/>`;
+  const up=one("M20 41V13",20,13,0);
+  const lt=one("M20 41V24Q20 16 12 16H11",11,16,-90);
+  const rt=one("M20 41V24Q20 16 28 16H29",29,16,90);
+  const sr=one("M20 41V27L27.5 17.5",27.5,17.5,38);
+  const sl=one("M20 41V27L12.5 17.5",12.5,17.5,-38);
+  const ut=one("M13 41V16A7.5 7.5 0 0 1 28 16V25",28,25,180);
   if(g.includes("L"))p+=lt;if(g.includes("sL"))p+=sl;if(g.includes("S")||!g.length)p+=up;if(g.includes("sR"))p+=sr;if(g.includes("R"))p+=rt;if(g.includes("U"))p+=ut;
   return`<svg viewBox="0 0 40 42">${p}</svg>`;}
 function laneRow(ls){return`<div class="ln">${ls.map((l,i)=>`${i?"<i></i>":""}<span class="${l.on?"on":""}">${laneSvg(l.g,l.on)}</span>`).join("")}</div>`;}
@@ -1890,7 +1893,7 @@ function updateInset(nj,d){
   const spanM=(k1-k0)*1000+(city?40:150);
   let z=Math.log2(156543.03*Math.cos(ctr[0]*Math.PI/180)*hpx*0.75/spanM);
   z=Math.max(city?15:13,Math.min(city?19:18,z));
-  $("insetAr").textContent=arrowOf(nj.text,nj.ty);
+  $("insetAr").innerHTML=arIcon(arrowOf(nj.text,nj.ty));
   $("insetTxt").textContent=(d<1?Math.round(d*100)*10+"m ":d.toFixed(1)+"km ")+(nj.name?nj.name+"：":"")+nj.text;
   const p=A.lastP||(snapF?posAt(A.dispKm??curKm):(curPos||posAt(curKm))),key=nj.km.toFixed(3)+"|"+routeKey()+"|"+ATTR.length;
   if(gmap&&window.google){
@@ -1928,6 +1931,25 @@ function arrowOf(t,ty){
   if(r>=0)return"↱";
   return"↑";
 }
+/* ---- 案内の矢印（自作のSVG、24×24の枠。色は文字の色、大きさは文字の大きさ） ----
+   線（太さ3.4）と三角の矢じり。高速の分岐・出口は「まっすぐ上ってから斜め」、曲がる所は角を丸めた直角 */
+const AR_SHAPE={
+  "↑":["M12 23V9",[12,9,0]],
+  "↗":["M8.5 23V14L14.5 8",[14.5,8,45]],
+  "↖":["M15.5 23V14L9.5 8",[9.5,8,-45]],
+  "↱":["M7 23V12.5Q7 9 10.5 9H14",[14,9,90]],
+  "↰":["M17 23V12.5Q17 9 13.5 9H10",[10,9,-90]],
+  "↶":["M8 23V10A4 4 0 0 1 16 10V13",[16,13,180]], // Uターン（右回り）
+  "↻":["M12 23V18.5M12 8.5V7",[12,7,0],'<circle cx="12" cy="13.5" r="5" fill="none" stroke="currentColor" stroke-width="3"/>']
+};
+function arHead(x,y,a,L=7,W=6.2){const r=a*Math.PI/180,dx=Math.sin(r),dy=-Math.cos(r); // 線の端から矢じりを伸ばす
+  const tx=x+dx*L,ty=y+dy*L,bx=x-dx*.6,by=y-dy*.6;
+  return`M${tx.toFixed(2)} ${ty.toFixed(2)}L${(bx-dy*W).toFixed(2)} ${(by+dx*W).toFixed(2)}L${(bx+dy*W).toFixed(2)} ${(by-dx*W).toFixed(2)}Z`;}
+const AR_SVG={};
+for(const [k,[d,h,extra]] of Object.entries(AR_SHAPE))
+  AR_SVG[k]=`<svg class="arw" viewBox="0 0 24 24" aria-hidden="true">${extra||""}<path d="${d}" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linejoin="round"/><path d="${arHead(...h)}" fill="currentColor"/></svg>`;
+AR_SVG["⚑"]='<svg class="arw" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 23V2.5" stroke="currentColor" stroke-width="2.6"/><path d="M7.5 3H20l-3.2 4.6L20 12.2H7.5z" fill="currentColor"/></svg>';
+const arIcon=ch=>AR_SVG[ch]||AR_SVG["↑"];
 function setStatus(cls,txt){$("gpsState").innerHTML=`<span class="dot ${cls}"></span>${txt}`;}
 // 目標到着：詳細画面と経路確認の画面の2か所で入れられる（同じ値）
 function setTarget(v){$("target").value=v;$("pvTarget").value=v;try{localStorage.setItem("ecoTarget",v);}catch(e){}if(MODE==="preview")showPreview();render(curKm);}
