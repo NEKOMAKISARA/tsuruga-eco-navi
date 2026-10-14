@@ -342,7 +342,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="pv-head"><b id="pvName"></b><small id="pvAddr"></small></div>
   <div class="pv-sum" id="pvSum"></div>
   <label class="pv-target">目標到着<input type="time" id="pvTarget"><button type="button" id="pvTargetClear">なし</button></label>
-  <div class="pv-btns"><button id="pvCancel">やめる</button><button class="go" id="pvGo" disabled>出発</button></div>
+  <div class="pv-btns"><button id="pvCancel">やめる</button><button id="pvPark">🅿 駐車場</button><button class="go" id="pvGo" disabled>出発</button></div>
 </div>
 <div class="hsign" id="hSign" hidden></div>
 <div class="nav-stack" id="navStack">
@@ -1212,7 +1212,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 11:50";
+const BUILD="2026-10-14 11:10";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1750,8 +1750,48 @@ function decodeShape(s){let i=0,la=0,lo=0;const out=[];
 const cleanIns=t=>(t||"").replace(/\/[A-Za-z][A-Za-z0-9 .\-']*/g,"").replace(/[(（][A-Za-z][A-Za-z0-9 .\-']*[)）]/g,"").replace(/です。?$/,"").replace(/です。/g,"、").replace(/^[、 ]+|[、 ]+$/g,"");
 // 検索：施設名はOpenStreetMap（Nominatim）、住所・地名は国土地理院。どちらも無料・キー不要
 let searchSeq=0;
+/* ---- 駐車場：OpenStreetMapの amenity=parking を、指定した場所の周りから探す（私有地は除く） ---- */
+const PARK_RE=/駐車場|コインパーキング|パーキング(?!エリア)/;
+async function findParking(c,radius){
+  const q=`[out:json][timeout:40];nwr(around:${radius},${c[0].toFixed(5)},${c[1].toFixed(5)})["amenity"="parking"]["access"!~"private|no|customers"];out center tags;`;
+  for(const u of OVERPASS){
+    try{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),60000);
+      const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(q),signal:ctl.signal});
+      clearTimeout(tm);if(!r.ok)continue;
+      const els=(await r.json()).elements||[];
+      return els.map(e=>{const t=e.tags||{},lat=e.lat??(e.center&&e.center.lat),lon=e.lon??(e.center&&e.center.lon);if(lat==null)return null;
+        const kind=/multi-storey/.test(t.parking||"")?"立体":/underground/.test(t.parking||"")?"地下":"";
+        const fee=t.fee==="no"?"無料":t.fee==="yes"?"有料":"";
+        const info=[fee,t.capacity?`${t.capacity}台`:"",kind].filter(Boolean).join("・");
+        return{name:t.name||(t.operator?t.operator+" 駐車場":"駐車場"),addr:info,lat,lon,park:true};}).filter(Boolean);
+    }catch(e){}
+  }
+  return null;
+}
+// 駐車場の一覧を出す（近い順）
+function showParking(list,c,box){
+  list.forEach(x=>x.d=distKm(c,[x.lat,x.lon]));list.sort((a,b)=>a.d-b.d);
+  box.innerHTML='<div class="hh">駐車場</div>';
+  for(const x of list.slice(0,15)){const bt=document.createElement("button");
+    const dm=x.d<1?Math.round(x.d*1000)+" m":x.d.toFixed(1)+" km";
+    bt.innerHTML=`🅿 ${esc(x.name)}<small>${esc(x.addr)}${x.addr?" ・ ":""}${dm}</small>`;
+    bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);}
+}
+async function searchParking(q,seq,box){
+  // 「苗場 駐車場」なら苗場の周り、「駐車場」だけなら地図の中心の周り
+  const place=q.replace(PARK_RE,"").replace(/[の\s]+$/,"").trim();
+  let c=curPos||mapCenter();
+  if(place){try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=jp&accept-language=ja&limit=1&q=${encodeURIComponent(place)}`);const a=await r.json();if(a[0])c=[+a[0].lat,+a[0].lon];}catch(e){}}
+  if(seq!==searchSeq)return;
+  box.innerHTML='<div class="msg">駐車場を探しています…（混んでいると数十秒かかります）</div>';
+  const list=await findParking(c,1500);if(seq!==searchSeq)return;
+  if(list==null){box.innerHTML='<div class="msg">駐車場を探せませんでした（地図のデータのサーバーが混んでいます。少し待ってもう一度）</div>';return;}
+  if(!list.length){box.innerHTML='<div class="msg">近くに駐車場が見つかりませんでした</div>';return;}
+  showParking(list,c,box);
+}
 async function search(q){
   q=q.trim();if(!q)return;const seq=++searchSeq,box=$("results");
+  if(PARK_RE.test(q)){box.hidden=false;box.innerHTML='<div class="msg">検索中…</div>';return searchParking(q,seq,box);}
   box.hidden=false;box.innerHTML='<div class="msg">検索中…</div>';
   const c=curPos||mapCenter(),enc=encodeURIComponent(q);
   const vb=`${c[1]-1},${c[0]+1},${c[1]+1},${c[0]-1}`;
@@ -2060,6 +2100,15 @@ $("pvSum").addEventListener("click",async e=>{
   catch(e){if(seq===planSeq)showPreview("経路が見つかりませんでした");}
 });
 $("pvGo").addEventListener("click",()=>{if(hasRoute())startNav();});
+$("pvPark").addEventListener("click",async()=>{
+  if(!DEST)return;const c=[DEST.lat,DEST.lon],box=$("results"),seq=++searchSeq;
+  document.body.classList.add("srch");box.hidden=false;box.innerHTML='<div class="msg">目的地の近くの駐車場を探しています…</div>';
+  const list=await findParking(c,800);if(seq!==searchSeq)return;
+  if(list==null){box.innerHTML='<div class="msg">駐車場を探せませんでした（少し待ってもう一度）</div>';return;}
+  const own=list.filter(x=>distKm(c,[x.lat,x.lon])>0.03); // 目的地そのものは除く
+  if(!own.length){box.innerHTML='<div class="msg">目的地の近く（800m以内）に駐車場が見つかりませんでした</div>';return;}
+  showParking(own,c,box);
+});
 function clearRoute(){
   ROUTE=[];MANS=[];ATTR=[];SAS=[];DEST=null;STOP=null;OPTS=[];AVOID=[];AVOIDED=null;AVOID_OFF=false;GINFO=null;JAMRAW=[];JAMS=[];DETOUR=null;buildGeom();buildIndex();ECO.key="";ECO.state="none";ECO.z=ECO.g=null;ECO.segs=[];
   MODE="browse";applyMapMode();drawRouteLine();drawMarks();saveRoute();stopPlay();wxDrawn="";drawWx();
