@@ -215,8 +215,8 @@ body.sheet .app .jct{display:none}
 @media (orientation:landscape){.sdeck{width:min(190px,24vw)}}
 .sdeck .hsign{position:absolute;left:0;top:0;width:100%;box-sizing:border-box;transform-origin:50% 100%;transition:transform .35s ease,opacity .35s ease}
 .sdeck .hsign.front{z-index:3}
-.sdeck .hsign.back{z-index:2;transform:translateY(11px) scale(.92);filter:brightness(.8)}
-.sdeck .hsign.hide,.sdeck .hsign.new{z-index:1;transform:translateY(11px) scale(.92);opacity:0}
+.sdeck .hsign.back{z-index:2;top:auto;bottom:0;transform:scale(.92);filter:brightness(.8)} /* 前の看板の下に下端だけのぞく（背の低い看板でも） */
+.sdeck .hsign.hide,.sdeck .hsign.new{z-index:1;top:auto;bottom:0;transform:scale(.92);opacity:0}
 .sdeck .hsign.gone{z-index:4;transform:translateY(-24px);opacity:0}
 /* 看板から分岐の地点への線（ルートの線より細く） */
 .slead{position:fixed;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;overflow:visible}
@@ -1318,7 +1318,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 19:40";
+const BUILD="2026-10-14 20:00";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1844,7 +1844,7 @@ function drawDeck(items){
     if(el._h!==it.html){el._h=it.html;el.innerHTML=it.html;}
     el.className="hsign"+(it.cls?" "+it.cls:"")+(i===0?" front":i===1?" back":" hide");});
   if(!items.length){$("sLead").style.display="none";return;}
-  const f=DECK.get(items[0].key);dk.style.height=(f.offsetHeight+(items.length>1?11:0))+"px";
+  const f=DECK.get(items[0].key);dk.style.height=(f.offsetHeight+(items.length>1?12:0))+"px";
   // かぶりを調べるのは0.1秒ごと（毎フレームは重い）。看板が替わった時はすぐ
   const sig=items.map(it=>it.key).join(),t=performance.now();
   if(sig!==deckSig||t-deckT>100){deckSig=sig;deckT=t;placeDeck();}
