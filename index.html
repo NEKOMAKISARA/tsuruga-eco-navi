@@ -1,4 +1,4 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="エコナビ"><meta name="theme-color" content="#0d141c"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-180.png"></head><body><title>エコ巡航ナビ</title>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache"><meta http-equiv="Pragma" content="no-cache"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="エコナビ"><meta name="theme-color" content="#0d141c"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-180.png"></head><body><title>エコ巡航ナビ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Chakra+Petch:wght@500;700&display=swap">
 <!-- Leaflet 1.9.4（オフラインでも動くよう埋め込み） -->
@@ -173,6 +173,7 @@ body.sheet .app .jct{display:none}
 .area-pop.on{transform:none}
 .area-pop small{display:block;font-size:12px;color:#5f6368;font-weight:400}
 .area-pop b{display:block;font-size:20px;line-height:1.25}
+.upd-now{display:block;margin:6px auto 0;padding:6px 14px;font-size:13px;border-radius:16px}
 .upd-bar{position:fixed;z-index:30;left:50%;transform:translateX(-50%);top:calc(max(8px,env(safe-area-inset-top)) + 4px);background:#1a73e8;color:#fff;border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;width:auto;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 .build{color:var(--muted);font-size:12px}
 .pv-avoid{background:#e6f4ea;color:#137333;border:1px solid #34a853;border-radius:10px;padding:8px 10px;font-size:14px;font-weight:700;line-height:1.5;margin-top:6px}
@@ -492,7 +493,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   <div class="info">
     <span id="gpsState"><span class="dot demo"></span>GPS待ち</span>
     <small id="gpsAge"></small>
-    <small id="buildTag"></small>
+    <small id="buildTag"></small><button type="button" id="updNow" class="upd-now">最新版に更新</button>
   </div>
   <!-- 案内画面が値を読む部品（詳細画面には出さない） -->
   <div class="legacy" hidden>
@@ -1331,10 +1332,16 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 18:40";
-async function checkUpdate(){
+const BUILD="2026-10-14 18:45";
+// 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
+function hardReload(){location.replace(location.pathname+"?v="+Date.now());}
+async function checkUpdate(auto){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
-    if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
+    if(!m||m[1]===BUILD)return;
+    let tried=null;try{tried=JSON.parse(sessionStorage.getItem("updTry")||"null");}catch(e){}
+    const again=tried&&tried.b===m[1]&&Date.now()-tried.t<120000; // 読み込み直しても古いまま（配信の反映待ち）なら繰り返さない
+    if(auto&&MODE!=="nav"&&!again){try{sessionStorage.setItem("updTry",JSON.stringify({b:m[1],t:Date.now()}));}catch(e){}hardReload();return;}
+    const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}catch(e){}
 }
 const GPSI={prev:null,iv:null,v:null,age:0,fps:null,fc:0,ft:0,err:""};
 const A={fixT:0,fixKm:0,fixPos:null,spd:0,dispKm:null,dispPos:null,lastT:0,lastDraw:0,lastIcon:0,movePos:null,moveHd:null,pinchT:0};
@@ -2063,7 +2070,7 @@ $("pvTargetClear").addEventListener("click",()=>setTarget(""));
 
 let wake=null;
 async function keepAwake(){try{if("wakeLock" in navigator&&document.visibilityState==="visible")wake=await navigator.wakeLock.request("screen");}catch(e){}}
-document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){A.resumeT=performance.now();checkUpdate();gpsRestartT=0;restartGps("resume");startLoop();if(wake!==null)keepAwake();}});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){A.resumeT=performance.now();checkUpdate(true);gpsRestartT=0;restartGps("resume");startLoop();if(wake!==null)keepAwake();}});
 
 /* ===================== 目的地・経路検索 ===================== */
 function decodeShape(s){let i=0,la=0,lo=0;const out=[];
@@ -3158,7 +3165,7 @@ if(MODE==="nav")render(0);
 if(hasRoute()&&ATTR.some(s=>s.lim)&&!MANS.some(m=>m[8]))loadLanes();
 if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
-$("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",()=>{location.replace(location.pathname+"?v="+Date.now());});setTimeout(checkUpdate,3000);
+$("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",hardReload);$("updNow").addEventListener("click",hardReload);setTimeout(()=>checkUpdate(true),1500);
 // 開きっぱなしの間も15分ごとに確かめる（開いた時・戻った時だけだと、使っている間の更新に気づかない）
 setInterval(()=>{if(!document.hidden)checkUpdate();},15*60e3);
 </script>
