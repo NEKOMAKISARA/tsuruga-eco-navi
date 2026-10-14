@@ -156,6 +156,8 @@ body.sheet .app .jct{display:none}
 .fuel-ask button.x{background:#f1f3f4;color:#202124}
 .upd-bar{position:fixed;z-index:30;left:50%;transform:translateX(-50%);top:calc(max(8px,env(safe-area-inset-top)) + 4px);background:#1a73e8;color:#fff;border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;width:auto;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 .build{color:var(--muted);font-size:12px}
+.pv-close{background:#fce8e6;color:#a50e0e;border:1px solid #d93025;border-radius:10px;padding:8px 10px;font-size:14px;font-weight:700;line-height:1.5;margin-top:6px}
+.pv-close small{font-weight:400;color:#5f6368}
 .nav-toast{background:#fff;color:#202124;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .nav-toast button{width:auto;padding:6px 14px;background:#1a73e8;color:#fff;border:0;border-radius:18px;font-size:14px}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
@@ -1205,7 +1207,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 11:00";
+const BUILD="2026-10-14 11:20";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1450,6 +1452,8 @@ function phraseOf(g){const dw=/^(左|右)方向/.test(g.text)?"":dirWord(g);retu
 function remind(msg,say){NOTE={t:Date.now()+5000,msg};if(say&&SET.voice)speak(say);} // 画面の一言は10秒
 function remindTick(km){
   if(MODE!=="nav"||!hasRoute())return;
+  for(const c of CLOSE){const d=c.a-km;if(d>0&&d<=5){const key="close@"+c.a.toFixed(2);if(!spoken.has(key)){spoken.add(key);
+    remind(`⚠ ${fmtKm(d)}先 ${c.name} 冬期閉鎖（${c.txt}）`,`${fmtSay(d)}、${c.name}は、冬期閉鎖の区間です。通れない場合は再検索してください`);}}}
   const nextAfter=k=>GUIDE.find(j=>j.km>k+0.02&&!j.stop);
   for(const t of TOLLS){
     const d=t-km;
@@ -1981,12 +1985,12 @@ async function takeDetour(){
 function setRoute(t,keepSA){
   if(MODE==="nav"&&hasRoute())TRIPBASE+=Math.max(0,curKm); // 案内中の引き直し：ここまで走った分を足しておき、旅全体の進み具合を出す
   if(typeof LASTCHK!=="undefined")LASTCHK=null; // 迂回の比べた結果は前のルートのものなので捨てる
-  ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};TOLLS=[];if(!keepSA)SAS=[];
+  ROUTE=t.route;MANS=t.mans;RT={time:t.time,len:t.len,toll:t.toll};TOLLS=[];CLOSE=[];if(!keepSA)SAS=[];
   buildGeom();
   ATTR=t.ms.map(m=>({a:RCUM[m.b]||0,b:RCUM[m.e]??TOTAL,hw:m.hw,lim:null,v:m.v})).filter(s=>s.b>s.a);
   buildIndex();spoken.clear();DEC.said.clear();hist=[];arrived=false;A.dispKm=null;
   drawRouteLine();drawMarks();saveRoute();scheduleElev();wxDrawn="";drawWx();
-  loadAttr().then(()=>{loadJct();if(!SAS.length)loadSA();});
+  loadAttr().then(()=>{loadJct();loadClosures();if(!SAS.length)loadSA();});
 }
 let planSeq=0;
 async function planRoute(){
@@ -2026,6 +2030,7 @@ function showPreview(msg){
       return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
   }
   if(gErr)h+=`<small class="pv-note">料金・渋滞：${esc(gErr)}</small>`;
+  if(CLOSE.length)h+=`<div class="pv-close">⚠ 冬期閉鎖の道を通ります`+CLOSE.map(c=>`<br><b>${esc(c.name)}</b>（${esc(c.txt)}）・${fmtKm(c.a)}先`).join("")+`<br><small>別の経路を選ぶか、道路情報で確認してください</small></div>`;
   ensureWX();
   {const it=SAKM.map(x=>({n:saShort(x.name),km:x.km})).concat([{n:"目的地",km:TOTAL,dst:true}]).map(x=>({...x,w:wxAt(x.km,etaAt(x.km))})).filter(x=>x.w);
     if(it.length)h+=`<div class="pv-wx">`+it.map(x=>`<span class="${x.dst?"dst":wxWet(x.w)?"wet":""}"><small>${esc(x.n)}</small><b>${hm(new Date(etaAt(x.km)))}</b>${wxTxt(x.w,x.dst)}</span>`).join("")+`</div>`;}
@@ -2131,6 +2136,59 @@ async function loadJct(){
     }catch(e){}
   }
 }
+/* ---- 冬期閉鎖の道：OpenStreetMapで「◯月〜◯月は通行止め」の印が付いた道がルートに入っていないか調べる ----
+   motor_vehicle:conditional=no @ (Dec 1-Apr 25) などと、seasonal=summer（夏だけ通れる）を見る。データのある所だけ */
+let CLOSE=[]; // {a,b,name,txt,now}
+const MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+// 「Dec 1-Apr 25」「Nov-Apr」「12/1-4/25」などの期間を読み、[{m1,d1,m2,d2}]にする（読めなければ空）
+function parsePeriods(t){
+  const out=[];t=String(t||"");
+  const re=/([A-Za-z]{3})[a-z]*\.?\s*(\d{1,2})?\s*[-–〜~]\s*([A-Za-z]{3})[a-z]*\.?\s*(\d{1,2})?/g;let m;
+  while((m=re.exec(t))){const a=MON[m[1].toLowerCase()],b=MON[m[3].toLowerCase()];if(a&&b)out.push({m1:a,d1:+(m[2]||1),m2:b,d2:+(m[4]||31)});}
+  const re2=/(\d{1,2})\/(\d{1,2})\s*[-–〜~]\s*(\d{1,2})\/(\d{1,2})/g;
+  while((m=re2.exec(t)))out.push({m1:+m[1],d1:+m[2],m2:+m[3],d2:+m[4]});
+  return out;
+}
+function inPeriod(pr,d){const v=(d.getMonth()+1)*100+d.getDate(),a=pr.m1*100+pr.d1,b=pr.m2*100+pr.d2;return a<=b?(v>=a&&v<=b):(v>=a||v<=b);}
+const fmtPr=pr=>`${pr.m1}/${pr.d1}〜${pr.m2}/${pr.d2===31?"末":pr.d2}`;
+async function loadClosures(){
+  const key=routeKey();if(!key)return;
+  // 一般道の部分を250mごとに（高速は冬期閉鎖にならないので見ない）
+  const pts=[];for(let k=0;k<=TOTAL;k+=0.25)if(!attrAt(k).hw)pts.push(posAt(k));
+  if(pts.length<2)return;
+  const P=pts.slice(0,1500).map(p=>p[0].toFixed(5)+","+p[1].toFixed(5)).join(",");
+  const q=`[out:json][timeout:60];(way(around:40,${P})["highway"][~"^(access|vehicle|motor_vehicle|motorcar):conditional$"~"no"];way(around:40,${P})["highway"]["seasonal"];way(around:40,${P})["highway"][~"^(note|description)$"~"冬期"];);out tags geom;`;
+  for(const u of OVERPASS){
+    try{
+      const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),90000);
+      const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(q),signal:ctl.signal});
+      clearTimeout(tm);if(!r.ok)continue;
+      const els=(await r.json()).elements||[];if(key!==routeKey())return;
+      const today=new Date(),found=[];
+      for(const e of els){
+        const g=e.geometry||[],t=e.tags||{};if(g.length<2)continue;
+        // ルートの上を通っている（道の点の半分以上がルートから25m以内）ものだけ
+        const pr=g.map(x=>project(x.lat,x.lon)),on=pr.filter(x=>x.d<0.025);if(on.length<Math.max(2,g.length*0.5))continue;
+        const a=Math.min(...on.map(x=>x.km)),b=Math.max(...on.map(x=>x.km));
+        const cond=Object.keys(t).filter(k=>/:conditional$/.test(k)).map(k=>t[k]).filter(v=>/\bno\b/.test(v)).join(";");
+        let per=parsePeriods(cond);
+        if(!per.length&&t.seasonal&&/summer/.test(t.seasonal))per=[{m1:11,d1:1,m2:4,d2:30}]; // 夏だけ通れる道は、冬（11〜4月）は閉鎖とみなす
+        const memo=t.note||t.description||"";if(!per.length)per=parsePeriods(memo);
+        const now=per.length?per.some(x=>inPeriod(x,today)):null; // null＝期間が読めない
+        const soonD=new Date(today.getTime()+14*864e5),soon=now===false&&per.some(x=>inPeriod(x,soonD)); // 2週間以内に閉鎖が始まる
+        if(now===false&&!soon)continue; // 今は閉鎖期間ではない
+        const name=t.name||(t.ref?"国道・県道 "+t.ref:"")||"名前のない道";
+        found.push({a,b,name,txt:(per.length?per.map(fmtPr).join("・"):(memo||"期間不明"))+(soon?"・まもなく閉鎖":""),now});
+      }
+      // 同じ道で近いものはまとめる
+      found.sort((x,y)=>x.a-y.a);
+      const out=[];for(const f of found){const p=out[out.length-1];if(p&&p.name===f.name&&f.a-p.b<1){p.b=Math.max(p.b,f.b);}else out.push(f);}
+      if(key!==routeKey())return;CLOSE=out;saveRoute();
+      if(MODE==="preview")showPreview();render(curKm);
+      return;
+    }catch(e){}
+  }
+}
 async function loadSA(retry){
   const key=routeKey();if(!key)return;
   const pts=[];for(let k=0;k<=TOTAL;k+=1)if(attrAt(k).hw)pts.push(posAt(k));
@@ -2176,12 +2234,12 @@ async function loadSA(retry){
 /* ---- ルートの保存：ページを開き直しても、案内中ならそのまま続ける ---- */
 function saveRoute(){
   try{if(!DEST){localStorage.removeItem("navRoute");return;}
-    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,tripBase:TRIPBASE,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT,tolls:TOLLS}));}catch(e){}
+    localStorage.setItem("navRoute",JSON.stringify({t:Date.now(),mode:MODE,dest:DEST,stop:STOP,tripBase:TRIPBASE,ginfo:GINFO,jamraw:JAMRAW,route:ROUTE,mans:MANS,attr:ATTR,sas:SAS,rt:RT,tolls:TOLLS,close:CLOSE}));}catch(e){}
 }
 function restoreRoute(){
   try{const v=JSON.parse(localStorage.getItem("navRoute")||"null");if(!v||!v.dest||Date.now()-v.t>12*3600e3)return;
     DEST=v.dest;STOP=v.stop||null;TRIPBASE=v.tripBase||0;GINFO=v.ginfo||null;JAMRAW=v.jamraw||[];
-    if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];TOLLS=v.tolls||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
+    if(v.route&&v.route.length>1){ROUTE=v.route;MANS=v.mans||[];ATTR=v.attr||[];TOLLS=v.tolls||[];CLOSE=v.close||[];SAS=v.sas||[];RT=v.rt||RT;buildGeom();buildIndex();scheduleElev();}
     MODE=v.mode==="nav"&&hasRoute()?"nav":"preview";
   }catch(e){}
 }
@@ -2426,7 +2484,7 @@ restoreRoute();
 applyMapMode();syncMap();startGps();
 if(MODE==="preview"&&DEST){showPreview();setTimeout(()=>slideTo([DEST.lat,DEST.lon],16),500);}
 if(MODE==="nav")render(0);
-if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct();if(!SAS.length)loadSA();});
+if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct();loadClosures();if(!SAS.length)loadSA();});
 
 $("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",()=>{location.replace(location.pathname+"?v="+Date.now());});setTimeout(checkUpdate,3000);
 </script>
