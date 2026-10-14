@@ -156,6 +156,8 @@ body.sheet .app .jct{display:none}
 .fuel-ask button.x{background:#f1f3f4;color:#202124}
 .upd-bar{position:fixed;z-index:30;left:50%;transform:translateX(-50%);top:calc(max(8px,env(safe-area-inset-top)) + 4px);background:#1a73e8;color:#fff;border:0;border-radius:20px;padding:8px 16px;font-size:14px;font-weight:700;width:auto;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 .build{color:var(--muted);font-size:12px}
+.pv-avoid{background:#e6f4ea;color:#137333;border:1px solid #34a853;border-radius:10px;padding:8px 10px;font-size:14px;font-weight:700;line-height:1.5;margin-top:6px}
+.pv-avoid button{display:block;margin-top:6px;width:auto;padding:6px 12px;border-radius:16px;border:1px solid #137333;background:#fff;color:#137333;font-size:13px}
 .pv-close{background:#fce8e6;color:#a50e0e;border:1px solid #d93025;border-radius:10px;padding:8px 10px;font-size:14px;font-weight:700;line-height:1.5;margin-top:6px}
 .pv-close small{font-weight:400;color:#5f6368}
 .nav-toast{background:#fff;color:#202124;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3)}
@@ -1207,7 +1209,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 11:20";
+const BUILD="2026-10-14 11:35";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1798,7 +1800,7 @@ function pickPoint(lat,lon){
 }
 function chooseDest(d){
   if(MODE==="nav")return;
-  DEST={name:d.name,addr:d.addr||"",lat:d.lat,lon:d.lon};STOP=null;
+  DEST={name:d.name,addr:d.addr||"",lat:d.lat,lon:d.lon};STOP=null;AVOID=[];AVOIDED=null;AVOID_OFF=false;
   setTarget("");MODE="preview";applyMapMode();drawMarks();
   slideTo([DEST.lat,DEST.lon],d.fromMap?null:16); // 検索結果は拡大して、長押しは今の拡大率のまま
   planRoute();
@@ -1861,6 +1863,7 @@ async function fetchTrips(from,heading,opt={}){
     const q={locations:[start,...(opt.vias||[]),...st,{lat:DEST.lat,lon:DEST.lon,type:"break"}],costing:"auto",
       costing_options:{auto:SET.pref==="notoll"?{use_tolls:0}:{use_highways:1}},directions_options:{language:"ja-JP",units:"km"}};
     if(opt.alt&&!STOP&&!(opt.vias||[]).length)q.alternates=opt.alt;
+    if(AVOID.length&&!opt.noAvoid)q.exclude_locations=AVOID.slice(0,50); // 冬期閉鎖の道を避ける
     const r=await fetch(VAL+"/route?json="+encodeURIComponent(JSON.stringify(q)));
     if(!r.ok){let m="";try{m=(await r.json()).error||"";}catch(e){}throw new Error(m||r.status);}
     usageBump("route");const d=await r.json();
@@ -2030,11 +2033,13 @@ function showPreview(msg){
       return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
   }
   if(gErr)h+=`<small class="pv-note">料金・渋滞：${esc(gErr)}</small>`;
+  if(AVOIDED)h+=`<div class="pv-avoid">✓ 冬期閉鎖の道（${esc(AVOIDED.names.join("・"))}）を避けた経路にしました（${(m=>m>=1?"+"+Math.round(m)+"分":m<=-1?Math.round(m)+"分":"時間はほぼ同じ")(driveMin(0,TOTAL)-AVOIDED.min)}・${(TOTAL-AVOIDED.km>=0?"+":"")+(TOTAL-AVOIDED.km).toFixed(Math.abs(TOTAL-AVOIDED.km)<10?1:0)}km）<button type="button" id="undoAvoid">元の経路に戻す</button></div>`;
   if(CLOSE.length)h+=`<div class="pv-close">⚠ 冬期閉鎖の道を通ります`+CLOSE.map(c=>`<br><b>${esc(c.name)}</b>（${esc(c.txt)}）・${fmtKm(c.a)}先`).join("")+`<br><small>別の経路を選ぶか、道路情報で確認してください</small></div>`;
   ensureWX();
   {const it=SAKM.map(x=>({n:saShort(x.name),km:x.km})).concat([{n:"目的地",km:TOTAL,dst:true}]).map(x=>({...x,w:wxAt(x.km,etaAt(x.km))})).filter(x=>x.w);
     if(it.length)h+=`<div class="pv-wx">`+it.map(x=>`<span class="${x.dst?"dst":wxWet(x.w)?"wet":""}"><small>${esc(x.n)}</small><b>${hm(new Date(etaAt(x.km)))}</b>${wxTxt(x.w,x.dst)}</span>`).join("")+`</div>`;}
   $("pvSum").innerHTML=h;
+  {const u=$("undoAvoid");if(u)u.onclick=e=>{e.stopPropagation();undoAvoid();};}
   $("pvGo").disabled=false;
 }
 $("pvCancel").addEventListener("click",()=>{planSeq++;clearRoute();});
@@ -2047,7 +2052,7 @@ $("pvSum").addEventListener("click",async e=>{
 });
 $("pvGo").addEventListener("click",()=>{if(hasRoute())startNav();});
 function clearRoute(){
-  ROUTE=[];MANS=[];ATTR=[];SAS=[];DEST=null;STOP=null;OPTS=[];GINFO=null;JAMRAW=[];JAMS=[];DETOUR=null;buildGeom();buildIndex();ECO.key="";ECO.state="none";ECO.z=ECO.g=null;ECO.segs=[];
+  ROUTE=[];MANS=[];ATTR=[];SAS=[];DEST=null;STOP=null;OPTS=[];AVOID=[];AVOIDED=null;AVOID_OFF=false;GINFO=null;JAMRAW=[];JAMS=[];DETOUR=null;buildGeom();buildIndex();ECO.key="";ECO.state="none";ECO.z=ECO.g=null;ECO.segs=[];
   MODE="browse";applyMapMode();drawRouteLine();drawMarks();saveRoute();stopPlay();wxDrawn="";drawWx();
   try{wake&&wake.release();}catch(e){}wake=null;
   document.body.classList.remove("sheet");
@@ -2139,6 +2144,31 @@ async function loadJct(){
 /* ---- 冬期閉鎖の道：OpenStreetMapで「◯月〜◯月は通行止め」の印が付いた道がルートに入っていないか調べる ----
    motor_vehicle:conditional=no @ (Dec 1-Apr 25) などと、seasonal=summer（夏だけ通れる）を見る。データのある所だけ */
 let CLOSE=[]; // {a,b,name,txt,now}
+let AVOID=[],AVOIDED=null; // 経路検索で避ける点（閉鎖中の道の上）、避けた経路にした時の元の経路
+// 閉鎖中の道の上に300mごとに点を置く（経路検索はその点に一番近い道を通らない）
+function closurePts(cs){const out=[];for(const c of cs){const L=c.b-c.a;for(let k=c.a+Math.min(0.1,L/2);k<=c.b-0.05||out.length===0;k+=0.3){const p=posAt(k);out.push({lat:+p[0].toFixed(6),lon:+p[1].toFixed(6)});if(L<0.2)break;}}return out;}
+// 経路の確認画面で、今閉鎖中の道を通るなら、避けた経路に自動で変える（Valhallaだけ使う。Googleには聞かない）
+async function avoidClosures(){
+  if(MODE!=="preview"||!hasRoute())return;
+  const shut=CLOSE.filter(c=>c.now===true);if(!shut.length)return;
+  const pts=closurePts(shut).filter(p=>!AVOID.some(q=>Math.abs(q.lat-p.lat)<1e-5&&Math.abs(q.lon-p.lon)<1e-5));if(!pts.length)return;
+  if(AVOID.length>=50)return;
+  const before={trip:OPTS[OPT_I]&&OPTS[OPT_I].trip,min:driveMin(0,TOTAL),km:TOTAL,names:shut.map(c=>c.name)};
+  AVOID=AVOID.concat(pts).slice(0,50);
+  showPreview("冬期閉鎖の道を避けた経路を探しています…");
+  try{
+    const t=await fetchTrip(ROUTE[0],null,{});
+    if(MODE!=="preview")return;
+    if(!AVOIDED)AVOIDED=before; // 一番最初の経路を覚えておく（元に戻す用）
+    const op={src:"v",trip:t,dist:t.len,durMin:t.time/60};OPTS[OPT_I]=op;setRoute(t);applyG(op);curKm=0;showPreview();
+  }catch(e){AVOID=AVOID.slice(0,AVOID.length-pts.length);showPreview();}
+}
+function undoAvoid(){
+  if(!AVOIDED||!AVOIDED.trip)return;
+  const t=AVOIDED.trip,op={src:"v",trip:t,dist:t.len,durMin:t.time/60};
+  AVOID=[];AVOIDED=null;AVOID_OFF=true;OPTS[OPT_I]=op;setRoute(t);applyG(op);curKm=0;showPreview();
+}
+let AVOID_OFF=false; // 「元の経路に戻す」を押した：この目的地では自動で避けない
 const MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
 // 「Dec 1-Apr 25」「Nov-Apr」「12/1-4/25」などの期間を読み、[{m1,d1,m2,d2}]にする（読めなければ空）
 function parsePeriods(t){
@@ -2184,6 +2214,7 @@ async function loadClosures(){
       found.sort((x,y)=>x.a-y.a);
       const out=[];for(const f of found){const p=out[out.length-1];if(p&&p.name===f.name&&f.a-p.b<1){p.b=Math.max(p.b,f.b);}else out.push(f);}
       if(key!==routeKey())return;CLOSE=out;saveRoute();
+      if(!AVOID_OFF)avoidClosures();
       if(MODE==="preview")showPreview();render(curKm);
       return;
     }catch(e){}
