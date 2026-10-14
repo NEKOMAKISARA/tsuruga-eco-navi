@@ -1241,7 +1241,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 12:40";
+const BUILD="2026-10-14 12:55";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1716,7 +1716,8 @@ function showSignPins(list){
   SGN.onMap=true;return true;
 }
 // 毎フレーム：枠ごと回している地図では、看板を進む向きぶん回し戻す
-function signPinRot(hd){if(!SGN.onMap)return;const a=(gmap&&vectorMode)?0:hd;for(const q of SGP)if(q.on){const r=q.el.firstChild;r.style.transform=(a?`rotate(${a}deg)`:"")+(q.el.classList.contains("far")?" scale(.82)":"");fitPin(q);}}
+function signPinRot(hd){if(!SGN.onMap)return;const a=(gmap&&vectorMode)?0:hd;for(const q of SGP)if(q.on){const r=q.el.firstChild;r.style.transform=(a?`rotate(${a}deg) `:"")+`scale(${(q.el.classList.contains("far")?0.82:1)*PIN_S})`;fitPin(q);}}
+const PIN_S=0.8; // 地図に貼る看板の大きさ（支柱ごと縮める）
 // 画面の端からはみ出す分だけ看板を細くする（地図が斜めの時は見た目の大きさで測る。毎フレーム少しずつ）
 function fitPin(q){
   const sg=q.el.querySelector(".hsign"),rc=sg.getBoundingClientRect();if(!rc.width||!sg.offsetWidth)return;
@@ -1737,13 +1738,13 @@ function screenOf(q){
 function unstackPins(list){
   const last={r:null,l:null};
   list.forEach((it,i)=>{const q=SGP[i];if(!q||!q.on)return;
-    const sg=q.el.querySelector(".hsign"),h=sg.offsetHeight*(it.far?0.82:1),y=screenOf(posAt(it.nj.km))[1];
+    const sg=q.el.querySelector(".hsign"),h=sg.offsetHeight*(it.far?0.82:1)*PIN_S,y=screenOf(posAt(it.nj.km))[1];
     let dy=0;const L=last[it.side];
     if(L){const need=L.y-L.h/2-6-h/2;if(y>need)dy=y-need;}
     last[it.side]={y:y-dy,h};
     const len=Math.hypot(26,dy),ang=Math.atan2(-dy,26)*180/Math.PI;
     const pole=q.el.querySelector(".pole");pole.style.width=len+"px";pole.style.transform=`rotate(${it.side==="r"?ang:180-ang}deg)`;
-    sg.style.marginTop=(-dy)+"px";sg.style[it.side==="r"?"left":"right"]=(24+0)+"px";
+    sg.style.marginTop=(-dy)+"px";sg.style[it.side==="r"?"left":"right"]="24px";sg.style[it.side==="r"?"right":"left"]="";
 
   });
 }
