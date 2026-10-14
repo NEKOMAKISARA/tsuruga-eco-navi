@@ -1324,7 +1324,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 14:40";
+const BUILD="2026-10-14 15:05";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -2102,9 +2102,12 @@ async function getOrigin(){
    出口（一般道へ降りる）：名前「本庄児玉IC」＋「出口 本庄・児玉方面（8-1）」
    分岐（別の高速へ）　　：名前「鶴ヶ島JCT」＋「圏央道 八王子方面」
    標識の情報がない時は、経路検索の文言のまま */
+// 方面名のローマ字（Chigasaki など）：日本語の方面名がある時は外す。E1 など数字入りの路線番号は残す
+const isRoman=t=>/^[A-Za-z][A-Za-z\s.'’\-]*$/.test(t);
+const noRoman=a=>a.some(t=>!isRoman(t))?a.filter(t=>!isRoman(t)):a;
 function signText(m,all,i){
   const sg=m.sign;if(!sg||![17,18,19,20,21,22,23,24].includes(m.type))return null;
-  const el=k=>[...new Set((sg[k]||[]).map(e=>cleanIns(e.text||"")).filter(Boolean))];
+  const el=k=>noRoman([...new Set((sg[k]||[]).map(e=>cleanIns(e.text||"")).filter(Boolean))]);
   const names=el("exit_name_elements"),nums=el("exit_number_elements"),br=el("exit_branch_elements"),tw=el("exit_toward_elements");
   if(!names.length&&!br.length&&!tw.length)return null;
   // この先が高速なら分岐（JCT）、一般道なら出口（IC）。ランプ・分かれ道は飛ばして、その先の道で決める
@@ -2482,7 +2485,7 @@ function roadLab(t,awayFwd){
   const nm=t.name||"",mk=nm.match(/^(国道|都道|府道|県道|道道)\s*(\d+)\s*号?/),ref=(t.ref||"").split(";")[0].trim();
   const num=mk?mk[2]:/^\d{1,4}$/.test(ref)?ref:"";
   if(num)o.sh=[num,(mk&&mk[1]==="国道")||(!mk&&t.highway==="trunk")?"k":"t"];
-  if(dst){o.t=dst.split(";").map(x=>x.trim()).filter(Boolean).slice(0,2);o.big=true;}
+  if(dst){o.t=noRoman(dst.split(";").map(x=>x.trim()).filter(Boolean)).slice(0,2);o.big=true;}
   else if(nm&&!mk)o.t=[nm];
   return o.sh||o.t.length?o:null;}
 async function loadLanes(){
