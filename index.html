@@ -256,8 +256,9 @@ body.sheet .app .jct{display:none}
 .hsign .ln span.on{background:#ff8c1a}
 .hsign .ln span svg{width:100%;max-width:26px;height:auto}
 .hsign .ln i{width:0;border-left:2px dashed rgba(255,255,255,.7);margin:2px 1px}
-.inset{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 3px 12px rgba(0,0,0,.35);width:min(220px,56vw)}
-.inset-map{position:relative;height:140px;overflow:hidden}
+.inset{background:#fff;border-radius:16px;overflow:hidden;border:4px solid #fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.6),0 8px 22px rgba(0,0,0,.55);width:min(270px,66vw)}
+.inset-map{position:relative;height:200px;overflow:hidden;border-radius:12px}
+@media (orientation:portrait){body.hsg .inset{width:min(270px,calc(100vw - min(144px,36vw) - 30px))}} /* 右の看板と重ならない幅 */
 #insetRot{position:absolute;left:50%;top:60%;width:560px;height:560px;transform:translate(-50%,-50%) rotate(var(--irot,0deg))}
 #insetG,#insetL{width:100%;height:100%}
 .inset-cap{display:flex;gap:8px;align-items:center;padding:6px 10px;color:#202124;font-size:13px;font-weight:700;line-height:1.3}
@@ -327,7 +328,7 @@ body.sheet .app .jct{display:none}
 @media (orientation:landscape){
   .nav-eco{left:auto;right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom))}
   #mapNote{bottom:auto;top:8px}
-  .inset{width:min(260px,100%)}.inset-map{height:120px}.sapa{width:100%}
+  .inset{width:min(300px,100%)}.inset-map{height:150px}.sapa{width:100%}
 
 }
 /* ===== 目的地を決める画面：検索欄・候補・経路の確認 ===== */
@@ -1332,7 +1333,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 18:45";
+const BUILD="2026-10-14 19:15";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2257,7 +2258,7 @@ async function fetchTrips(from,heading,opt={}){
     // 立ち寄り先（SA・PA）は本線ではなく中の道に合わせる（本線に合わせると素通りするため）
     const st=STOP?[{lat:STOP.lat,lon:STOP.lon,type:"break",...(filt?{search_filter:{max_road_class:"unclassified"}}:{})}]:[];
     const q={locations:[start,...(opt.vias||[]),...st,{lat:DEST.lat,lon:DEST.lon,type:"break"}],costing:"auto",
-      costing_options:{auto:SET.pref==="notoll"?{use_tolls:0}:{use_highways:1}},directions_options:{language:"ja-JP",units:"km"}};
+      costing_options:{auto:Object.assign({use_living_streets:0,use_tracks:0,service_penalty:60,maneuver_penalty:12,exclude_unpaved:true},SET.pref==="notoll"?{use_tolls:0}:{use_highways:1})},directions_options:{language:"ja-JP",units:"km"}};
     if(opt.alt&&!STOP&&!(opt.vias||[]).length)q.alternates=opt.alt;
     if(AVOID.length&&!opt.noAvoid)q.exclude_locations=AVOID.slice(0,50); // 冬期閉鎖の道を避ける
     const r=await fetch(VAL+"/route?json="+encodeURIComponent(JSON.stringify(q)));
