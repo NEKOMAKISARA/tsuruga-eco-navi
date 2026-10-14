@@ -181,14 +181,17 @@ body.sheet .app .jct{display:none}
 .pv-close small{font-weight:400;color:#5f6368}
 .nav-toast{background:#fff;color:#202124;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;box-shadow:0 2px 10px rgba(0,0,0,.3)}
 .nav-toast button{width:auto;padding:6px 14px;background:#1a73e8;color:#fff;border:0;border-radius:18px;font-size:14px}
+.nav-eco{transition:transform .35s ease;}
+.nav-eco.away{transform:translateY(calc(100% + 120px))}
 .nav-eco{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px);display:flex;gap:8px;align-items:flex-end}
 /* 指定速度：標識と見間違えないよう、丸や赤は使わず青いカードに */
-.road{align-self:flex-end;background:#fff;color:#3c4043;border-radius:10px;padding:6px 10px;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:nowrap}
+.road{align-self:flex-end;background:#fff;color:#3c4043;border-radius:10px;padding:5px 10px;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:nowrap}
 .road.hw{background:#0f7d45;color:#fff}
 .road.dr{background:#f29900;color:#fff} /* GPSが途切れて推定位置で案内している間 */
-.setv{background:#1a73e8;color:#fff;border-radius:12px;padding:4px 12px 6px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);min-width:70px}
-.setv b{display:block;font-family:var(--num);font-size:30px;line-height:1.1}
-.setv small{display:block;font-size:11px;opacity:.9}
+/* 指定速度・自車速度は1行の薄い箱（数字＋km/h） */
+.setv{background:#1a73e8;color:#fff;border-radius:10px;padding:3px 10px;display:flex;align-items:baseline;gap:3px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.setv b{font-family:var(--num);font-size:24px;line-height:1.15}
+.setv small{font-size:11px;opacity:.9}
 /* 曲がる所・IC・JCTの拡大ポップアップ */
 /* 高速の案内標識風の看板（出口・JCTの2km手前から） */
 .hsign{position:fixed;z-index:6;background:#0b7a3e;border-radius:10px;padding:5px;box-shadow:0 4px 14px rgba(0,0,0,.4);width:min(190px,46vw);color:#fff;font-family:var(--jp,system-ui);transition:top .4s,left .4s}
@@ -215,13 +218,14 @@ body.sheet .app .jct{display:none}
 @media (orientation:landscape){.sdeck{width:min(190px,24vw)}}
 .sdeck .hsign{position:absolute;left:0;top:0;width:100%;box-sizing:border-box;transform-origin:50% 100%;transition:transform .35s ease,opacity .35s ease}
 .sdeck .hsign.front{z-index:3}
-.sdeck .hsign.back{z-index:2;top:auto;bottom:0;transform:scale(.92);filter:brightness(.8)} /* 前の看板の下に下端だけのぞく（背の低い看板でも） */
-.sdeck .hsign.hide,.sdeck .hsign.new{z-index:1;top:auto;bottom:0;transform:scale(.92);opacity:0}
+.sdeck .hsign{transition:transform .35s ease,opacity .35s ease,top .35s ease}
+.sdeck .hsign.back{z-index:2;transform-origin:100% 0;transform:scale(.86)} /* 次の看板：1枚目の下に少し小さく */
+.sdeck .hsign.hide,.sdeck .hsign.new{z-index:1;transform-origin:100% 0;transform:scale(.86);opacity:0}
 .sdeck .hsign.gone{z-index:4;transform:translateY(-24px);opacity:0}
 /* 看板から分岐の地点への線（ルートの線より細く） */
 .slead{position:fixed;inset:0;width:100%;height:100%;z-index:5;pointer-events:none;overflow:visible}
-.slead .o{stroke:#fff;stroke-width:4;stroke-linecap:round}.slead .i{stroke:#0b7a3e;stroke-width:2;stroke-linecap:round}
-.slead circle{r:5px;fill:#0b7a3e;stroke:#fff;stroke-width:2.5px}
+.slead{opacity:.6}.slead .o{stroke:#fff;stroke-width:2.5;stroke-linecap:round}.slead .i{stroke:#0b7a3e;stroke-width:1.2;stroke-linecap:round}
+.slead circle{r:4px;fill:#0b7a3e;stroke:#fff;stroke-width:2px}
 .slead.cty .i{stroke:#1d4fa3}.slead.cty circle{fill:#1d4fa3}
 .sgpin .rot{position:absolute;left:0;top:0;transform-origin:0 0}
 .sgpin .pole{position:absolute;left:0;top:-2.5px;width:26px;height:5px;border-radius:3px;background:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.45);transform-origin:0 50%}
@@ -288,8 +292,8 @@ body.sheet .app .jct{display:none}
 .settings h2{margin:0;font-size:12px;letter-spacing:.1em;color:var(--muted);font-weight:400}
 .settings label{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:15px}
 .settings input[type=checkbox]{width:22px;height:22px;accent-color:#1a73e8}
-.spd,.shift{background:#fff;color:#202124;border-radius:12px;padding:6px 10px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.35);min-width:64px}
-.spd b,.shift b{display:block;font-family:var(--num);font-size:24px;line-height:1.1}
+.spd,.shift{background:#fff;color:#202124;border-radius:10px;padding:3px 10px;display:flex;align-items:baseline;gap:3px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.spd b,.shift b{font-family:var(--num);font-size:24px;line-height:1.15}
 .spd small,.shift small{font-size:11px;color:#5f6368}
 .shift{background:#202124;color:#fff}.shift small{color:#c8ccd0}
 .nav-bottom{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));
@@ -313,7 +317,7 @@ body.sheet .app .jct{display:none}
 .me-ar{width:34px;height:34px}
 @media (min-width:1000px) and (min-height:600px){
   .nav-top .ar{font-size:56px}.nav-top .dist{font-size:40px}.nav-top .txt{font-size:22px}
-  .setv b{font-size:40px}.spd b,.shift b{font-size:32px}.nav-bottom .eta b{font-size:34px}
+  .setv b{font-size:30px}.spd b,.shift b{font-size:30px}.nav-bottom .eta b{font-size:34px}
 }
 /* 横向き（iPhone 17 横 874×402）：左に案内・ポップアップ/SA・PA・到着バー、指定速度などは右下 */
 @media (orientation:landscape){
@@ -423,7 +427,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 <div class="nav-eco" id="navEco">
   <div class="road dr" id="nvDr" hidden>推定</div>
   <div class="road" id="nvRoad">一般道</div>
-  <div class="setv" id="nvSetBox"><small>指定</small><b id="nvSet">--</b><small id="nvCc"></small></div>
+  <div class="setv" id="nvSetBox"><b id="nvSet">--</b><small>km/h</small><small id="nvCc" hidden></small></div>
   <div class="spd"><b id="nvSpd">--</b><small>km/h</small></div>
 </div>
 <div class="nav-bottom" id="navBottom"><div class="prog" id="nvProg" hidden></div><span class="prog-p" id="nvProgP" hidden></span><div class="eta"><b id="nvEta">--:--</b><small>着</small></div><div class="meta"><span id="nvSlack"></span><span id="nvRemain">--</span></div><button id="detBtn" class="det" aria-label="迂回を探す">迂回</button><button id="menuBtn" aria-label="詳細">≡</button></div>
@@ -1318,7 +1322,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 20:30";
+const BUILD="2026-10-14 21:00";
 async function checkUpdate(){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(m&&m[1]!==BUILD){const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}}catch(e){}
@@ -1843,8 +1847,11 @@ function drawDeck(items){
     if(!el){el=document.createElement("div");el.className="hsign new";dk.appendChild(el);DECK.set(it.key,el);}
     if(el._h!==it.html){el._h=it.html;el.innerHTML=it.html;}
     el.className="hsign"+(it.cls?" "+it.cls:"")+(i===0?" front":i===1?" back":" hide");});
-  if(!items.length){$("sLead").style.display="none";return;}
-  const f=DECK.get(items[0].key);dk.style.height=(f.offsetHeight+(items.length>1?12:0))+"px";
+  if(!items.length){$("sLead").style.display="none";ecoAway(false);return;}
+  // 1枚目は上、2枚目はその下（少し小さく）、3枚目は2枚目の位置で隠して待つ
+  const f0=DECK.get(items[0].key),h0=f0.offsetHeight;
+  items.forEach((it,i)=>{const el=DECK.get(it.key);el.style.top=(i===0?0:h0+6)+"px";});
+  const f=f0;dk.style.height=(h0+(items.length>1?6+DECK.get(items[1].key).offsetHeight*0.86:0))+"px";
   // かぶりを調べるのは0.1秒ごと（毎フレームは重い）。看板が替わった時はすぐ
   const sig=items.map(it=>it.key).join(),t=performance.now();
   if(sig!==deckSig||t-deckT>100){deckSig=sig;deckT=t;placeDeck();}
@@ -1863,6 +1870,10 @@ function drawLead(card,it){
   const c=ln.querySelector("circle");c.setAttribute("cx",p[0]);c.setAttribute("cy",p[1]);
 }
 let deckSig="",deckT=0;
+// 速度の表示（指定・自車速度・高速）を下へスライドして隠す／戻す。位置は隠す前の上端で判定する
+let ECO_TOP=null;
+function ecoAway(on){const e=$("navEco");if(on===e.classList.contains("away"))return;
+  if(on)ECO_TOP=e.getBoundingClientRect().top;else ECO_TOP=null;e.classList.toggle("away",on);}
 // 地図が回ったり動いたりしている間も：かぶりは0.1秒ごと、線は毎フレーム
 function deckFrame(){
   const dk=$("sDeck");if(dk.hidden||!DECK.front)return;
@@ -1891,8 +1902,8 @@ function rtScreen(){
   j=0;return pts.map(q=>{if(!q)return null;const r=PROBES[++j].getBoundingClientRect();return[r.left,r.top];});
 }
 // 四角とルートの線（太さの半分＋余白）が重なるか。点と点の間も細かく調べる
-function rtHit(rc){
-  const M=gmap?16:8,l=rc.left-M,t=rc.top-M,r=rc.right+M,b=rc.bottom+M,pts=rtScreen();
+function rtHit(rc,m){
+  const M=m!=null?m:gmap?16:8,l=rc.left-M,t=rc.top-M,r=rc.right+M,b=rc.bottom+M,pts=rtScreen();
   const inR=(x,y)=>x>l&&x<r&&y>t&&y<b;
   for(let i=0;i<pts.length;i++){if(!pts[i])continue;const [x,y]=pts[i];if(inR(x,y))return true;if(!i||!pts[i-1])continue;
     const [px,py]=pts[i-1],n=Math.ceil(Math.hypot(x-px,y-py)/4);for(let j=1;j<n;j++)if(inR(px+(x-px)*j/n,py+(y-py)*j/n))return true;}
@@ -1904,7 +1915,11 @@ function placeDeck(){
   const y=land?Math.max(8,safeT+8):$("navTop").getBoundingClientRect().bottom+8,x=W-w-Math.max(8,parseFloat(getComputedStyle(document.documentElement).paddingRight)||0);
   const ap=$("areaPop"),dy=ap.classList.contains("on")?ap.offsetHeight+8:0; // 市区町村が出ている間は、その下へ
   dk.style.left=x+"px";dk.style.top=(y+dy)+"px";
-  dk.classList.toggle("thru",rtHit({left:x,top:y+dy,right:x+w,bottom:y+dy+h}));
+  const cards=[...dk.querySelectorAll(".hsign.front,.hsign.back")].map(e=>e.getBoundingClientRect());
+  dk.classList.toggle("thru",cards.some(rc=>rtHit(rc,2)));
+  // 2枚で下の速度の表示にかかる時は、速度の表示を下へスライドして隠す
+  const eb=$("navEco").getBoundingClientRect(),bot=Math.max(...cards.map(rc=>rc.bottom),0),R=Math.max(...cards.map(rc=>rc.right),0),Lf=Math.min(...cards.map(rc=>rc.left),1e9);
+  const eco0=ECO_TOP??eb.top;ecoAway(bot>eco0-6&&Lf<eb.right&&R>eb.left);
 }
 let iMap=null,iL=null,iMe=null,iLines=[],iKey="",insetClosed=null,insetFor=null;
 /* ---- 立ち寄り先のSA・PAの見取り図（拡大ポップアップの代わり）：建物・駐車場・トイレ・給油・EV充電・案内所の位置と、設備の一覧。
