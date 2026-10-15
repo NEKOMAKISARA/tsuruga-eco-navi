@@ -1572,7 +1572,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 16:40";
+const BUILD="2026-10-15 16:50";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -3349,6 +3349,9 @@ async function reroute(force,opt){
     rerouteMsg="";trackKm=null;const pr=projectTrack(from[0],from[1],Date.now());offD=curPos?pr.d:0;
     if(timer){demoKm=pr.km;$("sim").value=pr.km;}
     feedFix(pr.km,curPos,A.spd); // 地図の追従位置も新しいルートに合わせる
+    {const dp=A.lastP||A.dispPos;const q=dp?project(dp[0],dp[1]):null;A.dispKm=q&&q.d<0.1?q.km:pr.km;A.shownKm=A.dispKm;} // 前のルートの距離のままだと、ずれと見なして一瞬飛ぶ // 今 画面に出ている所から続ける（自車が飛ばないように）
+    updOnRoute();updSnap(); // ルートに乗ったかどうかを、次の位置を待たずに決める（待つと一瞬ずれて見える）
+    startBlend(); // 地図は0.7秒かけて新しい追従の位置へ（瞬間移動しない）
     render(pr.km);return true;
   }catch(e){rerouteMsg="再検索できませんでした（通信を確認）";return false;}
   finally{rerouting=false;syncNav();}
