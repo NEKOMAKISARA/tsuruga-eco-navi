@@ -534,6 +534,9 @@ body.night .sa-clock .tk,body.night .sa-clock .hh,body.night .sa-clock .mh{strok
 .sa-clock small{display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;color:#0E6B43;margin-top:1px;font-family:var(--num)}
 .sa-clock small i{width:9px;height:9px;border-radius:50%;background:#0E6B43;display:inline-block}
 body.night .sa-clock .ah line{stroke:#4CC38A}body.night .sa-clock .ah circle{fill:#4CC38A;stroke:#1A222B}body.night .sa-clock small{color:#4CC38A}body.night .sa-clock small i{background:#4CC38A}
+
+/* 横画面：2枚目からの看板は小さく（上に入るように） */
+@media (orientation:landscape){.sdeck .hsign.far:not(.wait):not(.gone){transform:scale(.74);transform-origin:top right}}
 </style>
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
@@ -1473,7 +1476,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 15:10";
+const BUILD="2026-10-15 15:20";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2018,7 +2021,7 @@ function unstackPins(list){
 }
 /* ---- 流れる看板：近づくと右から出て、残りの距離に合わせて下へ動き、分岐を通る時に画面の真ん中。過ぎたら右へ戻る ---- */
 const DECK=new Map(),SIGN_WIN=2.2,SIGN_WIN_C=0.35; // 看板を出す距離（高速・一般道）
-let SIGN_END=0.4; // 分岐を通る時の看板の真ん中の高さ（画面の高さに対して）
+let SIGN_END=0.4;const FAR_S=0.74; // 分岐を通る時の看板の真ん中の高さ（画面の高さに対して）
 function drawDeck(items){
   const dk=$("sDeck");items=items.slice(0,4);DECK.items=items;
   const keep=new Set(items.map(it=>it.key));
@@ -2060,7 +2063,7 @@ function deckFrame(force){
   dk.style.left=(W-dk.offsetWidth-Math.max(8,parseFloat(cs.paddingRight)||0))+"px";
   const now=A.dispKm??curKm,t=performance.now(),dt=Math.min(0.1,(t-(DECK.t||t))/1000);DECK.t=t;
   let floor=Infinity;const vis=[];
-  items.forEach((it,i)=>{const el=DECK.get(it.key);if(!el)return;const h=el.offsetHeight;
+  items.forEach((it,i)=>{const el=DECK.get(it.key);if(!el)return;const h=el.offsetHeight*(land&&i>0?FAR_S:1); // 横画面は2枚目から小さく（縦が足りないので）
     const f=Math.max(0,Math.min(1,(it.km-now)/(it.cls==="cty"?SIGN_WIN_C:SIGN_WIN))),y0=Math.max(yTop,yMid-h/2);
     // 1枚だけの時は下へ動かさない（出た所、または今の所にとどまる）
     const y=items.length===1?Math.max(yTop,el._y??yTop):Math.min(y0+(yTop-y0)*f,floor-6-h);floor=Math.min(floor,y);
