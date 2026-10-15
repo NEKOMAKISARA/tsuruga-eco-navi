@@ -1333,15 +1333,15 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-14 19:15";
+const BUILD="2026-10-15 13:40";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
-function hardReload(){location.replace(location.pathname+"?v="+Date.now());}
+function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
   try{const r=await fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"});const t=await r.text(),m=t.match(/const BUILD="([^"]+)"/);
     if(!m||m[1]===BUILD)return;
     let tried=null;try{tried=JSON.parse(sessionStorage.getItem("updTry")||"null");}catch(e){}
     const again=tried&&tried.b===m[1]&&Date.now()-tried.t<120000; // 読み込み直しても古いまま（配信の反映待ち）なら繰り返さない
-    if(auto&&MODE!=="nav"&&!again){try{sessionStorage.setItem("updTry",JSON.stringify({b:m[1],t:Date.now()}));}catch(e){}hardReload();return;}
+    if(auto&&MODE!=="nav"&&!again){try{sessionStorage.setItem("updTry",JSON.stringify({b:m[1],t:Date.now()}));localStorage.setItem("updFrom",BUILD);}catch(e){}hardReload();return;}
     const b=$("updBar");b.hidden=false;b.textContent=`新しい版（${m[1]}）があります。タップで更新`;}catch(e){}
 }
 const GPSI={prev:null,iv:null,v:null,age:0,fps:null,fc:0,ft:0,err:""};
@@ -3166,7 +3166,9 @@ if(MODE==="nav")render(0);
 if(hasRoute()&&ATTR.some(s=>s.lim)&&!MANS.some(m=>m[8]))loadLanes();
 if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
-$("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",hardReload);$("updNow").addEventListener("click",hardReload);setTimeout(()=>checkUpdate(true),1500);
+$("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",e=>{const b=e.currentTarget;if(b.dataset.done){b.hidden=true;delete b.dataset.done;}else hardReload();});
+// 更新した直後：上に「更新しました」を5秒（自動の更新は気づきにくいので）
+try{const f=localStorage.getItem("updFrom");if(f&&f!==BUILD){localStorage.removeItem("updFrom");const b=$("updBar");b.hidden=false;b.textContent=`最新版（${BUILD}）に更新しました`;b.dataset.done="1";setTimeout(()=>{if(b.dataset.done){b.hidden=true;delete b.dataset.done;}},5000);}else if(f)localStorage.removeItem("updFrom");}catch(e){}$("updNow").addEventListener("click",hardReload);setTimeout(()=>checkUpdate(true),1500);
 // 開きっぱなしの間も15分ごとに確かめる（開いた時・戻った時だけだと、使っている間の更新に気づかない）
 setInterval(()=>{if(!document.hidden)checkUpdate();},15*60e3);
 </script>
