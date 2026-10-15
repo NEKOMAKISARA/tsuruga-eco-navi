@@ -630,6 +630,10 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
 .results button.gfind{display:flex;align-items:center;justify-content:center;gap:10px;color:#1a73e8;font-weight:700;background:#F4F7FE}
 .results button.gfind small{display:inline;margin:0;color:#6B7682;font-weight:500}
 .results button.gfind:disabled{color:#9AA3AC}
+
+.vp-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.vp-row #vpInfo{flex:1;min-width:0}
+.vp-btn{display:inline-block;width:auto;padding:6px 12px;border-radius:16px;border:1px solid var(--line);background:transparent;color:inherit;font-size:13px;cursor:pointer}
 </style>
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
@@ -683,6 +687,8 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
     <label>音声案内<input type="checkbox" id="setVoice"></label>
     <label>指定速度の変化も読み上げ<input type="checkbox" id="setVoiceEco"></label>
     <button id="voiceTest">音声のテスト</button>
+    <label>好きな声で案内（声のパック）<input type="checkbox" id="setVoicePack"></label>
+    <div class="vp-row"><span id="vpInfo">声のパック：なし</span><label class="vp-btn">読み込む<input type="file" id="vpFile" accept=".zip,application/zip" hidden></label><button type="button" class="vp-btn" id="vpDel" hidden>消す</button></div>
   </section>
   <section class="settings">
     <h2>表示</h2>
@@ -752,7 +758,7 @@ const R=6371;
 const $=id=>document.getElementById(id);
 const VAL="https://valhalla1.openstreetmap.de"; // 経路・道路の種類・標高（無料・キー不要）
 /* ---- 設定（この端末に保存） ---- */
-const SET={night:true,orbis:true,voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30,traffic:true};
+const SET={voicePack:true,night:true,orbis:true,voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30,traffic:true};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}catch(e){}
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 let XLAT=35.3; // 平面に直す時の基準の緯度（ルートの平均）
@@ -1422,10 +1428,10 @@ $("closeSheet").addEventListener("click",()=>document.body.classList.remove("she
 $("sheetBg").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute();});
 $("rerouteSheet").addEventListener("click",()=>{if(MODE!=="nav"||!hasRoute())return;document.body.classList.remove("sheet");reroute(true);});
-for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setOrbis","orbis"],["setEcoRest","ecoRest"],["setTraffic","traffic"],["setNight","night"]]){
+for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setOrbis","orbis"],["setEcoRest","ecoRest"],["setTraffic","traffic"],["setNight","night"],["setVoicePack","voicePack"]]){
   $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="orbis")drawMarks();if(k==="traffic")applyTraffic();if(k==="night")nightCheck(true);if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
-$("voiceTest").addEventListener("click",()=>speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true));
+$("voiceTest").addEventListener("click",()=>{vpCtx();if(SET.voicePack&&VP.clips)speak("1キロ先、左方向、出口です。左車線を走行してください",true);else speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true);});
 let saving=false;
 $("saveMapBtn").addEventListener("click",async()=>{
   if(saving)return;const btn=$("saveMapBtn");
@@ -1572,7 +1578,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 16:50";
+const BUILD="2026-10-15 17:10";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -1810,10 +1816,89 @@ addEventListener("orientationchange",()=>setTimeout(syncMap,300));if(land.addEve
 
 /* ---- 音声：iPhoneは最初の1回をボタン操作の中で鳴らす必要がある ---- */
 function speak(t,force){
-  if(!(force||SET.voice)||!("speechSynthesis" in window))return;
-  const u=new SpeechSynthesisUtterance(t.replace(/JCT/g,"ジャンクション").replace(/IC/g,"インター").replace(/SA/g,"サービスエリア").replace(/PA/g,"パーキング").replace(/（.*?）/g,"").replace(/：/g,"、"));
-  u.lang="ja-JP";u.rate=1.05;speechSynthesis.speak(u);
+  if(!(force||SET.voice))return;
+  const s=t.replace(/JCT/g,"ジャンクション").replace(/IC/g,"インター").replace(/SA/g,"サービスエリア").replace(/PA/g,"パーキング").replace(/（.*?）/g,"").replace(/：/g,"、");
+  if(SET.voicePack&&VP.clips){vpSpeak(s).then(ok=>{if(!ok)ttsSpeak(s);});return;}
+  ttsSpeak(s);
 }
+// 機械の声。好きな声がまだ話している時は、終わってから
+function ttsSpeak(s){
+  if(!("speechSynthesis" in window))return;
+  const wait=VP.ctx?Math.max(0,(VP.until-VP.ctx.currentTime)*1000):0;
+  const go=()=>{const u=new SpeechSynthesisUtterance(s);u.lang="ja-JP";u.rate=1.05;speechSynthesis.speak(u);};
+  if(wait>50)setTimeout(go,wait);else go();
+}
+/* ---- 好きな声（声のパック）：言葉ごとの音声を入れた zip（無圧縮）。manifest.json に {clips:{"言葉":"ファイル名"}}。
+   読み上げる文を「、」「。」で区切り、区切りごとに一覧の言葉（の組み合わせ）で言えれば、つないで流す。
+   地名などで1つでも言えない所があれば、その文は全部機械の声 ---- */
+const VP={clips:null,files:null,bufs:new Map(),ctx:null,until:0,name:"",keys:null,maxLen:0};
+function vpCtx(){
+  if(!VP.ctx){const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;VP.ctx=new C();}
+  if(VP.ctx.state==="suspended")VP.ctx.resume().catch(()=>{});return VP.ctx;
+}
+// iPhoneは画面に触れた時でないと音を出せないので、触れるたびに起こしておく
+addEventListener("touchend",()=>{if(VP.clips)vpCtx();},{passive:true});addEventListener("click",()=>{if(VP.clips)vpCtx();});
+// 無圧縮のzipを読む（中央ディレクトリから名前と場所）
+function unzipStored(ab){
+  const v=new DataView(ab),u8=new Uint8Array(ab),td=new TextDecoder();let e=-1;
+  for(let i=ab.byteLength-22;i>=Math.max(0,ab.byteLength-65557);i--)if(v.getUint32(i,true)===0x06054b50){e=i;break;}
+  if(e<0)throw new Error("zipではありません");
+  const n=v.getUint16(e+10,true);let o=v.getUint32(e+16,true);const out=new Map();
+  for(let k=0;k<n;k++){
+    if(v.getUint32(o,true)!==0x02014b50)throw new Error("zipが壊れています");
+    const meth=v.getUint16(o+10,true),csz=v.getUint32(o+20,true),nl=v.getUint16(o+28,true),xl=v.getUint16(o+30,true),cl=v.getUint16(o+32,true),lo=v.getUint32(o+42,true);
+    const name=td.decode(u8.subarray(o+46,o+46+nl));o+=46+nl+xl+cl;
+    if(name.endsWith("/"))continue;
+    if(meth!==0)throw new Error("圧縮なし（無圧縮）のzipにしてください");
+    const lnl=v.getUint16(lo+26,true),lxl=v.getUint16(lo+28,true),st=lo+30+lnl+lxl;
+    out.set(name.replace(/^.*\//,""),u8.subarray(st,st+csz));
+  }
+  return out;
+}
+function vpUse(files){
+  const m=files.get("manifest.json");if(!m)throw new Error("manifest.json がありません");
+  const man=JSON.parse(new TextDecoder().decode(m));
+  VP.files=files;VP.clips=man.clips||{};VP.name=man.name||"好きな声";VP.bufs.clear();
+  VP.keys=new Set(Object.keys(VP.clips).filter(k=>files.has(VP.clips[k])));VP.maxLen=Math.max(0,...[...VP.keys].map(k=>k.length));
+  vpShow();
+}
+function vpShow(){$("vpInfo").textContent=VP.clips?`声のパック：${VP.name}（${VP.keys.size}語）`:"声のパック：なし";$("vpDel").hidden=!VP.clips;}
+// 端末に保存（IndexedDB）
+function vpDb(){return new Promise((ok,ng)=>{const r=indexedDB.open("naviVoice",1);r.onupgradeneeded=()=>r.result.createObjectStore("kv");r.onsuccess=()=>ok(r.result);r.onerror=()=>ng(r.error);});}
+async function vpStore(blob){const db=await vpDb();return new Promise((ok,ng)=>{const tx=db.transaction("kv","readwrite");blob?tx.objectStore("kv").put(blob,"pack"):tx.objectStore("kv").delete("pack");tx.oncomplete=ok;tx.onerror=()=>ng(tx.error);});}
+async function vpRestore(){try{const db=await vpDb();const blob=await new Promise(ok=>{const r=db.transaction("kv").objectStore("kv").get("pack");r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null);});
+  if(blob)vpUse(unzipStored(await blob.arrayBuffer()));}catch(e){}}
+// 1つの区切りを一覧の言葉に分ける（いちばん少ない数で）
+function vpSplit(c){
+  const n=c.length,best=new Array(n+1).fill(null);best[0]=[];
+  for(let i=0;i<n;i++){if(!best[i])continue;
+    for(let L=Math.min(VP.maxLen,n-i);L>=1;L--){const w=c.substr(i,L);if(VP.keys.has(w)&&(!best[i+L]||best[i+L].length>best[i].length+1))best[i+L]=best[i].concat([w]);}}
+  return best[n];
+}
+function vpPlan(s){
+  if(!VP.keys)return null;const seq=[];
+  for(const p of s.split(/([、。！？\s])/)){ // 「1.5キロ」の点では区切らない
+    if(p==="、"){seq.push({gap:0.12});continue;}if(p==="。"||p==="！"||p==="？"){seq.push({gap:0.3});continue;}
+    const c=p.trim();if(!c)continue;const w=vpSplit(c);if(!w)return null;w.forEach(x=>seq.push({w:x}));}
+  return seq.some(x=>x.w)?seq:null;
+}
+async function vpBuf(w){
+  if(VP.bufs.has(w))return VP.bufs.get(w);
+  const f=VP.files.get(VP.clips[w]),b=await VP.ctx.decodeAudioData(f.slice().buffer);VP.bufs.set(w,b);return b;
+}
+async function vpSpeak(s){
+  const plan=vpPlan(s);if(!plan)return false;const ctx=vpCtx();if(!ctx)return false;
+  try{const bufs=await Promise.all(plan.map(x=>x.w?vpBuf(x.w):null));
+    let t=Math.max(ctx.currentTime+0.05,VP.until+0.15);
+    plan.forEach((x,i)=>{if(!x.w){t+=x.gap;return;}const src=ctx.createBufferSource();src.buffer=bufs[i];src.connect(ctx.destination);src.start(t);t+=bufs[i].duration;});
+    VP.until=t;return true;
+  }catch(e){return false;}
+}
+vpRestore();
+$("vpFile").addEventListener("change",async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;
+  try{vpUse(unzipStored(await f.arrayBuffer()));await vpStore(f);vpCtx();SET.voicePack=true;$("setVoicePack").checked=true;saveSet();speak("音声案内をオンにしました",true);}
+  catch(err){$("vpInfo").textContent="読み込めませんでした："+err.message;}});
+$("vpDel").addEventListener("click",async()=>{VP.clips=VP.files=VP.keys=null;VP.bufs.clear();try{await vpStore(null);}catch(e){}vpShow();});
 const spoken=new Set();let lastEcoSay="",ecoCand={v:"",t:0};
 function fmtSay(km){return km>=0.95?`${km.toFixed(km<10?1:0).replace(/\.0$/,"")}キロ先`:`${Math.round(km*10)*100}メートル先`;}
 // 左右の言葉（看板風の文言には左右が入らないので、読み上げでは必ず足す）
