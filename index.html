@@ -1567,7 +1567,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 16:10";
+const BUILD="2026-10-15 16:20";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2434,17 +2434,27 @@ async function search(q){
       return{name:x.name||parts[0],addr:parts.slice(1).reverse().join(""),lat:+x.lat,lon:+x.lon};})).catch(()=>[]);
   const gsi=fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${enc}`).then(r=>r.json())
     .then(a=>a.slice(0,10).map(f=>({name:f.properties.title,addr:"",lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0]}))).catch(()=>[]);
-  let [a,b]=await Promise.all([nomi,gsi]);if(seq!==searchSeq)return;
+  // ウィキペディア：ひらがな・よみがなでも見つかる（記事の最初に読みが書いてあるため）。位置が書いてある記事だけ使う
+  const wiki=fetch(`https://ja.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=8&gsrsearch=${enc}&prop=coordinates&coprimary=primary`).then(r=>r.json())
+    .then(j=>Object.values((j.query||{}).pages||{}).sort((x,y)=>(x.index||0)-(y.index||0)).filter(p=>p.coordinates&&p.coordinates[0])
+      .map(p=>({name:p.title.replace(/\s*[(（][^)）]*[)）]$/,""),addr:"",lat:p.coordinates[0].lat,lon:p.coordinates[0].lon,wiki:true}))
+      .filter(x=>x.lat>20&&x.lat<46&&x.lon>122&&x.lon<154)).catch(()=>[]);
+  let [a,b,w]=await Promise.all([nomi,gsi,wiki]);if(seq!==searchSeq)return;
   // 住所（番地・市町村名）の時は国土地理院を先に。施設名の時は、国土地理院は名前に検索語を含むものだけ（「東京駅」で「札幌市東区」等が出るため）
   const isAddr=/\d|[都道府県市区町村]|丁目|番地/.test(q),key=q.replace(/\s/g,"");
   if(!isAddr)b=b.filter(x=>x.name.replace(/\s/g,"").includes(key));
   [a,b].forEach(l=>{l.forEach(x=>x.d=distKm(c,[x.lat,x.lon]));l.sort((x,y)=>x.d-y.d);}); // それぞれ近い順
-  const list=[];for(const x of isAddr?[...b,...a]:[...a,...b])if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.05))list.push(x);
+  // ひらがな・カタカナだけの時はウィキペディアを先に（地図のデータは漢字の名前しか入っていないことが多い）
+  const kana=/^[\u3040-\u30ffー\s]+$/.test(q);
+  const order=isAddr?[...b,...a,...w]:kana?[...w,...a,...b]:[...a,...w,...b];
+  const list=[];for(const x of order)if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<(x.wiki||y.wiki?0.15:0.05)))list.push(x);
+  w.forEach(x=>x.d=distKm(c,[x.lat,x.lon]));
   if(!list.length){box.innerHTML='<div class="msg">見つかりませんでした</div>';return;}
   box.innerHTML="";
   for(const x of list.slice(0,12)){const bt=document.createElement("button");
     bt.className="rw";bt.innerHTML=rowHtml(PARK_RE.test(x.name)?"pk":"pl",x.name,x.addr,x.d);
-    bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);}
+    bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);
+    if(x.wiki&&!x.addr)geoGsi([x.lat,x.lon]).then(g=>{if(seq!==searchSeq)return;x.addr=g.pref+g.full+(g.town||"");bt.innerHTML=rowHtml("pl",x.name,x.addr,x.d);}).catch(()=>{});}
 }
 function mapCenter(){if(gmap){const c=gmap.getCenter();return[c.lat(),c.lng()];}if(map){const c=map.getCenter();return[c.lat,c.lng];}return[35.68,139.6];}
 $("searchForm").addEventListener("submit",e=>{e.preventDefault();search($("q").value);});
