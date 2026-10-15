@@ -548,6 +548,84 @@ body.night .sa-clock .ah path{fill:#4CC38A}body.night .sa-clock .ah circle{strok
 .sa-clock .ckpill b{font-size:20px;margin:0}
 .sa-clock .ckpill small{margin:0;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}.sa-clock .ckpill{white-space:nowrap}
 body.night .sa-clock{background:none}body.night .sa-clock .ckpill{background:#1A222B}
+
+/* ===== リッチな見た目（時計と同じ作り：奥行き・本物の看板の白枠・メーター） ===== */
+/* 案内の札：本物の看板のような白い内枠と、上から下へのわずかな陰影 */
+.nav-top{position:relative;background:linear-gradient(180deg,#14804F 0%,var(--hwc) 55%,#0B5C38 100%);border:0}
+body.ctyroad .nav-top{background:linear-gradient(180deg,#2A5EB6 0%,var(--ctc) 55%,#18428C 100%)}
+.nav-top::before{content:"";position:absolute;inset:4px;border:2px solid rgba(255,255,255,.92);border-radius:12px;pointer-events:none}
+.nav-stack:has(.nav-toast:not([hidden])) .nav-top::before{border-bottom-left-radius:4px;border-bottom-right-radius:4px}
+.nav-top .ar{filter:drop-shadow(0 2px 2px rgba(0,0,0,.3))}
+.nav-top .dist{text-shadow:0 2px 3px rgba(0,0,0,.25)}
+/* 車線：アスファルトの帯に白い破線、入る車線はオレンジに光る */
+.nav-top .ln2{background:linear-gradient(180deg,#2E343B,#1E2329);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -1px 0 rgba(0,0,0,.4);padding:4px;border-radius:9px}
+.nav-top .ln2 i{border-left:2px dashed rgba(255,255,255,.75)}
+.nav-top .ln2 span.on{background:linear-gradient(180deg,#FFA040,#F27A0A);box-shadow:0 0 0 1px rgba(255,255,255,.35) inset,0 0 12px rgba(255,138,31,.55)}
+/* 一言：左に警告の色の縁 */
+.nav-stack .nav-toast{background:linear-gradient(180deg,#FFF6E0,#FCEBC0);border-left:5px solid #F2B233}
+/* 看板（地図の右）：同じ陰影と光沢 */
+.sdeck .hsign,.hsign{background:linear-gradient(180deg,#14804F,#0B6A3E 60%,#095732)}
+.sdeck .hsign.cty,.hsign.cty{background:linear-gradient(180deg,#2A5EB6,#1D4FA3 60%,#163F86)}
+.hsign .in{box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
+/* SA・PAの一覧・専用の札も同じ陰影 */
+.sapa,.sa-top{background:linear-gradient(180deg,#14804F,var(--hwc) 55%,#0B5C38)}
+/* 到着の札：時刻を大きく、進み具合は道路の帯 */
+.nav-bottom{background:linear-gradient(180deg,#FFFFFF,#F3F5F4)}
+.prog{background:#D9DEE2;height:5px;border-radius:3px}
+.prog i{background:linear-gradient(90deg,#0E6B43,#25A06A);border-radius:3px}
+.prog .c{background:#FF8A1F;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 2px 4px rgba(0,0,0,.3)}
+/* 速度：丸いメーター。道の種類と指定速度は左に小さな札で */
+.nav-eco{background:none;box-shadow:none;overflow:visible;gap:8px;align-items:center}
+.nav-eco>*{border-radius:12px!important;box-shadow:var(--shadow)!important}
+.nav-eco .road{padding:6px 10px;font-size:13px;align-self:center!important}
+.nav-eco .setv{flex-direction:column;align-items:center!important;justify-content:center;padding:4px 10px;background:linear-gradient(180deg,#14804F,#0B5C38);color:#fff;border:0;align-self:center!important}
+.nav-eco .setv b{font-size:26px;line-height:1}.nav-eco .setv small{font-size:10px;opacity:.85}
+.nav-eco .setv small:first-of-type::before{content:"指定 "}
+.nav-eco .spd{--g1:#fff;--g2:#E9EDEB;position:relative;width:104px;height:104px;padding:0!important;border-radius:50%!important;background:none!important;box-shadow:none!important;display:grid!important;place-items:center;filter:drop-shadow(0 6px 12px rgba(0,0,0,.3)) drop-shadow(0 1px 1px rgba(0,0,0,.2))}
+.nav-eco .spd .gauge{position:absolute;inset:0;width:100%;height:100%}
+.nav-eco .spd b{position:relative;font-size:34px;line-height:1;margin-top:-4px;color:#141A20}
+.nav-eco .spd small{position:absolute;bottom:17px;left:0;right:0;text-align:center;font-size:10px;color:#6B7682}
+.gauge .g-rim{fill:#141A20}.gauge .g-trk{fill:none;stroke:#D5DADF;stroke-width:6;stroke-linecap:round}
+.gauge .g-val{fill:none;stroke:#FF8A1F;stroke-width:6;stroke-linecap:round;transition:d .4s}
+.gauge .tb{stroke:#141A20;stroke-width:1.6;stroke-linecap:round}.gauge .ts{stroke:#9AA3AC;stroke-width:.9;stroke-linecap:round}
+.gauge .g-set path{fill:#0E6B43;stroke:#fff;stroke-width:1.3;stroke-linejoin:round}
+.gauge .g-lim circle{fill:#fff;stroke:#D7262B;stroke-width:2}
+/* 夜 */
+body.night .nav-top{background:linear-gradient(180deg,#0E5C3A,#0B4E31 60%,#08402A)}
+body.night.ctyroad .nav-top{background:linear-gradient(180deg,#1E4A8E,#163B78 60%,#112F62)}
+body.night .nav-top::before{border-color:rgba(255,255,255,.75)}
+body.night .nav-bottom{background:linear-gradient(180deg,#202A34,#171E25)}
+body.night .nav-eco{background:none}body.night .nav-eco .spd{--g1:#26303A;--g2:#161C23}body.night .nav-eco .spd b{color:#E9EEF2}
+body.night .gauge .g-rim{fill:#3A4652}body.night .gauge .g-trk{stroke:#2F3A45}body.night .gauge .tb{stroke:#E9EEF2}
+
+/* 指定速度はメーターの中（下のすき間）に。別の札と道の種類の札は出さない（札の色で分かる） */
+.nav-eco .setv,.nav-eco .road:not(.dr){display:none!important}
+.nav-eco .spd{width:112px;height:112px}
+.nav-eco .spd b{font-size:36px;margin-top:-10px}
+.nav-eco .spd small{bottom:auto;top:62px}
+.nav-eco .spd .gset{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);display:flex;align-items:baseline;gap:3px;background:linear-gradient(180deg,#14804F,#0B5C38);color:#fff;border-radius:999px;padding:1px 9px 2px;font:700 15px/1.2 var(--num);white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.nav-eco .spd .gset i{font:700 9px var(--jp);font-style:normal;opacity:.9}
+.nav-eco .spd .gset[hidden]{display:none}
+/* 進み具合の線の丸い印はなし（線の長さで分かる） */
+.prog .c,.prog .s{display:none!important}
+
+/* 速度：丸いメーターはやめて、横長の札1つ（今の速度・指定速度・下に細い棒） */
+.nav-eco .spd{width:auto;height:auto;border-radius:16px!important;background:linear-gradient(180deg,#FFFFFF,#F1F4F2)!important;box-shadow:var(--shadow)!important;filter:none;display:grid!important;grid-template-columns:auto auto;grid-template-rows:auto auto;column-gap:10px;align-items:center;padding:7px 12px 8px!important}
+.nav-eco .spd .gauge{display:none}
+.nav-eco .spd b{grid-row:1/3;font-size:38px;margin:0;line-height:.95;letter-spacing:-1px}
+.nav-eco .spd small{position:static;grid-column:2;grid-row:1;text-align:left;font-size:11px;align-self:end}
+.nav-eco .spd .gset{position:static;transform:none;grid-column:2;grid-row:2;align-self:start;padding:1px 7px 1px;font-size:14px;box-shadow:none}
+.nav-eco .spd .lbar{display:block;grid-column:1/3;grid-row:3;position:relative;min-width:110px;height:5px;border-radius:3px;background:#D9DEE2;margin-top:6px;overflow:visible}
+.nav-eco .spd .lbar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#FFB061,#FF8A1F);transition:width .4s}
+.nav-eco .spd .lbar em{position:absolute;top:-3px;bottom:-3px;width:3px;margin-left:-1.5px;border-radius:2px;background:#0E6B43;box-shadow:0 0 0 1.5px #fff}
+body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!important}body.night .nav-eco .spd .lbar{background:#2F3A45}body.night .nav-eco .spd .lbar em{box-shadow:0 0 0 1.5px #171E25}
+
+/* 指定速度：文字は付けず、緑の大きな数字で（今の速度の右） */
+.nav-eco .spd{grid-template-columns:auto auto auto}
+.nav-eco .spd b{grid-column:1;grid-row:1/3}
+.nav-eco .spd .gset{grid-column:2;grid-row:1/3;align-self:center;font-size:28px;line-height:1;padding:4px 10px 5px;border-radius:12px;letter-spacing:-.5px}
+.nav-eco .spd small{grid-column:3;grid-row:1/3;align-self:end;padding-bottom:3px}
+.nav-eco .spd .lbar{grid-column:1/4}
 </style>
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
@@ -585,7 +663,9 @@ body.night .sa-clock{background:none}body.night .sa-clock .ckpill{background:#1A
   <div class="road dr" id="nvDr" hidden>推定</div>
   <div class="road" id="nvRoad">一般道</div>
   <div class="setv" id="nvSetBox"><b id="nvSet">--</b><small>km/h</small><small id="nvCc" hidden></small></div>
-  <div class="spd"><b id="nvSpd">--</b><small>km/h</small></div>
+  <div class="spd"><svg class="gauge" viewBox="0 0 100 100"><defs><radialGradient id="gFace" cx="50%" cy="35%" r="70%"><stop offset="0" stop-color="var(--g1)"/><stop offset="1" stop-color="var(--g2)"/></radialGradient></defs>
+    <circle cx="50" cy="50" r="48" class="g-rim"/><circle cx="50" cy="50" r="45.5" fill="url(#gFace)"/>
+    <path class="g-trk" d=""/><path class="g-val" id="gVal" d=""/><g id="gTicks"></g><g id="gSet" class="g-set"><path d="M50 17 L45.6 6.5 H54.4 Z"/></g><g id="gLim" class="g-lim"><circle cx="50" cy="9" r="3.4"/></g></svg><b id="nvSpd">--</b><small>km/h</small><span class="gset" id="gSetT" hidden></span><span class="lbar"><i id="lbV"></i><em id="lbS"></em></span></div>
 </div>
 <div class="nav-bottom" id="navBottom"><div class="prog" id="nvProg" hidden></div><span class="prog-p" id="nvProgP" hidden></span><div class="eta"><b id="nvEta">--:--</b><small>着</small></div><div class="meta"><span id="nvSlack"></span><span id="nvRemain">--</span></div><button id="detBtn" class="det" aria-label="迂回を探す">迂回</button><button id="menuBtn" aria-label="詳細">≡</button></div>
 <div class="sheet-bg" id="sheetBg"></div>
@@ -1487,7 +1567,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 15:45";
+const BUILD="2026-10-15 16:10";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -1791,6 +1871,20 @@ function nightCheck(force){
   let on=false;if(SET.night){const p=curPos||(hasRoute()?posAt(curKm):[35.68,139.7]),d=new Date(),m=d.getHours()*60+d.getMinutes(),t=sunTimes(p[0],p[1],d);on=m<t.rise||m>t.set;}
   document.body.classList.toggle("night",on);
 }
+/* 速度のメーター：0〜140km/hを240度の弧に。今の速度はオレンジ（指定を超えたら赤みを強く） */
+const G_MAX=140,G_A0=-120,G_A1=120;
+const gAng=v=>G_A0+(G_A1-G_A0)*Math.max(0,Math.min(1,(v||0)/G_MAX));
+const gArc=(a0,a1,r)=>{const P=a=>[50+r*Math.sin(a*Math.PI/180),50-r*Math.cos(a*Math.PI/180)],[x0,y0]=P(a0),[x1,y1]=P(a1);return`M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${a1-a0>180?1:0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;};
+let gInit=false;
+function gaugeSet(v,set,lim){
+  if(!gInit){gInit=true;document.querySelector(".gauge .g-trk").setAttribute("d",gArc(G_A0,G_A1,40));
+    let t="";for(let k=0;k<=G_MAX;k+=10){const a=gAng(k),big=k%20===0;t+=`<line x1="50" y1="${big?13.5:15}" x2="50" y2="18.5" transform="rotate(${a} 50 50)" class="${big?"tb":"ts"}"/>`;}
+    $("gTicks").innerHTML=t;}
+  const a=gAng(isNaN(v)?0:v);$("gVal").setAttribute("d",v>0.5?gArc(G_A0,a,40):"");
+  {const pc=x=>(Math.max(0,Math.min(1,x/G_MAX))*100).toFixed(1)+"%";$("lbV").style.width=pc(isNaN(v)?0:v);const e=$("lbS");e.style.display=set?"":"none";if(set)e.style.left=pc(set);}
+  const gs=$("gSet");gs.style.display=set?"":"none";{const t=$("gSetT");t.hidden=!set;if(set)t.textContent=Math.round(set);}if(set)gs.setAttribute("transform",`rotate(${gAng(set)} 50 50)`);
+  const gl=$("gLim");gl.style.display=lim?"":"none";if(lim)gl.setAttribute("transform",`rotate(${gAng(lim)} 50 50)`);
+}
 function syncNav(){
   const T=id=>$(id).textContent;
   if(MODE!=="nav"||!hasRoute())return;
@@ -1811,7 +1905,7 @@ function syncNav(){
   nightCheck();
   $("nvSetBox").hidden=!hw||T("set")==="—";
   $("nvSet").textContent=T("set");$("nvCc").textContent=T("setUnit");
-  $("nvSpd").textContent=T("spd");
+  $("nvSpd").textContent=T("spd");gaugeSet(parseFloat(T("spd")),hw&&T("set")!=="—"?parseFloat(T("set")):null,(attrAt(curKm)||{}).lim||null);
   $("nvEta").textContent=T("eta");
   const tg=$("target").value;$("nvSlack").textContent=tg?`目標${tg}・余裕 ${T("slack")}`:"";$("nvSlack").hidden=!tg;
   // 目的地までの進み具合：ここまで走った距離÷（走った距離＋残り）。SA/PAは小さな点、半分に目盛り
