@@ -398,6 +398,142 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
   body.pv .plan{left:auto;right:max(8px,env(safe-area-inset-right));width:min(400px,calc(58vw - 32px))}
   .results{max-height:calc(100dvh - 90px)}
 }
+
+/* ===== 画面のブラッシュアップ（2026-10） ===== */
+/* ===== ブラッシュアップ（今の配置のまま、作りと色を整える） ===== */
+:root{--hwc:#0E6B43;--ctc:#1D4FA3;--goc:#FF8A1F;--card:#fff;--ink2:#12181F;--mut2:#6B7682;--r:16px;--shadow:0 1px 0 rgba(0,0,0,.06),0 6px 18px rgba(0,0,0,.22)}
+@media (orientation:landscape){
+  .nav-stack{right:auto;width:360px;gap:0}
+  .nav-stack>*{margin-top:8px}.nav-stack>*:first-child{margin-top:0}
+  html body .nav-bottom{right:auto;width:360px}
+}
+/* 案内の札：道の種類で色（高速＝緑・一般道＝青）。矢印は大きく、距離と名前の段をそろえる */
+.nav-top{background:var(--hwc);border-radius:var(--r);padding:10px 16px 10px 12px;box-shadow:var(--shadow);flex-wrap:wrap;column-gap:12px;row-gap:8px}
+body.ctyroad .nav-top{background:var(--ctc)}
+.nav-top .ar{font-size:50px;min-width:50px}
+.nav-top .dist{font-size:40px;letter-spacing:-.5px}
+.nav-top .txt{font-size:16px;flex:1}
+.nav-top .ln2{flex-basis:100%;display:flex;background:rgba(0,0,0,.28);border-radius:8px;padding:3px}
+.nav-top .ln2 span{flex:1;height:28px;display:grid;place-items:center;border-radius:6px}
+.nav-top .ln2 span.on{background:var(--goc)}
+.nav-top .ln2 i{width:0;border-left:2px dashed rgba(255,255,255,.55);margin:3px 0}
+.nav-top .ln2 svg{width:22px;height:24px}
+/* 一言は札の下にくっつける（別のカードにしない） */
+.nav-stack .nav-toast{margin-top:0;border-radius:0 0 var(--r) var(--r);background:#FFF4DC;color:#6B4A00;font-size:13.5px;padding:7px 14px;box-shadow:var(--shadow)}
+.nav-stack:has(.nav-toast:not([hidden])) .nav-top{border-radius:var(--r) var(--r) 0 0}
+/* 拡大ポップアップ：細い白枠で、札と同じ角の丸み */
+.inset{width:100%;border:3px solid #fff;border-radius:var(--r);box-shadow:var(--shadow)}
+.inset-map{border-radius:calc(var(--r) - 3px);height:150px}
+@media (orientation:landscape){.inset-map{height:118px}}
+/* 下の到着の札：進み具合は上の縁に細く。％の文字はなし */
+.nav-bottom{border-radius:var(--r);box-shadow:var(--shadow);padding:12px 10px 10px 16px}
+.nav-bottom.pg{padding-top:14px}
+.prog{height:4px;top:9px;left:16px;right:16px}.prog .c{top:-4px;width:12px;height:12px;margin-left:-6px}.prog .h,.prog .s{display:none}
+.prog-p{display:none}
+.nav-bottom .eta b{color:var(--ink2);font-size:32px;letter-spacing:-.5px}
+/* 速さ：道の種類・指定速度・今の速度を1つの札にまとめる */
+.nav-eco{gap:0;background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;align-items:stretch}
+.nav-eco>*{box-shadow:none!important;border-radius:0!important;margin:0!important;align-self:stretch!important;display:flex;align-items:center}
+.nav-eco .road{background:#EEF1EF;color:var(--ink2);padding:0 12px}
+.nav-eco .road.hw{background:var(--hwc);color:#fff}
+.nav-eco .setv{background:#E8F3EC;color:var(--hwc);padding:4px 12px;border-left:1px solid #D9E3DC}
+.nav-eco .spd{background:transparent;padding:4px 14px}
+.nav-eco .spd b,.nav-eco .setv b{font-size:30px}
+/* 右の看板：影をそろえる */
+.sdeck .hsign,.hsign{box-shadow:var(--shadow)}
+/* 夜 */
+body.night .leaflet-tile-pane{filter:invert(.92) hue-rotate(180deg) brightness(.85) contrast(.9)}
+body.night .nav-bottom,body.night .nav-eco{background:#1A222B;color:#E6EBF0}
+body.night .nav-bottom .eta b,body.night .nav-eco .spd b{color:#E6EBF0}
+body.night .nav-eco .road{background:#232C36;color:#E6EBF0}
+body.night .nav-eco .setv{background:#0B4E31;color:#fff;border-color:#0B4E31}
+body.night .nav-bottom button{background:#232C36;color:#E6EBF0}
+body.night .nav-top{background:#0B4E31}body.night.ctyroad .nav-top{background:#163B78}
+body.night .nav-toast{background:#3A2E12;color:#F6D58A}
+body.night .inset{border-color:#2A333D}
+
+body.night .prog{background:#2A333D}
+
+/* 車線は上の案内の札だけに（看板からは外す） */
+.hsign .ln{display:none}
+/* 拡大ポップアップの間は、下の到着の札を下へ逃がして、ポップアップを縦に大きく */
+.nav-bottom{transition:transform .35s ease}
+body:has(#inset:not([hidden])) .nav-bottom{transform:translateY(calc(100% + 24px))}
+@media (orientation:landscape){body:has(#inset:not([hidden])) .inset-map{height:calc(100dvh - 216px)}
+  body:has(#inset:not([hidden])):not(:has(#nvToast:not([hidden]))) .inset-map{height:calc(100dvh - 176px)}}
+/* SA・PAの札：看板の作りのまま、角と影をそろえる */
+.sapa{border-radius:var(--r);box-shadow:inset 0 0 0 3px var(--hwc),inset 0 0 0 5px #fff,var(--shadow);background:var(--hwc)}
+.sapa .kd{color:var(--hwc)}
+.nav-stack .sapa{width:100%;box-sizing:border-box}
+.prog .s{display:block}
+/* SA・PAの行：設備のアイコンを名前の横に並べて、1行を低く */
+.sapa .n{display:flex;align-items:center;gap:8px}
+.sapa .n .nm{display:inline;flex-shrink:1;min-width:0}
+.sapa .fi{margin-top:0;opacity:.9}
+.sapa button{padding:5px 4px}
+/* SA・PAの中の地図：上の札と同じ幅・角・影。出ている間は到着の札を下へ逃がして地図を大きく */
+.nav-stack .sapan{width:100%;border-radius:var(--r);box-shadow:var(--shadow);background:var(--hwc)}
+.sapan .sp-hd{padding:8px 12px}
+.sapan .sp-hd .n{font-size:18px}
+.sapan .sp-leg{background:#F6F7F5}
+body.spon .nav-bottom{transform:translateY(calc(100% + 24px))}
+@media (orientation:landscape){body.spon .sp-map{height:calc(100dvh - 210px)}}
+body.night .sapan .sp-leg{background:#1A222B;color:#E6EBF0}
+@media (orientation:landscape){.sapan .sp-body{align-items:stretch;background:#F6F7F5}
+  body.spon .sapan .sp-map{height:auto;min-height:calc(100dvh - 190px)}
+  .sapan .sp-leg{justify-content:center}}
+body.night .sapan .sp-body{background:#1A222B}
+
+/* SA・PAの中の地図：休める時間・出発の時刻・着く時刻（到着の札の代わり） */
+.sp-rest{display:flex;align-items:baseline;gap:14px;padding:0 12px 8px;color:#fff;white-space:nowrap}
+.sp-rest b{font-family:var(--num);font-size:30px;line-height:1;font-weight:700;letter-spacing:-.5px}
+.sp-rest small{font-size:12px;opacity:.85;margin-left:3px}
+.sp-rest .lt b{font-size:22px}
+.sp-rest.short b:first-child{color:#FFD27A}
+
+/* 休める時間は名前と同じ行に小さく（見取り図を広く） */
+.sp-hd .sp-rest{padding:0;gap:8px;margin-left:auto;flex-shrink:0}
+.sp-hd .sp-rest b,.sp-hd .sp-rest .lt b{font-size:17px;letter-spacing:0}
+.sp-hd .sp-rest small{font-size:10.5px;margin-left:1px}
+.sp-hd .n{flex:1 1 auto}
+@media (orientation:landscape){body.spon .sapan .sp-map{min-height:calc(100dvh - 160px)}}
+
+/* SA・PAの中：案内の札の場所に、休める時間の札（看板の作り） */
+.sa-top{background:var(--hwc);color:#fff;border-radius:var(--r);padding:5px;box-shadow:var(--shadow)}
+.sa-top .st-hd,.sa-top .st-rest{padding:0 10px}
+.sa-top{display:flex;flex-direction:column}
+.sa-top>.st-hd{border:2.5px solid #fff;border-bottom:0;border-radius:11px 11px 0 0;padding:8px 12px 2px;display:flex;align-items:center;gap:8px}
+.sa-top>.st-rest{border:2.5px solid #fff;border-top:0;border-radius:0 0 11px 11px;padding:0 12px 9px;display:flex;align-items:flex-end;gap:16px}
+.sa-top .kd{background:#fff;color:var(--hwc);border-radius:4px;font:700 13px/1 var(--num);padding:4px 6px}
+.sa-top .n{font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sa-top .big b{font-family:var(--num);font-size:46px;line-height:.95;font-weight:700;letter-spacing:-1px}
+.sa-top .big small{font-size:14px;font-weight:700;margin-left:4px}
+.sa-top .sub{display:flex;gap:14px;margin-left:auto;padding-bottom:3px}
+.sa-top .sub b{font-family:var(--num);font-size:22px;font-weight:700}
+.sa-top .sub small{font-size:11px;opacity:.85;margin-left:2px}
+.sa-top .short .big b{color:#FFD27A}
+body.insa .nav-top,body.insa .nav-toast{display:none}
+/* 名前は見取り図の札に出すので、上の札は休める時間だけ */
+.sa-top>.st-hd{display:none}
+.sa-top>.st-rest{border-top:2.5px solid #fff;border-radius:11px;padding:8px 14px 9px;align-items:center}
+@media (orientation:landscape){body.insa .sapan .sp-map{min-height:calc(100dvh - 190px)}}
+body.night .sa-top{background:#0B4E31}
+
+/* SA・PAの中の時計（右上） */
+.sa-clock{position:fixed;z-index:8;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));width:118px;background:#fff;border-radius:var(--r);box-shadow:var(--shadow);padding:8px 8px 6px;text-align:center}
+.sa-clock svg{display:block;width:102px;height:102px}
+.sa-clock .fc{fill:#fff;stroke:#12181F;stroke-width:3}
+.sa-clock .tk{stroke:#12181F;stroke-width:3.2;stroke-linecap:round}.sa-clock .tm{stroke:#9AA3AC;stroke-width:1.6;stroke-linecap:round}
+.sa-clock .hh{stroke:#12181F;stroke-width:5;stroke-linecap:round}.sa-clock .mh{stroke:#12181F;stroke-width:3.4;stroke-linecap:round}
+.sa-clock .sh{stroke:#FF8A1F;stroke-width:1.6;stroke-linecap:round}.sa-clock .cc{fill:#FF8A1F}
+.sa-clock b{display:block;font-family:var(--num);font-size:24px;font-weight:700;line-height:1.1;color:#12181F;margin-top:2px;font-variant-numeric:tabular-nums}
+body.night .sa-clock{background:#1A222B}body.night .sa-clock .fc{fill:#1A222B;stroke:#E6EBF0}
+body.night .sa-clock .tk,body.night .sa-clock .hh,body.night .sa-clock .mh{stroke:#E6EBF0}body.night .sa-clock b{color:#E6EBF0}
+
+.sa-clock .ah line{stroke:#0E6B43;stroke-width:3.4;stroke-linecap:round;stroke-dasharray:4 3}.sa-clock .ah circle{fill:#0E6B43;stroke:#fff;stroke-width:1.5}
+.sa-clock small{display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:700;color:#0E6B43;margin-top:1px;font-family:var(--num)}
+.sa-clock small i{width:9px;height:9px;border-radius:50%;background:#0E6B43;display:inline-block}
+body.night .sa-clock .ah line{stroke:#4CC38A}body.night .sa-clock .ah circle{fill:#4CC38A;stroke:#1A222B}body.night .sa-clock small{color:#4CC38A}body.night .sa-clock small i{background:#4CC38A}
 </style>
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
@@ -419,7 +555,9 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 <div class="hsign" id="hSign" hidden></div>
 <svg class="slead" id="sLead" style="display:none"><path class="o"/><path class="i"/><circle class="a"/><circle class="t"/></svg>
 <div class="sdeck" id="sDeck" hidden></div>
+<div class="sa-clock" id="saClock" hidden><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" class="fc"/><line x1="50" y1="6" x2="50" y2="14" transform="rotate(0 50 50)" class="tk"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(30 50 50)" class="tm"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(60 50 50)" class="tm"/><line x1="50" y1="6" x2="50" y2="14" transform="rotate(90 50 50)" class="tk"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(120 50 50)" class="tm"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(150 50 50)" class="tm"/><line x1="50" y1="6" x2="50" y2="14" transform="rotate(180 50 50)" class="tk"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(210 50 50)" class="tm"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(240 50 50)" class="tm"/><line x1="50" y1="6" x2="50" y2="14" transform="rotate(270 50 50)" class="tk"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(300 50 50)" class="tm"/><line x1="50" y1="8" x2="50" y2="12" transform="rotate(330 50 50)" class="tm"/><g id="ckA" class="ah"><line x1="50" y1="50" x2="50" y2="20"/><circle cx="50" cy="20" r="4.5"/></g><line id="ckH" x1="50" y1="50" x2="50" y2="27" class="hh"/><line id="ckM" x1="50" y1="50" x2="50" y2="15" class="mh"/><line id="ckS" x1="50" y1="58" x2="50" y2="12" class="sh"/><circle cx="50" cy="50" r="3.5" class="cc"/></svg><b id="ckD">--:--</b><small id="ckE"></small></div>
 <div class="nav-stack" id="navStack">
+  <div class="sa-top" id="saTop" hidden><div class="st-hd"><b class="kd" id="stKd">SA</b><span class="n" id="stName"></span></div><div class="st-rest" id="stRest"></div></div>
   <div class="nav-top" id="navTop"><b class="ar" id="nvAr">↑</b><div class="dist" id="nvDist">--</div><div class="txt"><span class="nm" id="nvName"></span><span id="nvTxt"></span></div></div>
   <div class="nav-toast" id="nvToast" hidden><span id="nvToastTxt"></span><button id="rerouteBtn" hidden>再検索</button></div>
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap" hidden><b id="insetAr"></b><span id="insetTxt"></span></div></div>
@@ -454,6 +592,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
     <label>市区町村に入った時に表示<input type="checkbox" id="setArea" checked></label>
     <label>速度取り締まり機を知らせる<input type="checkbox" id="setOrbis" checked></label>
     <label>交通状況を地図に表示<input type="checkbox" id="setTraffic" checked></label>
+    <label>夜は暗い表示（日の入り〜日の出）<input type="checkbox" id="setNight" checked></label>
   </section>
   <section class="settings">
     <h2>走り方・休憩</h2>
@@ -515,7 +654,7 @@ const R=6371;
 const $=id=>document.getElementById(id);
 const VAL="https://valhalla1.openstreetmap.de"; // 経路・道路の種類・標高（無料・キー不要）
 /* ---- 設定（この端末に保存） ---- */
-const SET={orbis:true,voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30,traffic:true};
+const SET={night:true,orbis:true,voice:false,voiceEco:false,sapa:true,area:true,meY:0,ecoRest:false,restMin:30,cruise:90,pref:"fast",gCap:30,traffic:true};
 try{Object.assign(SET,JSON.parse(localStorage.getItem("ecoSettings")||"{}"));}catch(e){}
 function saveSet(){try{localStorage.setItem("ecoSettings",JSON.stringify(SET));}catch(e){}}
 let XLAT=35.3; // 平面に直す時の基準の緯度（ルートの平均）
@@ -943,6 +1082,7 @@ function render(km){
   // 目標に遅れそうなときだけクルーズ設定を上げる（遅れ5分まで+5、それ以上+10、制限速度まで）。余裕が5分戻るまで続ける
   const rem=remainMin(km,TOTAL,tr,f)+jamDelayAhead(km,tr.state==="jam"||tr.state==="slow"),eta=new Date(now.getTime()+rem*60e3);
   const tgt=targetDate(now),slack=tgt?(tgt-eta)/60e3:null;
+  RESTI={slack,eta:eta.getTime(),drive:rem};
   if(slack==null||slack>5)hurry=false;else if(slack<0)hurry=true;
   if(hw&&cc==="cruise"&&hurry&&tr.state==="flow"){
     const up=Math.min(lim,set+(slack!=null&&slack<-5?10:5));
@@ -1183,8 +1323,8 @@ $("closeSheet").addEventListener("click",()=>document.body.classList.remove("she
 $("sheetBg").addEventListener("click",()=>document.body.classList.remove("sheet"));
 $("rerouteBtn").addEventListener("click",()=>{if(curPos)reroute();});
 $("rerouteSheet").addEventListener("click",()=>{if(MODE!=="nav"||!hasRoute())return;document.body.classList.remove("sheet");reroute(true);});
-for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setOrbis","orbis"],["setEcoRest","ecoRest"],["setTraffic","traffic"]]){
-  $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="orbis")drawMarks();if(k==="traffic")applyTraffic();if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
+for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setOrbis","orbis"],["setEcoRest","ecoRest"],["setTraffic","traffic"],["setNight","night"]]){
+  $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="orbis")drawMarks();if(k==="traffic")applyTraffic();if(k==="night")nightCheck(true);if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
 $("voiceTest").addEventListener("click",()=>speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true));
 let saving=false;
@@ -1333,7 +1473,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 13:40";
+const BUILD="2026-10-15 15:10";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -1622,6 +1762,21 @@ function voiceGuide(nj,d,city){
   const lp=nj.x&&nj.x.lp&&th===(city?0.3:1)&&d>(city?0.12:0.5)?`。${nj.x.lp}を走行してください`:"";
   speak((th<=0.08||d<0.05?"まもなく、":fmtSay(d)+"、")+phraseOf(nj)+lp);
 }
+/* 夜：日の入り〜日の出は暗い表示（今いる場所の日の出・日の入りを計算。1分ごと） */
+let nightT=0;
+function sunTimes(lat,lon,d){
+  const rad=Math.PI/180,n=Math.floor((d-new Date(d.getFullYear(),0,0))/864e5),g=2*Math.PI/365*(n-1);
+  const eq=229.18*(0.000075+0.001868*Math.cos(g)-0.032077*Math.sin(g)-0.014615*Math.cos(2*g)-0.040849*Math.sin(2*g));
+  const de=0.006918-0.399912*Math.cos(g)+0.070257*Math.sin(g)-0.006758*Math.cos(2*g)+0.000907*Math.sin(2*g)-0.002697*Math.cos(3*g)+0.00148*Math.sin(3*g);
+  const ha=Math.acos(Math.max(-1,Math.min(1,Math.cos(90.833*rad)/(Math.cos(lat*rad)*Math.cos(de))-Math.tan(lat*rad)*Math.tan(de))))/rad;
+  const mid=720-4*lon-eq,off=-d.getTimezoneOffset(); // 分（その日の0時から、端末の時刻で）
+  return{rise:mid-4*ha+off,set:mid+4*ha+off};
+}
+function nightCheck(force){
+  if(!force&&Date.now()-nightT<60e3)return;nightT=Date.now();
+  let on=false;if(SET.night){const p=curPos||(hasRoute()?posAt(curKm):[35.68,139.7]),d=new Date(),m=d.getHours()*60+d.getMinutes(),t=sunTimes(p[0],p[1],d);on=m<t.rise||m>t.set;}
+  document.body.classList.toggle("night",on);
+}
 function syncNav(){
   const T=id=>$(id).textContent;
   if(MODE!=="nav"||!hasRoute())return;
@@ -1632,6 +1787,14 @@ function syncNav(){
   $("nvTxt").textContent=arrived?"目的地に到着しました":has?T("jctText"):(curPos&&offD>0.1)?"ルートから外れています":"まもなく目的地";
   $("navTop").classList.toggle("soon",$("jctBox").classList.contains("soon"));
   const hw=onHighway();
+  document.body.classList.toggle("ctyroad",!hw);
+  // 車線：上の案内の札の中に（一般道350m・高速2.2km手前から）
+  {const g=GUIDE.find(j=>j.km>curKm+0.02),nt=$("navTop");let ln=nt.querySelector(".ln2");
+    const ok=!arrived&&has&&g&&g.x&&g.x.lanes&&g.km-curKm<=(hw?2.2:0.35);
+    if(ok){const h=g.x.lanes.map((l,i)=>(i?"<i></i>":"")+`<span class="${l.on?"on":""}">${laneSvg(l.g,l.on)}</span>`).join("");
+      if(!ln){ln=document.createElement("div");ln.className="ln2";nt.appendChild(ln);}if(ln.dataset.h!==h){ln.dataset.h=h;ln.innerHTML=h;}}
+    else if(ln)ln.remove();}
+  nightCheck();
   $("nvSetBox").hidden=!hw||T("set")==="—";
   $("nvSet").textContent=T("set");$("nvCc").textContent=T("setUnit");
   $("nvSpd").textContent=T("spd");
@@ -1659,7 +1822,8 @@ function syncNav(){
   const city=isCity(),nj=GUIDE.find(j=>j.km>curKm+0.02),d=nj?nj.km-curKm:null;
   const navOn=(curPos&&performance.now()-A.fixT<15000)||!!timer||drOn(); // GPSが途切れて推定位置で走っている間も出す
   const sp=navOn?saPanelFor():null;
-  $("saPanel").hidden=!sp;if(sp)updateSaPanel(sp);document.body.classList.toggle("spon",!!sp);$("spRe").hidden=!(sp&&off&&curPos&&!rerouting);
+  $("saPanel").hidden=!sp;if(sp)updateSaPanel(sp);document.body.classList.toggle("spon",!!sp);
+  $("saTop").hidden=!(sp&&SP_IN);document.body.classList.toggle("insa",!!(sp&&SP_IN));saClock(!!(sp&&SP_IN));$("spRe").hidden=!(sp&&off&&curPos&&!rerouting);
   const showInset=!sp&&navOn&&nj&&!off&&onRouteF&&d>0&&d<(city?0.3:1.0)&&insetClosed!==nj.km;
   $("inset").hidden=!showInset;
   insetFor=showInset?nj.km:null;
@@ -1723,6 +1887,7 @@ function syncNav(){
 // 名前の下の設備のアイコン：トイレ（どこにもある）・給油・EV充電・食事・店。地図のデータにある物だけ
 function saIcons(x){const {n}=facCount(x.fc);
   return`<span class="fi">${["t","f","e","r","s"].filter(k=>k==="t"||n[k]).map(k=>picSvg(k,16)).join("")}</span>`;}
+let RESTI={slack:null,eta:null,drive:null};
 let sapaHtml="",tunHtml="",detHtml="",wxTick=0,progHtml="",progSaid=true;
 const fmtKm=d=>d<1?Math.round(d*10)*100+"m":(d<10?d.toFixed(1):d.toFixed(0))+"km";
 const saKind=n=>/SA|ＳＡ|サービスエリア/.test(n)?"SA":"PA";
@@ -1951,16 +2116,40 @@ function inSaArea(s,p){
     if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;}
   return inside;
 }
-function saPanelFor(){
+// SA・PAの中：右上にアナログ時計と今の時刻（1秒ごと）
+let ckIv=null,CKETA=null;
+function saClock(on){const el=$("saClock");el.hidden=!on;
+  if(on&&!ckIv){const tick=()=>{const d=new Date(),h=d.getHours()%12,m=d.getMinutes(),s=d.getSeconds();
+      $("ckH").setAttribute("transform",`rotate(${h*30+m*0.5} 50 50)`);$("ckM").setAttribute("transform",`rotate(${m*6+s*0.1} 50 50)`);$("ckS").setAttribute("transform",`rotate(${s*6} 50 50)`);
+      $("ckD").textContent=hm(d);
+      const e=CKETA;$("ckA").style.display=e?"":"none";if(e){$("ckA").setAttribute("transform",`rotate(${(e.getHours()%12)*30+e.getMinutes()*0.5} 50 50)`);$("ckE").innerHTML=`<i></i>着 ${hm(e)}`;}else $("ckE").textContent="";};tick();ckIv=setInterval(tick,1000);}
+  else if(!on&&ckIv){clearInterval(ckIv);ckIv=null;}}
+let SP_IN=false; // SA・PAの中にいる（寄る手前ではなく）
+function saPanelFor(){SP_IN=false;
   const pos=curPos&&performance.now()-A.fixT<15000?curPos:(timer?posAt(curKm):null);
-  if(pos&&(A.spd||0)<60){const s=SAKM.find(x=>x.fc&&distKm(pos,[x.lat,x.lon])<1&&inSaArea(x,pos));if(s)return spClosed===s.name?null:s;}
+  if(pos&&(A.spd||0)<60){const s=SAKM.find(x=>x.fc&&distKm(pos,[x.lat,x.lon])<1&&inSaArea(x,pos));if(s){saArrived(s);if(spClosed===s.name)return null;SP_IN=true;return s;}}
   if(!STOP||STOP.km==null||spClosed===STOP.name)return null;
   const s=SAKM.find(x=>x.name===STOP.name);if(!s||!s.fc)return null;
   const g=GUIDE.filter(x=>!x.stop&&x.km<STOP.km&&x.km>STOP.km-2&&attrAt(Math.max(0,x.km-0.05)).hw).pop(); // SA・PAへの分岐（本線の上にある最後の案内）
   const from=g?g.km+0.03:STOP.km-0.4;
   return curKm>from&&curKm<STOP.km+0.5?s:null;
 }
+function saArrived(s){
+  const key="saIn@"+s.name;if(spoken.has(key)||MODE!=="nav")return;spoken.add(key);
+  const r=restNow(),kind=saKind(s.name)==="SA"?"サービスエリア":"パーキングエリア";
+  speak(`${saShort(s.name)}${kind}に到着しました。`+(r.min>0?`休憩できるのは${r.min}分、${r.until.getHours()}時${r.until.getMinutes()}分までです`:(r.tg?"目標の到着時刻まで、余裕がありません":"")));
+}
+// 休める時間：目標到着があれば余裕の分、なければ設定の「確保する休憩」の残り
+function restNow(){
+  const now=Date.now();let min,tg=false;
+  if(RESTI.slack!=null){min=Math.floor(RESTI.slack);tg=true;}else min=Math.round((+SET.restMin||0)-ECO.stopMin);
+  min=Math.max(0,min);const until=new Date(now+min*60e3),eta=RESTI.drive!=null?new Date(now+min*60e3+RESTI.drive*60e3):null;
+  return{min,until,eta,tg};
+}
 function updateSaPanel(s){
+  if(SP_IN){const r=restNow();$("stKd").textContent=saKind(s.name);$("stName").textContent=saShort(s.name);
+    $("stRest").className="st-rest"+(r.min<10?" short":"");
+    $("stRest").innerHTML=`<div class="big"><b>${r.min}</b><small>分 休める</small></div><div class="sub"><span><b>${hm(r.until)}</b><small>まで</small></span></div>`;CKETA=r.eta;}
   if(!window.L)return;
   const d=STOP&&STOP.name===s.name&&STOP.km!=null?Math.max(0,STOP.km-curKm):0;
   $("spKd").textContent=saKind(s.name);$("spName").textContent=saShort(s.name);$("spName").dataset.n=s.name;
@@ -3166,7 +3355,7 @@ if(MODE==="nav")render(0);
 if(hasRoute()&&ATTR.some(s=>s.lim)&&!MANS.some(m=>m[8]))loadLanes();
 if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
-$("buildTag").textContent="版 "+BUILD;$("updBar").addEventListener("click",e=>{const b=e.currentTarget;if(b.dataset.done){b.hidden=true;delete b.dataset.done;}else hardReload();});
+$("buildTag").textContent="版 "+BUILD;nightCheck(true);setInterval(()=>nightCheck(true),60e3);$("updBar").addEventListener("click",e=>{const b=e.currentTarget;if(b.dataset.done){b.hidden=true;delete b.dataset.done;}else hardReload();});
 // 更新した直後：上に「更新しました」を5秒（自動の更新は気づきにくいので）
 try{const f=localStorage.getItem("updFrom");if(f&&f!==BUILD){localStorage.removeItem("updFrom");const b=$("updBar");b.hidden=false;b.textContent=`最新版（${BUILD}）に更新しました`;b.dataset.done="1";setTimeout(()=>{if(b.dataset.done){b.hidden=true;delete b.dataset.done;}},5000);}else if(f)localStorage.removeItem("updFrom");}catch(e){}$("updNow").addEventListener("click",hardReload);setTimeout(()=>checkUpdate(true),1500);
 // 開きっぱなしの間も15分ごとに確かめる（開いた時・戻った時だけだと、使っている間の更新に気づかない）
