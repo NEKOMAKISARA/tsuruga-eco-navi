@@ -626,6 +626,10 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
 .nav-eco .spd .gset{grid-column:2;grid-row:1/3;align-self:center;font-size:28px;line-height:1;padding:4px 10px 5px;border-radius:12px;letter-spacing:-.5px}
 .nav-eco .spd small{grid-column:3;grid-row:1/3;align-self:end;padding-bottom:3px}
 .nav-eco .spd .lbar{grid-column:1/4}
+
+.results button.gfind{display:flex;align-items:center;justify-content:center;gap:10px;color:#1a73e8;font-weight:700;background:#F4F7FE}
+.results button.gfind small{display:inline;margin:0;color:#6B7682;font-weight:500}
+.results button.gfind:disabled{color:#9AA3AC}
 </style>
 
 <div class="mapbox"><div id="map"><div id="mapNote" hidden></div><div id="rot"><div id="gmap"></div><div id="lmap" hidden></div></div></div></div>
@@ -1407,9 +1411,10 @@ $("fullBtn").addEventListener("click",async()=>{
 });
 document.addEventListener("fullscreenchange",()=>{$("fullBtn").textContent=document.fullscreenElement?"全画面を終了":"全画面";});
 /* ---- API使用量（この端末で今日使った分。Google側の実数ではない） ---- */
-function usageGet(){const t=new Date().toDateString();let u={};try{u=JSON.parse(localStorage.getItem("apiUsage")||"{}");}catch(e){}return u.d===t?Object.assign({geo:0,groute:0},u):{d:t,gmap:0,route:0,geo:0,groute:0};}
+const GPLACE_CAP=20; // Googleの場所検索の1日の上限（この端末）
+function usageGet(){const t=new Date().toDateString();let u={};try{u=JSON.parse(localStorage.getItem("apiUsage")||"{}");}catch(e){}return u.d===t?Object.assign({geo:0,groute:0,gplace:0},u):{d:t,gmap:0,route:0,geo:0,groute:0,gplace:0};}
 function usageBump(k){const u=usageGet();u[k]=(u[k]||0)+1;try{localStorage.setItem("apiUsage",JSON.stringify(u));}catch(e){}showUsage();}
-function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回<br>Googleの経路（料金・渋滞） <b>${u.groute}</b> / ${SET.gCap}回　経路検索 <b>${u.route}</b>回`;}
+function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回<br>Googleの経路（料金・渋滞） <b>${u.groute}</b> / ${SET.gCap}回<br>Googleの場所検索 <b>${u.gplace||0}</b> / ${GPLACE_CAP}回　経路検索 <b>${u.route}</b>回`;}
 showUsage();
 const openSheet=()=>document.body.classList.add("sheet");
 $("menuBtn").addEventListener("click",()=>{openSheet();checkUpdate();});$("menuBtn2").addEventListener("click",openSheet);
@@ -1567,7 +1572,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 16:30";
+const BUILD="2026-10-15 16:40";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2453,12 +2458,35 @@ async function search(q){
   if(list.length<3&&!isAddr){box.innerHTML='<div class="msg">お店の名前で探しています…</div>';
     const more=await nameNear(q,c);if(seq!==searchSeq)return;
     for(const x of more)if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.05))list.push(x);}
-  if(!list.length){box.innerHTML='<div class="msg">見つかりませんでした</div>';return;}
+  if(!list.length){box.innerHTML='<div class="msg">見つかりませんでした</div>';gButton(q,c,seq,box);return;}
   box.innerHTML="";
   for(const x of list.slice(0,12)){const bt=document.createElement("button");
     bt.className="rw";bt.innerHTML=rowHtml(PARK_RE.test(x.name)?"pk":"pl",x.name,x.addr,x.d);
     bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);
     if(x.wiki&&!x.addr)geoGsi([x.lat,x.lon]).then(g=>{if(seq!==searchSeq)return;x.addr=g.pref+g.full+(g.town||"");bt.innerHTML=rowHtml("pl",x.name,x.addr,x.d);}).catch(()=>{});}
+  gButton(q,c,seq,box);
+}
+/* Googleで探す：押した時だけGoogleの場所検索（Places API の Text Search）を使う。自動では使わない。1日の回数に上限 */
+const gPlaceOk=()=>typeof google!=="undefined"&&google.maps&&typeof google.maps.importLibrary==="function"&&gState==="ok";
+function gButton(q,c,seq,box){
+  if(!gPlaceOk())return;
+  const left=GPLACE_CAP-(usageGet().gplace||0),bt=document.createElement("button");bt.type="button";bt.className="gfind";
+  bt.innerHTML=left>0?`Googleで探す<small>今日あと${left}回</small>`:`Googleで探す<small>今日の上限に達しました</small>`;bt.disabled=left<=0;
+  bt.addEventListener("click",async()=>{if(seq!==searchSeq)return;bt.disabled=true;bt.innerHTML="Googleで探しています…";
+    try{const {Place}=await google.maps.importLibrary("places");usageBump("gplace");
+      const {places}=await Place.searchByText({textQuery:q,fields:["displayName","formattedAddress","location"],language:"ja",region:"jp",maxResultCount:8,
+        locationBias:{center:{lat:c[0],lng:c[1]},radius:50000}});
+      if(seq!==searchSeq)return;
+      const gl=(places||[]).map(p=>({name:p.displayName||"",addr:(p.formattedAddress||"").replace(/^日本、?\s*/,"").replace(/〒\d{3}-?\d{4}\s*/,""),lat:p.location.lat(),lon:p.location.lng()})).map(x=>Object.assign(x,{d:distKm(c,[x.lat,x.lon])}));
+      bt.remove();
+      if(!gl.length){box.insertAdjacentHTML("beforeend",'<div class="msg">Googleでも見つかりませんでした</div>');return;}
+      const hd=document.createElement("div");hd.className="hh";hd.textContent="Googleの検索結果";box.prepend(hd);
+      gl.slice().reverse().forEach(x=>{const b=document.createElement("button");b.className="rw";b.innerHTML=rowHtml("pl",x.name,x.addr,x.d);
+        b.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});hd.after(b);});
+      box.querySelector(".msg")&&box.querySelector(".msg").remove();box.scrollTop=0;
+    }catch(e){bt.disabled=false;bt.innerHTML=`Googleで探せませんでした<small>${/PERMISSION|not enabled|ApiNotActivated|REQUEST_DENIED/i.test(String(e&&e.message||e))?"キーで Places API (New) を有効にしてください":"もう一度"}</small>`;}
+  });
+  box.appendChild(bt);
 }
 // 名前を文字の種類で区切る（カタカナ・漢字・英数字の切れ目）。「店」「支店」は外す
 function nameParts(q){
