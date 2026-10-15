@@ -1578,7 +1578,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 17:10";
+const BUILD="2026-10-15 18:20";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2708,7 +2708,10 @@ async function fetchTrips(from,heading,opt={}){
     // 立ち寄り先（SA・PA）は本線ではなく中の道に合わせる（本線に合わせると素通りするため）
     const st=STOP?[{lat:STOP.lat,lon:STOP.lon,type:"break",...(filt?{search_filter:{max_road_class:"unclassified"}}:{})}]:[];
     const q={locations:[start,...(opt.vias||[]),...st,{lat:DEST.lat,lon:DEST.lon,type:"break"}],costing:"auto",
-      costing_options:{auto:Object.assign({use_living_streets:0,use_tracks:0,service_penalty:60,maneuver_penalty:12,exclude_unpaved:true},SET.pref==="notoll"?{use_tolls:0}:{use_highways:1})},directions_options:{language:"ja-JP",units:"km"}};
+      // 裏道も使う：生活道路・細い道を嫌わない（Valhallaの標準より少し使いやすく）。未舗装と林道だけは使わない。
+      // 道の格の絞り込み（出発地・目的地から離れると幹線しか探さない）を切って、本当に早い道を探す（遠回りの元）
+      costing_options:{auto:Object.assign({use_living_streets:0.5,use_tracks:0,service_penalty:15,maneuver_penalty:5,exclude_unpaved:true},
+        filt!=="nohp"?{disable_hierarchy_pruning:true}:{},SET.pref==="notoll"?{use_tolls:0}:{use_highways:1})},directions_options:{language:"ja-JP",units:"km"}};
     if(opt.alt&&!STOP&&!(opt.vias||[]).length)q.alternates=opt.alt;
     if(AVOID.length&&!opt.noAvoid)q.exclude_locations=AVOID.slice(0,50); // 冬期閉鎖の道を避ける
     const r=await fetch(VAL+"/route?json="+encodeURIComponent(JSON.stringify(q)));
@@ -2716,14 +2719,15 @@ async function fetchTrips(from,heading,opt={}){
     usageBump("route");const d=await r.json();
     return[parseTrip(d),...(d.alternates||[]).map(a=>parseTrip(a))];
   };
-  try{return await go(true);}catch(e){if(!STOP)throw e;return go(false);}
+  // 公開サーバーが重い探し方を断った時は、ふつうの探し方でやり直す
+  try{return await go(true);}catch(e){try{return await go("nohp");}catch(e2){if(!STOP)throw e2;return go(false);}}
 }
 const fetchTrip=async(from,heading,opt)=>(await fetchTrips(from,heading,opt))[0];
 // 別の経路（Google）の線の上に経由点を置く：一定間隔で、まっすぐな所に（分岐の近くに置くとIC・SAでUターンするため）。向きも付けて反対車線に乗らないように
 // 公開のValhallaは1回10地点までなので、経由点は8つまで
 function followVias(path){
   const c=[0];for(let i=1;i<path.length;i++)c[i]=c[i-1]+distKm(path[i-1],path[i]);
-  const T=c[c.length-1],L=Math.max(3,T/9),out=[];
+  const T=c[c.length-1],L=Math.max(0.8,T/9),out=[]; // 近い所でもGoogleと同じ裏道を通るよう、1km弱おきから
   const at=k=>{let lo=0,hi=c.length-1;if(k<=0)return path[0];if(k>=T)return path[hi];while(hi-lo>1){const m=(lo+hi)>>1;if(c[m]<k)lo=m;else hi=m;}const t=(k-c[lo])/(c[hi]-c[lo]||1);return[path[lo][0]+t*(path[hi][0]-path[lo][0]),path[lo][1]+t*(path[hi][1]-path[lo][1])];};
   const angd=(a,b)=>Math.abs(((a-b)%360+540)%360-180);
   for(let k=L;k<T-L*0.6&&out.length<8;k+=L)
@@ -2785,9 +2789,19 @@ function jamDelayAhead(km,inJam){
 }
 const yen=v=>"¥"+Math.round(v).toLocaleString("ja-JP");
 // 選んだ経路を案内する経路にする：Googleの経路はValhallaになぞらせる
+// Googleの経路をなぞる。経由点が隣の道（高架の下の道・反対車線など）に付くと大回りになるので、
+// Googleより長すぎたら経由点を減らし、それでもだめならValhallaだけの経路と比べて短い方にする
+async function followTrip(g,from,hd){
+  const gl=g.dist||0,ok=t=>!gl||t.len<=gl*1.06+0.4;
+  let v=followVias(g.path),t=await fetchTrip(from,hd,{vias:v});if(ok(t))return t;
+  const best=[t];
+  if(v.length>1){v=v.filter((_,k)=>k%2);try{t=await fetchTrip(from,hd,{vias:v});if(ok(t))return t;best.push(t);}catch(e){}}
+  try{best.push(await fetchTrip(from,hd));}catch(e){}
+  return best.sort((a,b)=>a.len-b.len)[0];
+}
 async function pickOpt(i,from,hd,keepSA){
   const op=OPTS[i];if(!op)return;OPT_I=i;
-  if(!op.trip)op.trip=await fetchTrip(from,hd,{vias:followVias(op.path)});
+  if(!op.trip)op.trip=await followTrip(op,from,hd);
   setRoute(op.trip,keepSA);applyG(op);
 }
 function applyG(op){
@@ -3429,7 +3443,7 @@ async function reroute(force,opt){
   const hd=onRouteF?bearing(posAt(Math.max(0,curKm-0.05)),posAt(curKm+0.05)):(gpsSpeed??0)>5?(gpsHeading??A.moveHd):A.moveHd;
   rerouting=true;lastReroute=Date.now();syncNav();
   try{
-    const t=await fetchTrip(from,hd,opt&&opt.vias?{vias:opt.vias}:{});
+    const t=opt&&opt.g?await followTrip(opt.g,from,hd):await fetchTrip(from,hd,opt&&opt.vias?{vias:opt.vias}:{});
     setRoute(t,true);if(opt&&opt.g){OPT_I=0;OPTS[0].trip=t;applyG(opt.g);}
     rerouteMsg="";trackKm=null;const pr=projectTrack(from[0],from[1],Date.now());offD=curPos?pr.d:0;
     if(timer){demoKm=pr.km;$("sim").value=pr.km;}
