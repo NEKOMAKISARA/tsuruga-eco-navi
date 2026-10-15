@@ -72,6 +72,9 @@ button.primary{background:var(--ev);color:#06231f;border-color:var(--ev)}
 button:focus-visible,input:focus-visible{outline:3px solid var(--glide);outline-offset:2px}
 div.demo{display:flex;flex-direction:column;gap:6px;border:1px dashed var(--line);border-radius:12px;padding:12px 14px}
 .demo label{font-size:13px;color:var(--muted);display:flex;justify-content:space-between}
+.demo-sp{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}
+.demo-sp button{flex:1;padding:6px 0;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font-size:13px}
+.demo-sp button.on{background:var(--glide);border-color:var(--glide);color:#fff;font-weight:700}
 input[type=range]{width:100%;accent-color:var(--glide)}
 .note{font-size:12px;color:var(--muted);margin:0}
 .pace{flex-basis:100%;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -732,6 +735,7 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
     <label for="sim"><span>デモ：ルート上の位置</span><span id="simKm">0 km</span></label>
     <input type="range" id="sim" min="0" max="10" step="0.5" value="0">
     <label class="chk" for="jamSim"><input type="checkbox" id="jamSim"> 渋滞を再現する</label>
+    <div class="demo-sp" id="demoSp">速さ<button type="button" data-x="1">実際</button><button type="button" data-x="2">2倍</button><button type="button" data-x="5">5倍</button><button type="button" data-x="20">20倍</button><button type="button" data-x="80">80倍</button></div>
     <button id="playBtn">デモ走行を再生</button>
   </div>
   <div class="info">
@@ -1578,7 +1582,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 18:20";
+const BUILD="2026-10-16 01:05";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -3590,30 +3594,35 @@ function renderSoon(km){const first=rsKm==null;rsKm=km;if(first)setTimeout(()=>{
 function showErr(where,e){GPSI.err=`${where}：${(e&&e.message)||e}`;try{console.error(e);}catch(_){}}
 addEventListener("error",e=>{GPSI.err=`エラー：${e.message||e}`;});
 
-/* ---- デモ：選んだルートを早送りで走る（1ステップ＝20秒ぶん） ---- */
+/* ---- デモ：選んだルートを走る。速さは 実際の速さ〜80倍（0.25秒ごとに 0.25秒×倍率ぶん進める） ---- */
 $("sim").addEventListener("input",e=>{if(!hasRoute())return;const km=+e.target.value;$("simKm").textContent=km.toFixed(0)+" km";hist=[];gpsSpeed=null;curPos=null;demoKm=null;feedFix(km,null,0);render(km);});
 let demoAlt=100,demoKm=null; // スライダーは0.5km刻みで丸まるので、デモの位置は別に持つ
-let timer=null;
+let timer=null,demoX=5,demoV=null,demoVT=0,demoAcc=0;
+try{const x=+localStorage.getItem("demoX");if([1,2,5,20,80].includes(x))demoX=x;}catch(e){}
+function demoSpUi(){for(const b of $("demoSp").querySelectorAll("button"))b.classList.toggle("on",+b.dataset.x===demoX);if(timer)setStatus("demo",demoX===1?"デモ走行中":`デモ走行中（${demoX}倍）`);}
+$("demoSp").addEventListener("click",e=>{const b=e.target.closest("button[data-x]");if(!b)return;demoX=+b.dataset.x;try{localStorage.setItem("demoX",demoX);}catch(_){}demoSpUi();});
+demoSpUi();
 function stopPlay(){if(timer){clearInterval(timer);timer=null;$("playBtn").textContent="デモ走行を再生";}}
 $("playBtn").addEventListener("click",()=>{
   if(timer){stopPlay();return;}
   if(!hasRoute()){$("playBtn").textContent="先に目的地を決めてください";return;}
   if(MODE!=="nav"){MODE="nav";applyMapMode();}
   document.body.classList.remove("sheet");
-  $("playBtn").textContent="停止";setStatus("demo","デモ走行中（早送り）");
+  $("playBtn").textContent="停止";demoV=null;demoAcc=0;
   timer=setInterval(()=>{
-    const jam=$("jamSim").checked,pos=demoKm??+$("sim").value,at=attrAt(pos);
-    const v=jam?12+Math.random()*16:at.hw?plannedSet(pos)-3+Math.random()*6:Math.max(15,at.v/GENK);
-    let km=pos;
-    for(let j=0;j<4;j++){ // 20秒ぶんを5秒ごとの4サンプルで記録
-      simOffset+=5000;const dk=v*5/3600;km=Math.min(TOTAL,km+dk);
-      demoAlt=ECO.z?ECO.z[Math.min(ECO.z.length-1,Math.floor(km/ECO.step))]:demoAlt;addSample(km,v,demoAlt+(Math.random()-0.5)*6);
-    }
+    const jam=$("jamSim").checked,pos=demoKm??+$("sim").value,at=attrAt(pos),sec=0.25*demoX; // この1回で進める時間（秒）
+    // 速さは走った時間5秒ごとに決め直す（毎回変えると、実際の速さの時に表示がばたつく）
+    demoVT-=sec;if(demoV==null||demoVT<=0){demoV=jam?12+Math.random()*16:at.hw?plannedSet(pos)-3+Math.random()*6:Math.max(15,at.v/GENK);demoVT=5;}
+    const v=demoV;let km=pos;
+    simOffset+=sec*1000;km=Math.min(TOTAL,km+v*sec/3600);
+    demoAcc+=sec;if(demoAcc>=5){demoAcc=0; // 記録は走った時間5秒ごと
+      demoAlt=ECO.z?ECO.z[Math.min(ECO.z.length-1,Math.floor(km/ECO.step))]:demoAlt;addSample(km,v,demoAlt+(Math.random()-0.5)*6);}
     if(km>=TOTAL)stopPlay();
     feedFix(km,null,(km-pos)/0.25*3600);curPos=null;demoKm=km;
-    $("sim").value=km;$("simKm").textContent=km.toFixed(1)+" km";
+    $("sim").value=km;$("simKm").textContent=km.toFixed(km<10?2:1)+" km";
     gpsSpeed=v;passStop(km);render(km);
   },250);
+  demoSpUi();
 });
 setInterval(()=>render(curKm),20000);
 updateCal();
