@@ -1567,7 +1567,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-15 16:20";
+const BUILD="2026-10-15 16:30";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2449,12 +2449,40 @@ async function search(q){
   const order=isAddr?[...b,...a,...w]:kana?[...w,...a,...b]:[...a,...w,...b];
   const list=[];for(const x of order)if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<(x.wiki||y.wiki?0.15:0.05)))list.push(x);
   w.forEach(x=>x.d=distKm(c,[x.lat,x.lon]));
+  // 少ない時：お店の名前と支店名（「ニューグランド」＋「新所沢店」）に分けて、近く（40km）の地図のデータから探す
+  if(list.length<3&&!isAddr){box.innerHTML='<div class="msg">お店の名前で探しています…</div>';
+    const more=await nameNear(q,c);if(seq!==searchSeq)return;
+    for(const x of more)if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.05))list.push(x);}
   if(!list.length){box.innerHTML='<div class="msg">見つかりませんでした</div>';return;}
   box.innerHTML="";
   for(const x of list.slice(0,12)){const bt=document.createElement("button");
     bt.className="rw";bt.innerHTML=rowHtml(PARK_RE.test(x.name)?"pk":"pl",x.name,x.addr,x.d);
     bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);
     if(x.wiki&&!x.addr)geoGsi([x.lat,x.lon]).then(g=>{if(seq!==searchSeq)return;x.addr=g.pref+g.full+(g.town||"");bt.innerHTML=rowHtml("pl",x.name,x.addr,x.d);}).catch(()=>{});}
+}
+// 名前を文字の種類で区切る（カタカナ・漢字・英数字の切れ目）。「店」「支店」は外す
+function nameParts(q){
+  const t=q.replace(/[\s　・]+/g," ").replace(/(本店|支店|店)(?=\s|$)/g,"").trim();
+  const out=[];for(const w of t.split(" "))out.push(...(w.match(/[\u30a0-\u30ffー]+|[\u4e00-\u9fff々ヶ]+|[\u3040-\u309f]+|[A-Za-z0-9&'.\-]+/g)||[]));
+  return out.filter(x=>x.length>=2);
+}
+async function nameNear(q,c){
+  const parts=nameParts(q);if(!parts.length)return[];
+  const main=parts.slice().sort((a,b)=>b.length-a.length)[0],esc=t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  const oq=`[out:json][timeout:25];nwr(around:40000,${c[0].toFixed(4)},${c[1].toFixed(4)})["name"~"${esc(main)}"];out center tags 60;`;
+  for(const u of OVERPASS){
+    try{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),30000);
+      const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(oq),signal:ctl.signal});
+      clearTimeout(tm);if(!r.ok)continue;
+      const els=(await r.json()).elements||[];
+      return els.map(e=>{const t=e.tags||{},lat=e.lat??(e.center&&e.center.lat),lon=e.lon??(e.center&&e.center.lon);if(lat==null)return null;
+          const full=[t.name,t.branch,t["addr:city"],t["addr:suburb"],t["addr:quarter"],t["addr:neighbourhood"]].filter(Boolean).join(" ");
+          const hit=parts.filter(p=>full.includes(p)).length; // 支店名・地名まで合っている順
+          return{name:t.name+(t.branch?" "+t.branch:""),addr:[t["addr:city"],t["addr:quarter"]||t["addr:suburb"]].filter(Boolean).join(""),lat,lon,d:distKm(c,[lat,lon]),hit};})
+        .filter(Boolean).sort((a,b)=>b.hit-a.hit||a.d-b.d).slice(0,10);
+    }catch(e){}
+  }
+  return[];
 }
 function mapCenter(){if(gmap){const c=gmap.getCenter();return[c.lat(),c.lng()];}if(map){const c=map.getCenter();return[c.lat,c.lng];}return[35.68,139.6];}
 $("searchForm").addEventListener("submit",e=>{e.preventDefault();search($("q").value);});
