@@ -163,6 +163,7 @@ body.sheet .app .jct{display:none}
 .info{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted)}
 .settings>button{width:100%}
 .settings .usage{background:none;border:0;padding:0}
+.vdiag{display:block;font-size:12px;color:var(--muted);line-height:1.4}
 .nav-stack{position:fixed;z-index:5;left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:6px}
 .nav-top{background:#0f7d45;color:#fff;border-radius:14px;padding:10px 14px;display:flex;gap:12px;align-items:center;box-shadow:0 3px 12px rgba(0,0,0,.35)}
 .nav-top.soon{background:#0b6a3a}
@@ -690,6 +691,7 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
     <label>音声案内<input type="checkbox" id="setVoice"></label>
     <label>指定速度の変化も読み上げ<input type="checkbox" id="setVoiceEco"></label>
     <button id="voiceTest">音声のテスト</button>
+    <small id="voiceDiag" class="vdiag"></small>
     <label>好きな声で案内（声のパック）<input type="checkbox" id="setVoicePack"></label>
     <div class="vp-row"><span id="vpInfo">声のパック：なし</span><label class="vp-btn">読み込む<input type="file" id="vpFile" accept=".zip,application/zip" hidden></label><button type="button" class="vp-btn" id="vpDel" hidden>消す</button></div>
   </section>
@@ -1435,7 +1437,7 @@ $("rerouteSheet").addEventListener("click",()=>{if(MODE!=="nav"||!hasRoute())ret
 for(const [id,k] of [["setVoice","voice"],["setVoiceEco","voiceEco"],["setSapa","sapa"],["setArea","area"],["setOrbis","orbis"],["setEcoRest","ecoRest"],["setTraffic","traffic"],["setNight","night"],["setVoicePack","voicePack"]]){
   $(id).checked=!!SET[k];$(id).addEventListener("change",e=>{SET[k]=e.target.checked;saveSet();if(k==="orbis")drawMarks();if(k==="traffic")applyTraffic();if(k==="night")nightCheck(true);if(k==="voice"&&SET.voice)speak("音声案内をオンにしました",true);render(curKm);});
 }
-$("voiceTest").addEventListener("click",()=>{vpCtx();if(SET.voicePack&&VP.clips)speak("1キロ先、左方向、出口です。左車線を走行してください",true);else speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true);});
+$("voiceTest").addEventListener("click",()=>{if(VP.clips)vpCtx();ttsUnlock();if(SET.voicePack&&VP.clips)speak("1キロ先、左方向、出口です。左車線を走行してください",true);else speak("1キロ先、左方向、新東名、静岡、名古屋方面です",true);});
 let saving=false;
 $("saveMapBtn").addEventListener("click",async()=>{
   if(saving)return;const btn=$("saveMapBtn");
@@ -1582,7 +1584,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-16 01:05";
+const BUILD="2026-10-18 10:10";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -1826,12 +1828,38 @@ function speak(t,force){
   ttsSpeak(s);
 }
 // 機械の声。好きな声がまだ話している時は、終わってから
-function ttsSpeak(s){
-  if(!("speechSynthesis" in window))return;
-  const wait=VP.ctx?Math.max(0,(VP.until-VP.ctx.currentTime)*1000):0;
-  const go=()=>{const u=new SpeechSynthesisUtterance(s);u.lang="ja-JP";u.rate=1.05;speechSynthesis.speak(u);};
+// iPhoneの読み上げは、止まったまま黙ることがある（他のアプリの音・電話・画面を消した後など）。
+// ・話す前に resume（一時停止のままのことがある）
+// ・言った文は消えないように持っておく（途中で捨てられると、それ以降 話さなくなる）
+// ・4秒たっても話し始めなければ、詰まった列を捨てて言い直す
+// ・アプリに戻った後は、次に画面に触れた時に無音の一言で読み上げを起こし直す
+const TTS={keep:[],last:"",lastT:0,startT:0,err:"",unlock:false};
+function ttsUnlock(){if(!("speechSynthesis" in window))return;try{speechSynthesis.cancel();speechSynthesis.resume();const u=new SpeechSynthesisUtterance(" ");u.volume=0;u.lang="ja-JP";speechSynthesis.speak(u);TTS.keep.push(u);TTS.unlock=false;}catch(e){}}
+addEventListener("touchend",()=>{if(TTS.unlock)ttsUnlock();},{passive:true});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&"speechSynthesis" in window){try{speechSynthesis.cancel();}catch(e){}TTS.unlock=true;}});
+function ttsSpeak(s,retry){
+  if(!("speechSynthesis" in window)){TTS.err="この端末は読み上げ不可";vDiag();return;}
+  const wait=VP.ctx&&VP.clips?Math.max(0,(VP.until-VP.ctx.currentTime)*1000):0;
+  const go=()=>{
+    try{speechSynthesis.resume();}catch(e){}
+    const u=new SpeechSynthesisUtterance(s);u.lang="ja-JP";u.rate=1.05;
+    let started=false;
+    u.onstart=()=>{started=true;TTS.startT=Date.now();TTS.err="";vDiag();};
+    u.onend=()=>{const i=TTS.keep.indexOf(u);if(i>=0)TTS.keep.splice(i,1);};
+    u.onerror=e=>{TTS.err="読み上げエラー："+(e&&e.error||"");const i=TTS.keep.indexOf(u);if(i>=0)TTS.keep.splice(i,1);vDiag();};
+    TTS.keep.push(u);if(TTS.keep.length>20)TTS.keep.shift();
+    TTS.last=s;TTS.lastT=Date.now();
+    try{speechSynthesis.speak(u);}catch(e){TTS.err="読み上げエラー："+e.message;}
+    vDiag();
+    // 前の文が長い時もあるので、話し中でなければ4秒、話し中なら12秒で詰まりと見る
+    setTimeout(()=>{if(started||retry)return;
+      if(speechSynthesis.speaking&&Date.now()-TTS.startT<12000&&TTS.startT>TTS.lastT-12000)return;
+      try{speechSynthesis.cancel();}catch(e){}TTS.err="詰まっていたので言い直しました";ttsSpeak(s,true);},4000);
+  };
   if(wait>50)setTimeout(go,wait);else go();
 }
+function vDiag(){const e=$("voiceDiag");if(!e)return;
+  e.textContent=(SET.voice?"":"音声案内がOFFです。")+(TTS.last?`最後の読み上げ ${hm(new Date(TTS.lastT))}「${TTS.last.slice(0,24)}${TTS.last.length>24?"…":""}」`:"まだ読み上げていません")+(TTS.err?` ・ ${TTS.err}`:"");}
 /* ---- 好きな声（声のパック）：言葉ごとの音声を入れた zip（無圧縮）。manifest.json に {clips:{"言葉":"ファイル名"}}。
    読み上げる文を「、」「。」で区切り、区切りごとに一覧の言葉（の組み合わせ）で言えれば、つないで流す。
    地名などで1つでも言えない所があれば、その文は全部機械の声 ---- */
@@ -1891,7 +1919,7 @@ async function vpBuf(w){
   const f=VP.files.get(VP.clips[w]),b=await VP.ctx.decodeAudioData(f.slice().buffer);VP.bufs.set(w,b);return b;
 }
 async function vpSpeak(s){
-  const plan=vpPlan(s);if(!plan)return false;const ctx=vpCtx();if(!ctx)return false;
+  const plan=vpPlan(s);if(!plan)return false;const ctx=vpCtx();if(!ctx||ctx.state!=="running")return false; // 音が出せない状態なら機械の声に任せる
   try{const bufs=await Promise.all(plan.map(x=>x.w?vpBuf(x.w):null));
     let t=Math.max(ctx.currentTime+0.05,VP.until+0.15);
     plan.forEach((x,i)=>{if(!x.w){t+=x.gap;return;}const src=ctx.createBufferSource();src.buffer=bufs[i];src.connect(ctx.destination);src.start(t);t+=bufs[i].duration;});
@@ -1899,6 +1927,7 @@ async function vpSpeak(s){
   }catch(e){return false;}
 }
 vpRestore();
+vDiag();
 $("vpFile").addEventListener("change",async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;
   try{vpUse(unzipStored(await f.arrayBuffer()));await vpStore(f);vpCtx();SET.voicePack=true;$("setVoicePack").checked=true;saveSet();speak("音声案内をオンにしました",true);}
   catch(err){$("vpInfo").textContent="読み込めませんでした："+err.message;}});
