@@ -1584,7 +1584,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-18 10:10";
+const BUILD="2026-10-18 11:05";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -3364,7 +3364,11 @@ function pickSA(els){
     const a=xy(...posAt(Math.max(0,pr.km-0.05))),b=xy(...posAt(pr.km+0.05)),c=xy(lat,lon),L=Math.hypot(b[0]-a[0],b[1]-a[1])||1;
     const side=((b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]))/L;
     const name=(e.tags&&e.tags.name)||(e.tags&&e.tags.highway==="services"?"SA":"PA");
-    cand.push({row:e.row,name,base:name.replace(/[\s　]*[（(](上り|下り|内回り|外回り|東行き?|西行き?|南行き?|北行き?)[)）]/g,"").replace(/ＳＡ/g,"SA").replace(/ＰＡ/g,"PA"),lat,lon,km:pr.km,side});
+    // 上り・下りが1つにまとまっている所（高坂SAなど）は、中心が本線の間にあり右側に出ることがある。
+    // 敷地の形が本線の左にもかかっていれば、こちら側からも入れる
+    let both=false;const ln=e.row&&e.row[4];
+    if(ln&&ln.length>=6)for(let i=0;i<ln.length;i+=2){const p=xy(lat+ln[i]/1e5,lon+ln[i+1]/1e5);if(((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]))/L>0.005){both=true;break;}}
+    cand.push({row:e.row,name,both,base:name.replace(/[\s　]*[（(](上り|下り|内回り|外回り|東行き?|西行き?|南行き?|北行き?)[)）]/g,"").replace(/ＳＡ/g,"SA").replace(/ＰＡ/g,"PA"),lat,lon,km:pr.km,side});
   }
   // 上り・下りの組ごとに「左にある方」の向きを数え、多い方をこの旅の向きとする（地図データの位置がずれている所があるため）
   const dirOf=n=>(n.match(/[（(](上り|下り|内回り|外回り)[)）]/)||[])[1]||"";
@@ -3378,10 +3382,14 @@ function pickSA(els){
     const mine=myDir&&grp.filter(y=>dirOf(y.name)===myDir);
     const best=mine&&mine.length?mine.reduce((p,y)=>y.side>p.side?y:p):grp.reduce((p,y)=>y.side>p.side?y:p);
     const dx=dirOf(x.name);
-    if(best!==x||(myDir&&dx&&dx!==myDir)||(!(myDir&&dx===myDir)&&x.side<-0.03))continue; // 反対車線側
+    if(best!==x||(myDir&&dx&&dx!==myDir)||(!(myDir&&dx===myDir)&&x.side<-0.03&&!(x.both&&!dx)))continue; // 反対車線側
     if(got.some(g=>g.base===x.base&&Math.abs(g.km-x.km)<3))continue;
+    // 同じSAの別の名前（「ウォークインゲート高坂SA」と「高坂SA」など）は、短い方の名前で1つに
+    const dup=got.findIndex(g=>Math.abs(g.km-x.km)<1.5&&(g.base.includes(x.base)||x.base.includes(g.base)));
+    if(dup>=0){if(x.base.length<got[dup].base.length)got[dup]=x;continue;}
     got.push(x);
   }
+  got.sort((p,q)=>p.km-q.km);
   SAS=got.map(({name,lat,lon,row})=>row?{name,lat,lon,fc:row[4].length||row[5].length?[row[2],row[3],row[4],row[5]]:null}:{name,lat,lon});
   buildIndex();drawMarks();saveRoute();render(curKm);if(MODE==="preview"&&!$("pvGo").disabled)showPreview();
 }
