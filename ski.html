@@ -29,7 +29,9 @@ header{position:sticky;top:0;z-index:1000;background:var(--card);border-bottom:1
 .opts label{display:flex;align-items:center;gap:4px}
 main{display:grid;grid-template-columns:1fr;gap:0}
 #map{height:34vh;min-height:200px;border-bottom:1px solid var(--line)}
-@media (min-width:900px){main{grid-template-columns:minmax(0,1fr) 38%;height:calc(100dvh - var(--hh,120px))}#map{height:100%;order:2;border-left:1px solid var(--line);border-bottom:0}#listWrap{overflow-y:auto}}
+/* 縦画面のスマホ向け。広い画面でもスマホの幅で真ん中に出す */
+header,main{max-width:520px;margin:0 auto}
+@media (min-width:560px){body{background:#e8eaed}main{background:var(--bg);min-height:100dvh;box-shadow:0 0 0 1px var(--line)}header{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
 #status{font-size:12px;color:var(--mut);padding:4px 10px}
 #status.err{color:var(--warn)}
 .row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:2px 8px;align-items:center;background:var(--card);border-bottom:1px solid var(--line);padding:6px 10px;cursor:pointer}
@@ -54,7 +56,7 @@ main{display:grid;grid-template-columns:1fr;gap:0}
 #detail{position:fixed;z-index:2000;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center}
 #detail[hidden]{display:none}
 .dl{background:var(--card);width:min(720px,100%);max-height:92dvh;overflow-y:auto;border-radius:14px 14px 0 0;padding:12px 14px max(14px,env(safe-area-inset-bottom))}
-@media (min-width:900px){#detail{align-items:center}.dl{border-radius:14px}}
+.dl{max-width:520px}
 .dl h2{margin:0;font-size:18px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .dl h2 small{font-size:12px;font-weight:400;color:var(--mut)}
 .dl .acts{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
