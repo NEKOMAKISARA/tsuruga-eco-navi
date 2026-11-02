@@ -820,22 +820,46 @@ function attrAt(km){
   return ATTR[lo];
 }
 // 高速道路に乗っているか：速さではなく場所で決める（渋滞中も高速、速い一般道は一般道）。
-// ルートの高速部分の線上を、同じ向きで3回続けて走ったら高速、線から離れたのが3回続いたら一般道。
+// ルートの高速部分（ランプ・料金所・SA/PAの中の道を含む）の線上を、同じ向きで3回続けて走ったら高速、線から離れたのが3回続いたら一般道。
 // 高速の下や上を横切る一般道は向きが違うので高速にならない
+// 高速扱いの区間（hx）：本線（hw）のほか、本線につながるランプ（ICは料金所まで）・本線と本線の間の短い区間（JCTのランプ・SA/PAの中・料金所の前後）
+function markHX(){
+  for(const a of ATTR)a.hx=!!a.hw;
+  let i=0;while(i<ATTR.length){
+    if(ATTR[i].hw){i++;continue;}
+    let j=i;while(j<ATTR.length&&!ATTR[j].hw)j++; // ATTR[i..j-1] が本線でない続き
+    const L=ATTR[j-1].b-ATTR[i].a,pre=i>0,post=j<ATTR.length;
+    if(pre&&post&&L<3){for(let k=i;k<j;k++)ATTR[k].hx=true;}
+    else{
+      if(pre){const tb=TOLLS.find(t=>t>ATTR[i].a-0.02&&t<ATTR[j-1].b);for(let k=i;k<j&&ATTR[k].ramp&&(tb==null||ATTR[k].a<tb);k++)ATTR[k].hx=true;} // 高速から降りるランプ：料金所まで
+      if(post){const tb=[...TOLLS].reverse().find(t=>t>ATTR[i].a&&t<ATTR[j-1].b+0.02);for(let k=j-1;k>=i&&ATTR[k].ramp&&(tb==null||ATTR[k].b>tb);k--)ATTR[k].hx=true;} // 高速に乗るランプ：料金所から
+    }
+    i=j;
+  }
+}
+const hxAt=km=>{const a=attrAt(km);return a.hx??a.hw;};
 let HWL=[],hwOn=null,hwIn=0,hwOut=0,hwSaid=null;
-function initHW(){HWL=[];for(let i=0;i<P.length-1;i++)if(attrAt((RCUM[i]+RCUM[i+1])/2).hw)HWL.push([P[i],P[i+1]]);}
-function hwUpdate(lat,lon,hd){
-  const q=xy(lat,lon);let bd=1e9,bh=0;
-  for(const[a,b]of HWL){const dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy||1e-12;
+function initHW(){markHX();HWL=[];for(let i=0;i<P.length-1;i++){const a=attrAt((RCUM[i]+RCUM[i+1])/2);if(a.hx??a.hw)HWL.push([P[i],P[i+1],!a.hw]);}}
+// SA・PAの敷地の中か（立ち寄りにしていなくても、中の道は高速の扱い）
+function inAnySa(p){return SAKM.some(x=>distKm(p,[x.lat,x.lon])<1&&(x.fc?inSaArea(x,p):distKm(p,[x.lat,x.lon])<0.15));}
+function hwUpdate(lat,lon,hd,km){
+  const q=xy(lat,lon);let bd=1e9,ok=false;
+  // ルートの上（50m以内）を走っている時は、ルートの進み具合の位置の区間で決める（立体交差は前回の続きで探すので取り違えない）
+  if(km!=null&&offD<0.05){if(hxAt(km)){hwOut=0;if(++hwIn>=3)hwOn=true;}else{hwIn=0;if(++hwOut>=3)hwOn=false;}return;}
+  for(const[a,b,rp]of HWL){const dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy||1e-12;
     const t=Math.max(0,Math.min(1,((q[0]-a[0])*dx+(q[1]-a[1])*dy)/L2)),d=Math.hypot(q[0]-(a[0]+t*dx),q[1]-(a[1]+t*dy));
-    if(d<bd){bd=d;bh=(Math.atan2(dx,dy)*180/Math.PI+360)%360;}}
-  const diff=hd==null?0:Math.abs(((hd-bh)%360+540)%360-180);
-  if(bd<(hwOn?0.08:0.05)&&diff<35){hwOut=0;if(++hwIn>=3)hwOn=true;}
+    if(d<bd)bd=d;
+    // ランプはカーブがきつくGPSの向きが遅れるので向きの差は70°まで、本線は35°まで。近くの線のどれかと向きが合えばよい
+    if(d<(hwOn?0.08:0.05)&&!ok){const bh=(Math.atan2(dx,dy)*180/Math.PI+360)%360,diff=hd==null?0:Math.abs(((hd-bh)%360+540)%360-180);if(diff<(rp?70:35))ok=true;}}
+  if(!ok&&inAnySa([lat,lon]))ok=true;
+  // 高速を走っていて予定のルートから外れた（ルートにないSA・PAや出口に入った）時は、高速の線から400m離れるまでは高速のまま
+  if(!ok&&hwOn&&offD>0.05&&bd<0.4){hwIn=0;hwOut=0;return;}
+  if(ok){hwOut=0;if(++hwIn>=3)hwOn=true;}
   else{hwIn=0;if(++hwOut>=3)hwOn=false;}
 }
 function onHighway(){
   if(curPos&&hwOn!=null&&!timer)return hwOn;
-  return hasRoute()&&attrAt(curKm).hw; // デモ走行・GPS前は道路の区間で決める
+  return hasRoute()&&hxAt(curKm); // デモ走行・GPS前は道路の区間で決める
 }
 // 点の並びから距離を作る
 function buildGeom(){
@@ -1584,7 +1608,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-10-18 11:05";
+const BUILD="2026-11-02 12:57";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -1615,7 +1639,9 @@ function feedFix(km,pos,spdKmh,fixTime){
 function targetHeading(){
   // 止まっている・ノロノロの時は向きを変えない（GPSのぶれやコンパスの誤差で地図が回るため）
   if(A.spd<5&&rotAcc!=null)return null;
-  if(snapF&&A.dispKm!=null&&hasRoute())return bearing(posAt(Math.max(0,A.dispKm-0.02)),posAt(A.dispKm+(isCity()?0.06:0.35)));
+  // ルートの上：今いる所の道の向き（少し後ろから足元まで）。先の点を見ると、カーブで足元の線が斜めになり（ドリフトして見える）、
+  // 交差点では曲がる前（信号待ち）から曲がった先を向いてしまう
+  if(snapF&&A.dispKm!=null&&hasRoute()){const k=A.dispKm,c=isCity();return bearing(posAt(Math.max(0,k-(c?0.025:0.06))),posAt(Math.min(TOTAL,k+(c?0.003:0.015))));}
   if(A.spd>=5&&gpsHeading!=null&&performance.now()-A.fixT<5000)return gpsHeading;
   if(A.moveHd!=null)return A.moveHd;
   return rotAcc==null?compassHd:null; // コンパスは、まだ一度も向きが分からない時（出発前）だけ使う // 何も分からなければ向きを変えない
@@ -1631,7 +1657,7 @@ function frame(now){
   const ahead=drAhead(now); // 前回のGPSから先読み（ふだんは最大2.5秒、GPSが途切れた時は推定位置）
   const k=1-Math.exp(-dt*5);
   const hd=targetHeading();
-  if(hd!=null&&!isNaN(hd)){if(rotAcc==null)rotAcc=hd;else rotAcc+=(((hd-rotAcc)%360+540)%360-180)*(1-Math.exp(-dt*3));} // 359°→1°で一回転しないよう差分で回す
+  if(hd!=null&&!isNaN(hd)){if(rotAcc==null)rotAcc=hd;else rotAcc+=(((hd-rotAcc)%360+540)%360-180)*(1-Math.exp(-dt*(snapF?6:3)));} // ルートの向きはぶれないので速めに追う（カーブで遅れない） // 359°→1°で一回転しないよう差分で回す
   if(MODE!=="nav"||!hasRoute()){if(curPos)drawMe(curPos,((rotAcc||0)%360+360)%360);return;} // 目的地を決めている間は印だけ動かす
   const fade=Math.exp(-(now-A.fixT)/400); // GPSが来た時のずれを0.4秒で消す
   if(A.dispKm!=null){
@@ -2991,12 +3017,12 @@ async function loadAttr(){
       if(!r.ok)throw new Error(r.status);
       const es=(await r.json()).edges||[],tot=es.reduce((s,e)=>s+(e.length||0),0);if(!tot)throw new Error("empty");
       let x=a;for(const e of es){const L=(e.length||0)/tot*(b-a),lim=+e.speed_limit;
-        out.push({a:x,b:x+L,hw:e.road_class==="motorway",ramp:e.use==="ramp",lim:lim>0&&lim<200?lim:null,v:e.speed||30,tun:!!e.tunnel,nm:(e.names||[]).find(n=>/[^\x00-\x7f]/.test(n))||""});x+=L;if(e.end_node&&/toll_booth/.test(e.end_node.type||""))tb.push(x);}
+        out.push({a:x,b:x+L,hw:e.road_class==="motorway",ramp:e.use==="ramp",lim:lim>0&&lim<200?lim:null,v:e.speed||30,tun:!!e.tunnel,nm:(e.names||[]).find(n=>/[^\x00-\x7f]/.test(n))||""});x+=L;if(e.end_node&&/toll_booth/.test(e.end_node.type||"")){tb.push(x);out[out.length-1].tbE=true;}}
       if(key!==routeKey())return;
       await new Promise(r=>setTimeout(r,300));
     }
     // 同じ種類・制限速度が続く所はまとめる
-    const m=[];for(const s of out){const p=m[m.length-1];if(p&&p.hw===s.hw&&p.lim===s.lim&&p.tun===s.tun&&p.nm===s.nm&&Math.abs(p.v-s.v)<1){p.b=s.b;}else m.push(Object.assign({},s));}
+    const m=[];for(const s of out){const p=m[m.length-1];if(p&&!p.tbE&&p.hw===s.hw&&p.ramp===s.ramp&&p.lim===s.lim&&p.tun===s.tun&&p.nm===s.nm&&Math.abs(p.v-s.v)<1){p.b=s.b;p.tbE=s.tbE;}else m.push(Object.assign({},s));}
     TOLLS=[];for(const k of tb)if(!TOLLS.length||k-TOLLS[TOLLS.length-1]>0.3)TOLLS.push(k);
     ATTR=m;buildIndex();drawRouteLine();saveRoute();scheduleElev();
     if(MODE==="preview")showPreview();render(curKm);
@@ -3614,7 +3640,7 @@ function onFix0(p){
   if(s==null&&lastFix){const dt=(p.timestamp-lastFix.t)/3.6e6;if(dt>0)s=Math.max(0,(pr.km-lastFix.km)/dt);} // 速度が取れない時は進み具合から推定
   lastFix={t:p.timestamp,km:pr.km};offD=pr.d;
   const alt=c.altitude!=null&&(c.altitudeAccuracy==null||c.altitudeAccuracy<=20)?c.altitude:null;
-  hwUpdate(c.latitude,c.longitude,(s??0)>8?(c.heading!=null&&!isNaN(c.heading)?c.heading:A.moveHd):null);
+  hwUpdate(c.latitude,c.longitude,(s??0)>8?(c.heading!=null&&!isNaN(c.heading)&&c.heading>=0?c.heading:A.moveHd):null,pr.km);
   try{checkArea(curPos);}catch(e){showErr("市区町村",e);}trackStop(s);
   if(FUEL.needStart){FUEL.needStart=false;FUEL.startKm=pr.km;fuelStore();}
   if(offD<0.1)recordSpeed(pr.km,s);
