@@ -141,7 +141,7 @@ input[type=range]{width:100%;accent-color:var(--glide)}
   .sp-map{flex:1;min-width:0;height:min(210px,calc(100vh - 210px))}
   .sp-leg{flex-direction:column;flex-wrap:nowrap;width:118px;flex-shrink:0;font-size:12px;padding:6px 8px;gap:3px;overflow:hidden}.sp-leg svg{width:16px;height:16px}}
 /* 見取り図を出している間は、案内のバナーと下のバーだけ残して見やすく（ルート外れの再検索は出す） */
-body.spon #hSign,body.spon #sDeck,body.spon #sLead,body.spon .sgpin,body.spon #sapaCard,body.spon #tunCard,body.spon #jamCard,body.spon #detCard,body.spon #navEco{display:none!important}
+body.spon #hSign,body.spon #sDeck,body.spon #sLead,body.spon .sgpin,body.spon #sapaCard,body.spon #tunCard,body.spon #jamCard,body.spon #detCard,body.spon #skiCard,body.spon #navEco{display:none!important}
 body.spon #nvToast{display:none!important} /* ルート外れの再検索は見取り図の見出しに出す */
 .sapa .nm{display:block;overflow:hidden;text-overflow:ellipsis}
 .sapa .fi{display:flex;gap:4px;margin-top:3px}
@@ -286,6 +286,7 @@ body.sheet .app .jct{display:none}
 .detour .db{display:flex;gap:8px;margin-top:4px}
 .detour button{flex:1;padding:8px 12px;border:0;border-radius:18px;background:#1a73e8;color:#fff;font-size:14px}
 .detour button.x{background:#f1f3f4;color:#202124}
+.skisug .th{font-size:12px;color:#c26401;font-weight:700}.skisug .nm{font:700 15px var(--jp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.skisug .dr{gap:6px}.skisug .dr small{font-size:12px}
 /* トンネル内の分岐：灰色の看板 */
 .sapa.tun{background:#3c4043;box-shadow:inset 0 0 0 3px #3c4043,inset 0 0 0 5px #fff,0 3px 12px rgba(0,0,0,.35)}
 .sapa .th{font-size:12px;font-weight:700;opacity:.9;padding:2px 4px 4px}
@@ -685,6 +686,7 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
   <div class="inset" id="inset" hidden><div class="inset-map"><div id="insetRot"><div id="insetG"></div><div id="insetL" hidden></div></div></div><div class="inset-cap" hidden><b id="insetAr"></b><span id="insetTxt"></span></div></div>
   <div class="sapan" id="saPanel" hidden><div class="sp-hd"><b class="kd" id="spKd">SA</b><span class="n" id="spName"></span><span class="k" id="spDist"></span><button type="button" id="spRe" hidden>再検索</button></div><div class="sp-body"><div class="sp-map"><div id="spRot"><div id="spL"></div></div></div><div class="sp-leg" id="spLeg"></div></div></div>
   <div class="detour" id="detCard" hidden></div>
+  <div class="detour skisug" id="skiCard" hidden></div>
   <div class="jamc" id="jamCard" hidden></div>
   <div class="sapa tun" id="tunCard" hidden></div>
   <div class="sapa" id="sapaCard" hidden></div>
@@ -1626,7 +1628,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 14:02";
+const BUILD="2026-11-02 14:16";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2146,6 +2148,7 @@ function syncNav(){
       `<div class="dr go"><span class="l">迂回</span><b>${hm(D.eta)}着</b><small>${Math.abs(sv)<1?"同じくらい":sv>0?sv+"分早い":-sv+"分遅い"}${D.dy==null?"":" ・ 料金"+(Math.abs(D.dy)<1?"同じ":(D.dy>0?"+":"−")+yen(Math.abs(D.dy)))}</small></div>`+
       `<div class="db"><button type="button" data-a="go">迂回する</button><button type="button" data-a="x" class="x">このまま</button></div>`;
     if(h!==detHtml){detHtml=h;$("detCard").innerHTML=h;}}
+  try{skiSugTick();}catch(e){showErr("スキー場の提案",e);}
   if(!$("sapaCard").hidden){
     const h=next.map(x=>{const on=STOP&&STOP.name===x.name,d=x.km-curKm;
       return `<button type="button" class="${on?"on":""}" data-n="${esc(x.name)}"><b class="kd">${saKind(x.name)}</b><span class="n"><span class="nm">${esc(saShort(x.name))}</span>${saIcons(x)}</span>${on?'<span class="yr">寄る</span>':""}${(w=>w?`<span class="w">${wxTxt(w)}</span>`:"")(wxAt(x.km,etaAt(x.km)))}<span class="k">${d<1?d.toFixed(1):d.toFixed(0)}<small>km</small></span></button>`;}).join("");
@@ -3068,6 +3071,101 @@ function skiHtml(){
   if(g>=20)h+=`<div class="sk-w">⚠ 強風（最大 ${Math.round(g)}m/s）：リフトが止まるかも</div>`;else if(g>=15)h+=`<div class="sk-w">風が強い（最大 ${Math.round(g)}m/s）：上のリフトは止まるかも</div>`;
   return h+`<small class="sk-n">雪質・積雪は天気予報からの目安（時間ごとは${P.length>1?"山頂":"山麓"}）</small></div>`;
 }
+/* ---- もっと良いスキー場の提案：目的地がスキー場の時、今の方向から行ける（+90分まで・リフト3本以上）スキー場の
+   着く時刻の雪を点数にして比べ、はっきり良い所があれば、そこへの道が今のルートから分かれる地点の手前で提案する。
+   点数＝雪質（パウダーが最高）＋新雪・積雪の量、雨の時間帯はマイナス。分かれる地点の15km手前で予報を取り直す。
+   時間はValhallaの「まとめて時間を測る」1回、分かれる地点は一番良い所への経路1回（Googleは使わない） ---- */
+const SKS={t:0,busy:false,prop:null,no:new Set(),said:new Set(),html:""};
+const QPT={powder:10,fresh:6,pack:4,zarame:3,ice:1,wet:-2,none:-20};
+const QTX={powder:"パウダー",fresh:"新雪",pack:"圧雪",zarame:"ザラメ",ice:"アイスバーン",wet:"重い雪",none:"雪が少ない"};
+// 着く時刻から（16時より後に着く時は次の日の）9・12・15時の雪
+function skiScore(w,arrMs){
+  if(!w||!w.time||!w.time.length)return null;
+  const a=new Date(arrMs),nx=a.getHours()>=16,day=new Date(a.getFullYear(),a.getMonth(),a.getDate()+(nx?1:0)),t0=day.getTime()/1000;
+  const idx=h=>{const i=Math.round((t0+h*3600-w.time[0])/3600);return i>=0&&i<w.time.length?i:-1;};
+  const hs=[9,12,15].filter(h=>nx||h>=a.getHours()-1);if(!hs.length)hs.push(15);
+  let q=0,n=0,rain=0,first=null;
+  for(const h of hs){const i=idx(h);if(i<0)continue;const r=snowQ(w,i);if(!r)continue;if(!first)first={r,i};
+    q+=QPT[r.k];n++;let rr=0;for(let k=Math.max(0,i-1);k<=Math.min(w.rain.length-1,i+1);k++)rr+=w.rain[k]||0;if(rr>=0.5)rain++;}
+  if(!n)return null;
+  let nw=0;for(let k=Math.max(0,first.i-24);k<=first.i;k++)nw+=w.snow[k]||0;
+  const dep=Math.round((w.depth[first.i]||0)*100);
+  return{score:q/n+Math.min(nw,40)*0.25+Math.min(dep,300)/60-rain*3,k:first.r.k,nw:Math.round(nw),dep,rain};
+}
+async function skiScan(){
+  if(SKS.busy||MODE!=="nav"||!SKI.res||!DEST||!hasRoute())return;
+  const from=curPos||posAt(curKm);if(!from)return;
+  SKS.busy=true;SKS.t=Date.now();
+  const key=routeKey();
+  try{
+    const db=await skiDb(),cur=SKI.res;
+    let cs=db.filter(r=>r.name!==cur.name&&r.lifts.length>=6&&distKm(r.c,cur.c)>2&&distKm(r.c,cur.c)<=120);
+    cs.sort((a,b)=>distKm(a.c,cur.c)-distKm(b.c,cur.c));cs=cs.slice(0,20);
+    if(!cs.length){SKS.prop=null;return;}
+    const all=[cur,...cs];
+    // 標高：リフトの端（1か所6点まで）。山頂＝一番高い所、山麓（行き先にする所）＝一番低い所
+    const ends=[];all.forEach((r,j)=>{const L=r.lifts.length?r.lifts:[r.c],st=Math.max(1,Math.floor(L.length/6));for(let k=0,c=0;k<L.length&&c<6;k+=st,c++)ends.push({j,p:L[k]});});
+    const el=[];for(let i=0;i<ends.length;i+=100){const ch=ends.slice(i,i+100);
+      const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${ch.map(e=>e.p[0].toFixed(5)).join(",")}&longitude=${ch.map(e=>e.p[1].toFixed(5)).join(",")}`);
+      el.push(...((await r.json()).elevation||[]));}
+    ends.forEach((e,i)=>e.e=el[i]??0);
+    const top=all.map((r,j)=>ends.filter(e=>e.j===j).reduce((a,b)=>b.e>a.e?b:a)),base=all.map((r,j)=>ends.filter(e=>e.j===j).reduce((a,b)=>b.e<a.e?b:a));
+    // 山頂の予報：まとめて1回。今の目的地よりはっきり良い（+4点以上）所を、点数の高い順に
+    const u="https://api.open-meteo.com/v1/forecast?latitude="+top.map(t=>t.p[0].toFixed(4)).join(",")+"&longitude="+top.map(t=>t.p[1].toFixed(4)).join(",")+"&elevation="+top.map(t=>Math.round(t.e)).join(",")+
+      "&hourly=temperature_2m,snowfall,rain,snow_depth&past_days=2&forecast_days=3&timezone=Asia%2FTokyo&timeformat=unixtime";
+    const fr=await fetch(u);if(!fr.ok)throw new Error(fr.status);
+    let fd=await fr.json();if(!Array.isArray(fd))fd=[fd];
+    const W=all.map((r,k)=>{const h=(fd[k]||{}).hourly||{};return{time:h.time||[],temp:h.temperature_2m||[],snow:h.snowfall||[],rain:h.rain||[],depth:h.snow_depth||[]};});
+    const remain=driveMin(curKm,TOTAL),arr=m=>nowMs()+m*60e3;
+    const me=skiScore(W[0],arr(remain));if(!me)return;
+    // 着く時刻はまだ分からないので、まず今の目的地と同じ時刻で比べて上位3か所に絞る
+    const cand=all.map((r,i)=>({i,r,s:skiScore(W[i],arr(remain))})).slice(1).filter(x=>x.s&&x.s.k!=="none"&&x.s.score>=me.score+4).sort((a,b)=>b.s.score-a.s.score).slice(0,3);
+    if(!cand.length){SKS.prop=null;return;}
+    // 経路：今の目的地（比べる基準）と候補へ。分かれる所＝新しい道の点が今のルートから150m離れる手前
+    const hd=onRouteF?routeHdAt(curKm):null,keep=DEST,ks=STOP;let tMe,best=null;
+    try{
+      STOP=null;tMe=(await fetchTrip(from,hd)).time/60;
+      for(const x of cand){DEST={name:x.r.name,lat:base[x.i].p[0],lon:base[x.i].p[1]};
+        let t;try{t=await fetchTrip(from,hd);}catch(e){continue;}
+        const extra=t.time/60-tMe;if(extra>90)continue;
+        const s2=skiScore(W[x.i],arr(remain+extra))||x.s;if(s2.score<me.score+4)continue;
+        best={r:x.r,base:base[x.i].p,s:s2,extra,trip:t};break;}
+    }finally{DEST=keep;STOP=ks;}
+    if(key!==routeKey())return;
+    if(!best){SKS.prop=null;return;}
+    const t=best.trip;let dec=null;
+    for(let i=1;i<t.route.length;i++){const q=project(t.route[i][0],t.route[i][1]);if(q.d>0.15){dec=project(t.route[i-1][0],t.route[i-1][1]).km;break;}}
+    if(dec==null||dec<curKm-0.2)dec=curKm;
+    const g=GUIDE.find(j=>Math.abs(j.km-dec)<0.6&&j.name);
+    SKS.prop={name:best.r.name,lat:best.base[0],lon:best.base[1],s:best.s,me,extra:Math.round(best.extra),dec,at:g?g.name:""};
+  }catch(e){SKS.err=String(e&&e.message||e);}
+  finally{SKS.busy=false;}
+}
+function skiSugTick(){
+  const card=$("skiCard");
+  if(MODE!=="nav"||!DEST||arrived){card.hidden=true;return;}
+  if(!SKI.res){skiLoad();card.hidden=true;return;}
+  const now=Date.now();
+  if(!SKS.busy&&now-SKS.t>60*60e3)skiScan();
+  const p=SKS.prop;if(!p){card.hidden=true;return;}
+  const d=p.dec-curKm,lead=onHighway()?5:1;
+  if(d<-0.3){SKS.prop=null;card.hidden=true;return;} // 分かれる所を過ぎた
+  if(d<=lead+10&&now-SKS.t>20*60e3&&!SKS.busy)skiScan(); // 分かれる所の15km手前で取り直す
+  const on=d<=lead&&!SKS.no.has(p.name);card.hidden=!on;if(!on)return;
+  const sn=x=>`${QTX[x.k]}${x.nw>=1?"・新雪"+x.nw+"cm":""}${x.dep?"・積雪"+x.dep+"cm":""}${x.rain?"・雨":""}`;
+  const h=`<div class="th">${d>0.05?`${fmtKm(d)}先${p.at?"の"+esc(p.at):"の分かれ道"}までに決めてください`:"今なら行き先を変えられます"}</div>`+
+    `<div class="dr go"><span class="l">提案</span><b class="nm">${esc(p.name)}</b></div><div class="dr"><span class="l"></span><small>${sn(p.s)} ・ ${p.extra>=1?"+"+p.extra+"分":p.extra<=-1?-p.extra+"分早い":"時間は同じくらい"}</small></div>`+
+    `<div class="dr"><span class="l">今</span><b class="nm">${esc(SKI.res.name||DEST.name)}</b></div><div class="dr"><span class="l"></span><small>${sn(p.me)}</small></div>`+
+    `<div class="db"><button type="button" data-a="go">行き先を変える</button><button type="button" data-a="x" class="x">このまま</button></div>`;
+  if(h!==SKS.html){SKS.html=h;card.innerHTML=h;}
+  if(!SKS.said.has(p.name)){SKS.said.add(p.name);speak(`${p.at?p.at+"の手前です。":""}${p.name}の方が雪が良さそうです。${QTX[p.s.k]}${p.s.nw>=1?"、新雪"+p.s.nw+"センチ":""}。${p.extra>=1?"プラス"+p.extra+"分です":p.extra<=-1?-p.extra+"分早く着きます":"時間は同じくらいです"}`);}
+}
+$("skiCard").addEventListener("click",async e=>{const b=e.target.closest("button[data-a]");if(!b||!SKS.prop)return;const p=SKS.prop;
+  if(b.dataset.a==="x"){SKS.no.add(p.name);$("skiCard").hidden=true;return;}
+  const prev=DEST;DEST={name:p.name,addr:"",lat:p.lat,lon:p.lon};STOP=null;
+  const ok=await reroute(true);
+  if(!ok){DEST=prev;return;}
+  SKS.prop=null;SKS.html="";$("skiCard").hidden=true;SKI.key="";SKI.res=null;SKS.t=Date.now();addHist(DEST);drawMarks();saveRoute();speak(p.name+"に行き先を変えました");});
 let planSeq=0;
 async function planRoute(){
   const seq=++planSeq;$("pvGo").disabled=true;showPreview("経路を検索中…");ICFORCE=[];ICRUNS=[];
