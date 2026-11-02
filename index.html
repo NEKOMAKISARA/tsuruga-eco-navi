@@ -173,8 +173,8 @@ body.sheet .app .jct{display:none}
 .nav-top .dist small{font-size:16px;margin-left:2px}
 .nav-top .txt{font-size:17px;font-weight:700;line-height:1.35;min-width:0}
 .nav-top .nm{display:block;font-size:12px;font-weight:400;opacity:.85}
-.area-pop{position:fixed;z-index:6;right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));background:#fff;color:#202124;border-radius:12px;padding:8px 14px;box-shadow:0 3px 12px rgba(0,0,0,.35);font-weight:700;text-align:right;max-width:60vw;transform:translateX(calc(100% + 24px));transition:transform .35s ease;pointer-events:none}
-.area-pop.on{transform:none}
+.area-pop{position:fixed;z-index:6;right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));background:#fff;color:#202124;border-radius:12px;padding:8px 14px;box-shadow:0 3px 12px rgba(0,0,0,.35);font-weight:700;text-align:right;max-width:60vw;transform:translateX(calc(100% + max(8px,env(safe-area-inset-right)) + 32px));visibility:hidden;transition:transform .35s ease,visibility 0s .35s;pointer-events:none}
+.area-pop.on{transform:none;visibility:visible;transition:transform .35s ease}
 .area-pop small{display:block;font-size:12px;color:#5f6368;font-weight:400}
 .area-pop b{display:block;font-size:20px;line-height:1.25}
 .upd-now{display:block;margin:6px auto 0;padding:6px 14px;font-size:13px;border-radius:16px}
@@ -1608,7 +1608,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 12:57";
+const BUILD="2026-11-02 12:58";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
