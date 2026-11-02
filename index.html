@@ -379,6 +379,14 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 .pv-opts button{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:baseline;text-align:left;border:1px solid #dadce0;background:#fff;color:#3c4043;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:400}
 .pv-opts button b{font:700 18px var(--num);color:#202124}.pv-opts button small{grid-column:2;color:#5f6368;font-size:12px}
 .pv-opts button.on{border-color:#1a73e8;background:#e8f0fe}
+.pv-ic{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.pv-ic .icn{color:#5f6368;font-size:11px;margin-top:2px}
+.pv-ic .icr{display:grid;grid-template-columns:3.6em 34px 1fr 34px;align-items:center;gap:6px}
+.pv-ic .icr .l{color:#5f6368;font-size:12px}
+.pv-ic .icr b{font-size:15px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-ic .icr button{height:30px;border:1px solid #dadce0;background:#fff;color:#1a73e8;border-radius:8px;font-size:13px;padding:0}
+.pv-ic .smt{display:inline-block;margin-left:5px;padding:0 5px;border-radius:5px;background:#7b1fa2;color:#fff;font:700 10px/1.6 var(--num);font-style:normal;vertical-align:2px}
+.pv-short.icx{background:#e8f0fe;color:#1967d2}
 .pv-short{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;background:#e6f4ea;color:#137333;font:700 11px/1.5 var(--jp,sans-serif);vertical-align:2px;font-style:normal}
 .wxmk{display:flex!important;color:#202124;align-items:center;justify-content:center;background:rgba(255,255,255,.9);border:2px solid #1a73e8;border-radius:50%;font-size:17px;line-height:1}
 .pv-wx{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;scrollbar-width:none}.pv-wx::-webkit-scrollbar{display:none}
@@ -1608,7 +1616,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 13:34";
+const BUILD="2026-11-02 13:50";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2902,9 +2910,68 @@ function setRoute(t,keepSA){
   drawRouteLine();drawMarks();saveRoute();scheduleElev();wxDrawn="";drawWx();
   loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 }
+/* ---- 乗るIC・降りるICを変える：確認画面で高速の区間ごとに、乗るIC・降りるICを隣のICに変えて探し直す。
+   ICの一覧は ic.json（tools/make_ic.py で OpenStreetMap の全国データから作る）。選んだICのランプの上の点を経由地にして
+   Valhalla（無料）で探すので、Googleの回数は増えない（変えたルートは渋滞・料金なしの見積もり） ---- */
+let ICDB=null,ICRUNS=[],ICKEY="",ICFORCE=[]; // ICFORCE：区間ごとに選んだIC {ent,ex}
+function icDb(){
+  if(!ICDB)ICDB=fetch("ic.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
+    .then(d=>d.x.map(r=>({name:r[0],road:r[1],kind:r[2],m:[r[3]/1e5,r[4]/1e5],v:[r[5]/1e5,r[6]/1e5],vh:r[7],mb:r[8],smt:!!r[9]}))).catch(e=>{ICDB=null;throw e;});
+  return ICDB;
+}
+const icAng=(a,b)=>Math.abs(((a-b)%360+540)%360-180);
+// 今のルートの高速の区間ごとに、乗っているIC・降りているICを探す
+async function icScan(){
+  const key=routeKey();if(!key||!ATTR.some(a=>a.ramp!=null)){ICRUNS=[];return;}
+  let db;try{db=await icDb();}catch(e){ICRUNS=[];return;}if(key!==routeKey())return;
+  const runs=[];for(const a of ATTR){if(!(a.hx??a.hw))continue;const p=runs[runs.length-1];if(p&&a.a-p.b<0.05)p.b=a.b;else runs.push({a:a.a,b:a.b});}
+  const near=r=>{const q=project(r.m[0],r.m[1]);if(q.d>0.06)return null;const v=project(r.v[0],r.v[1]);if(v.d>0.08)return null;
+    return icAng(r.mb,routeHdAt(q.km))<40?q.km:null;}; // 本線の点も、ランプの上の点もルートの上にある（そのICを使っている）
+  ICRUNS=runs.filter(r=>r.b-r.a>2).map(r=>{
+    let ent=null,ex=null,ek=1e9,xk=-1;
+    for(const x of db){if(x.kind===1){const k=near(x);if(k!=null&&k>=r.a-0.3&&k<=r.a+4&&k<ek){ek=k;ent=x;}}
+      else{const k=near(x);if(k!=null&&k>=r.b-4&&k<=r.b+0.3&&k>xk){xk=k;ex=x;}}}
+    return{a:r.a,b:r.b,ent,ex};});
+  ICKEY=key;
+}
+// 隣のIC：同じ道路・同じ向きの車線で、進む向き（dir=1）か戻る向き（-1）にある一番近いIC（名前の違う所）
+function icStep(rec,dir,db){
+  let best=null,bd=1e9;
+  for(const x of db){if(x.kind!==rec.kind||x.road!==rec.road||x.name===rec.name||icAng(x.mb,rec.mb)>60)continue;
+    const d=distKm(rec.m,x.m);if(d<0.3||d>60)continue;
+    const b=bearing(rec.m,x.m);if(icAng(b,dir>0?rec.mb:rec.mb+180)>70||icAng(b,dir>0?x.mb:x.mb+180)>70)continue;
+    if(d<bd){bd=d;best=x;}}
+  return best;
+}
+// 表示する名前：スマートICは「三芳」＋SMTの札、都市高速（首都高など）の出入口は IC を付けない
+const icName=x=>x.smt?x.name.replace(/スマートIC$/,""):/首都高|阪神高速|名古屋高速|福岡高速|北九州高速|広島高速|都市高速/.test(x.road)?x.name.replace(/IC$/,""):x.name;
+function icHtml(){
+  if(ICKEY!==routeKey()||!ICRUNS.length)return"";
+  let h=`<div class="pv-ic">`;
+  ICRUNS.forEach((r,i)=>{
+    const row=(lb,rec,k)=>rec?`<div class="icr"><span class="l">${lb}</span><button type="button" data-ic="${i},${k},-1">◀</button><b>${esc(icName(rec))}${rec.smt?'<em class="smt">SMT</em>':""}</b><button type="button" data-ic="${i},${k},1">▶</button></div>`:"";
+    h+=(ICRUNS.length>1?`<small class="icn">${esc(shortRoad(ICRUNS[i].ent?ICRUNS[i].ent.road:ICRUNS[i].ex?ICRUNS[i].ex.road:""))||"高速"}</small>`:"")+row("乗る",r.ent,"ent")+row("降りる",r.ex,"ex");});
+  return h+`</div>`;
+}
+async function icChange(i,k,dir){
+  const r=ICRUNS[i];if(!r||!r[k])return;
+  let db;try{db=await icDb();}catch(e){return;}
+  const nx=icStep(r[k],dir,db);if(!nx){note(dir>0?"この先に別のICが見つかりません":"この手前に別のICが見つかりません");return;}
+  // 区間ごとに選んだICを覚えておき、ほかの区間は今のICのまま経由地にする（探し直しで他の区間が変わらないように）
+  const f=ICRUNS.map((x,j)=>Object.assign({ent:x.ent,ex:x.ex},ICFORCE[j]||{}));f[i][k]=nx;
+  const vias=[];for(const x of f)for(const z of[x.ent,x.ex])if(z)vias.push({lat:z.v[0],lon:z.v[1],type:"through",heading:z.vh,heading_tolerance:45});
+  const seq=++planSeq;$("pvGo").disabled=true;showPreview(`${icName(nx)}${k==="ent"?"から乗る":"で降りる"}経路を検索中…`);
+  try{
+    const o=curPos||ROUTE[0];const t=(await fetchTrips(o,null,{vias:vias.slice(0,8)}))[0];if(seq!==planSeq)return;
+    ICFORCE=f;
+    const op={src:"v",trip:t,dist:t.len,durMin:t.time/60,ic:true};
+    OPTS=[op,...OPTS.filter(x=>!x.ic)];await pickOpt(0,o,null);if(seq!==planSeq)return;curKm=0;
+    await icScan();showPreview();
+  }catch(e){if(seq===planSeq){showPreview();note("そのICを使う経路が見つかりませんでした");}}
+}
 let planSeq=0;
 async function planRoute(){
-  const seq=++planSeq;$("pvGo").disabled=true;showPreview("経路を検索中…");
+  const seq=++planSeq;$("pvGo").disabled=true;showPreview("経路を検索中…");ICFORCE=[];ICRUNS=[];
   try{
     const o=await getOrigin();if(seq!==planSeq)return;
     if(!o){showPreview("現在地が分かりません（位置情報を許可してください）");return;}
@@ -2937,9 +3004,10 @@ function showPreview(msg){
   if(OPTS.length>1){
     h+=`<div class="pv-opts">`+OPTS.map((o,i)=>{const om=minOf(o),dm=om-m,dy=o.src==="g"&&sel&&sel.src==="g"&&o.tollKnown&&sel.tollKnown?o.yen-sel.yen:null;
       const diff=i===OPT_I?"選択中":[Math.abs(dm)<1?"同じくらい":`${Math.round(Math.abs(dm))}分${dm>0?"遅い":"早い"}`,dy==null||Math.abs(dy)<1?"":`${yen(Math.abs(dy))}${dy>0?"高い":"安い"}`].filter(Boolean).join("・");
-      return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}${o.short?'<em class="pv-short">最短距離</em>':""}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
+      return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}${o.short?'<em class="pv-short">最短距離</em>':""}${o.ic?'<em class="pv-short icx">IC指定</em>':""}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
   }
   if(gErr)h+=`<small class="pv-note">料金・渋滞：${esc(gErr)}</small>`;
+  h+=icHtml();
   if(AVOIDED)h+=`<div class="pv-avoid">✓ 冬期閉鎖の道（${esc(AVOIDED.names.join("・"))}）を避けた経路にしました（${(m=>m>=1?"+"+Math.round(m)+"分":m<=-1?Math.round(m)+"分":"時間はほぼ同じ")(driveMin(0,TOTAL)-AVOIDED.min)}・${(TOTAL-AVOIDED.km>=0?"+":"")+(TOTAL-AVOIDED.km).toFixed(Math.abs(TOTAL-AVOIDED.km)<10?1:0)}km）<button type="button" id="undoAvoid">元の経路に戻す</button></div>`;
   if(CLOSE.length)h+=`<div class="pv-close">⚠ 冬期閉鎖の道を通ります`+CLOSE.map(c=>`<br><b>${esc(c.name)}</b>（${esc(c.txt)}）・${fmtKm(c.a)}先`).join("")+`<br><small>別の経路を選ぶか、道路情報で確認してください</small></div>`;
   ensureWX();
@@ -2952,7 +3020,8 @@ function showPreview(msg){
 $("pvCancel").addEventListener("click",()=>{planSeq++;clearRoute();});
 $("pvSum").addEventListener("click",async e=>{
   const p=e.target.closest("button[data-p]");if(p){if(SET.pref!==p.dataset.p){SET.pref=p.dataset.p;saveSet();planRoute();}return;}
-  const b=e.target.closest("button[data-i]");if(!b||+b.dataset.i===OPT_I)return;
+  const ic=e.target.closest("button[data-ic]");if(ic){if($("pvGo").disabled)return;const [i,k,d]=ic.dataset.ic.split(",");icChange(+i,k,+d);return;}
+  const b=e.target.closest("button[data-i]");if(!b||+b.dataset.i===OPT_I)return;if(!OPTS[+b.dataset.i].ic)ICFORCE=[];
   const i=+b.dataset.i,seq=++planSeq;$("pvGo").disabled=true;
   try{const o=curPos||[ROUTE[0][0],ROUTE[0][1]];await pickOpt(i,o,null);if(seq===planSeq){curKm=0;showPreview();}}
   catch(e){if(seq===planSeq)showPreview("経路が見つかりませんでした");}
@@ -2991,7 +3060,9 @@ async function loadAttr(){
       const b=Math.min(TOTAL,a+60);
       const q={encoded_polyline:encPoly(ptsBetween(a,b)),shape_match:"edge_walk",costing:"auto",
         filters:{attributes:["edge.road_class","edge.use","edge.speed_limit","edge.speed","edge.length","edge.tunnel","edge.names","node.type"],action:"include"}};
-      const r=await fetch(VAL+"/trace_attributes?json="+encodeURIComponent(JSON.stringify(q)));
+      let r=await fetch(VAL+"/trace_attributes?json="+encodeURIComponent(JSON.stringify(q)));
+      // 経由地をはさんだ経路（Googleのなぞり・ICの指定）は、経由地の所で線がわずかに戻るので「線に完全に合う道」が見つからないことがある。その時は近い道に合わせる
+      if(!r.ok){q.shape_match="walk_or_snap";r=await fetch(VAL+"/trace_attributes?json="+encodeURIComponent(JSON.stringify(q)));}
       if(!r.ok)throw new Error(r.status);
       const es=(await r.json()).edges||[],tot=es.reduce((s,e)=>s+(e.length||0),0);if(!tot)throw new Error("empty");
       let x=a;for(const e of es){const L=(e.length||0)/tot*(b-a),lim=+e.speed_limit;
@@ -3004,6 +3075,7 @@ async function loadAttr(){
     TOLLS=[];for(const k of tb)if(!TOLLS.length||k-TOLLS[TOLLS.length-1]>0.3)TOLLS.push(k);
     ATTR=m;buildIndex();drawRouteLine();saveRoute();scheduleElev();
     if(MODE==="preview")showPreview();render(curKm);
+    if(MODE==="preview")icScan().then(()=>{if(MODE==="preview"&&!$("pvGo").disabled)showPreview();});
   }catch(e){} // 取れない時は経路検索の「高速かどうか」で代用（制限速度なし＝80）
 }
 /* ---- 沿線のSA・PA：OpenStreetMap（Overpass）から。混んでいて取れないこともあるので、取れた時だけ出す ----
