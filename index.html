@@ -355,8 +355,7 @@ body:not(.nav) #rerouteSheet{display:none}
 .results button.rw{display:grid;grid-template-columns:32px minmax(0,1fr) auto;column-gap:12px;align-items:center;padding:9px 14px}
 .results .ic{width:32px;height:32px;border-radius:50%;background:#f1f3f4;color:#5f6368;display:grid;place-items:center}
 .results .ic svg{width:18px;height:18px;fill:currentColor}
-.ic.pk,.pkb{background:#1a73e8;color:#fff;border-radius:8px;font:700 17px/1 var(--num)}
-.pkb{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;font-size:13px;margin-right:4px;vertical-align:-3px}
+.ic.pk{background:#1a73e8;color:#fff;border-radius:8px;font:700 17px/1 var(--num)}
 .results .tx{min-width:0}
 .results .tx b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .results .tx small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -655,7 +654,7 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
   <div class="pv-head"><b id="pvName"></b><small id="pvAddr"></small></div>
   <div class="pv-sum" id="pvSum"></div>
   <label class="pv-target">目標到着<input type="time" id="pvTarget"><button type="button" id="pvTargetClear">なし</button></label>
-  <div class="pv-btns"><button id="pvCancel">やめる</button><button id="pvPark"><span class="pkb">P</span>駐車場</button><button class="go" id="pvGo" disabled>出発</button></div>
+  <div class="pv-btns"><button id="pvCancel">やめる</button><button class="go" id="pvGo" disabled>出発</button></div>
 </div>
 <div class="hsign" id="hSign" hidden></div>
 <svg class="slead" id="sLead" style="display:none"><path class="o"/><path class="i"/><circle class="a"/><circle class="t"/></svg>
@@ -1609,7 +1608,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 13:30";
+const BUILD="2026-11-02 13:34";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2533,68 +2532,10 @@ const IC={pl:'<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 1
   hi:'<svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L15 10h7V3l-2.64 2.64A8.96 8.96 0 0 0 13 3zm-1 5v5l4.25 2.52.77-1.28L13.5 12.2V8z"/></svg>'};
 const fmtD=d=>d<1?Math.round(d*1000)+" m":(d<10?d.toFixed(1):Math.round(d))+" km";
 function rowHtml(kind,name,sub,d){return`<span class="ic ${kind}">${kind==="pk"?"P":IC[kind]}</span><span class="tx"><b>${esc(name)}</b>${sub?`<small>${esc(sub)}</small>`:""}</span><span class="ds">${fmtD(d)}</span>`;}
-/* ---- 駐車場：OpenStreetMapの amenity=parking を、指定した場所の周りから探す（私有地は除く） ---- */
+// 名前に駐車場が付く検索結果はPの印で出す
 const PARK_RE=/駐車場|コインパーキング|パーキング(?!エリア)/;
-// 駐車場：地図のデータ（名前が無い所が多い）と、Googleの近くの駐車場（タイムズ〇〇などの名前つき。1回だけ）を合わせる
-const DIR8=["北","北東","東","南東","南","南西","西","北西"];
-async function findParking(c,radius){
-  const g=gPlaceOk()&&GPLACE_CAP-(usageGet().gplace||0)>0?gParking(c,radius).catch(()=>null):Promise.resolve(null);
-  const [o,gl]=await Promise.all([osmParking(c,radius),g]);
-  if(o==null&&!gl)return null;
-  const list=(gl||[]).slice();
-  for(const x of o||[]){const same=list.find(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.04);
-    if(same){if(!same.addr&&x.info)same.addr=x.info;else if(x.info&&!same.addr.includes(x.info))same.addr=x.info+"・"+same.addr;continue;}
-    list.push(x);}
-  // 名前の無い所は、目的地からどちら側か
-  for(const x of list)if(!x.named){const b=bearing(c,[x.lat,x.lon]),d=distKm(c,[x.lat,x.lon]);
-    x.name=(x.op?x.op+" ":"")+"駐車場"+(d>0.03?`（${DIR8[((Math.round(b/45)%8)+8)%8]}側）`:"");x.addr=x.info||"";}
-  return list;
-}
-async function gParking(c,radius){
-  const {Place}=await google.maps.importLibrary("places");usageBump("gplace");
-  const {places}=await Place.searchNearby({fields:["displayName","formattedAddress","location"],language:"ja",region:"jp",maxResultCount:20,
-    includedPrimaryTypes:["parking"],locationRestriction:{center:{lat:c[0],lng:c[1]},radius:Math.min(radius,50000)}});
-  return(places||[]).map(p=>({name:p.displayName||"駐車場",named:!!p.displayName,addr:"",lat:p.location.lat(),lon:p.location.lng(),park:true,g:true}));
-}
-async function osmParking(c,radius){
-  const q=`[out:json][timeout:40];nwr(around:${radius},${c[0].toFixed(5)},${c[1].toFixed(5)})["amenity"="parking"]["access"!~"private|no|customers"];out center tags;`;
-  for(const u of OVERPASS){
-    try{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),60000);
-      const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"data="+encodeURIComponent(q),signal:ctl.signal});
-      clearTimeout(tm);if(!r.ok)continue;
-      const els=(await r.json()).elements||[];
-      return els.map(e=>{const t=e.tags||{},lat=e.lat??(e.center&&e.center.lat),lon=e.lon??(e.center&&e.center.lon);if(lat==null)return null;
-        const kind=/multi-storey/.test(t.parking||"")?"立体":/underground/.test(t.parking||"")?"地下":"";
-        const fee=t.fee==="no"?"無料":t.fee==="yes"?"有料":"";
-        const info=[fee,t.capacity?`${t.capacity}台`:"",kind].filter(Boolean).join("・");
-        return{name:t.name||"",named:!!t.name,op:t.operator||t.brand||"",info,addr:info,lat,lon,park:true};}).filter(Boolean);
-    }catch(e){}
-  }
-  return null;
-}
-// 駐車場の一覧を出す（近い順）
-function showParking(list,c,box){
-  list.forEach(x=>x.d=distKm(c,[x.lat,x.lon]));list.sort((a,b)=>a.d-b.d);
-  box.innerHTML='<div class="hh">駐車場</div>';
-  for(const x of list.slice(0,15)){const bt=document.createElement("button");
-    bt.className="rw";bt.innerHTML=rowHtml("pk",x.name,x.addr,x.d);
-    bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);}
-}
-async function searchParking(q,seq,box){
-  // 「苗場 駐車場」なら苗場の周り、「駐車場」だけなら地図の中心の周り
-  const place=q.replace(PARK_RE,"").replace(/[の\s]+$/,"").trim();
-  let c=curPos||mapCenter();
-  if(place){try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=jp&accept-language=ja&limit=1&q=${encodeURIComponent(place)}`);const a=await r.json();if(a[0])c=[+a[0].lat,+a[0].lon];}catch(e){}}
-  if(seq!==searchSeq)return;
-  box.innerHTML='<div class="msg">駐車場を探しています…（混んでいると数十秒かかります）</div>';
-  const list=await findParking(c,1500);if(seq!==searchSeq)return;
-  if(list==null){box.innerHTML='<div class="msg">駐車場を探せませんでした（地図のデータのサーバーが混んでいます。少し待ってもう一度）</div>';return;}
-  if(!list.length){box.innerHTML='<div class="msg">近くに駐車場が見つかりませんでした</div>';return;}
-  showParking(list,c,box);
-}
 async function search(q){
   q=q.trim();if(!q)return;const seq=++searchSeq,box=$("results");
-  if(PARK_RE.test(q)){box.hidden=false;box.innerHTML='<div class="msg">検索中…</div>';return searchParking(q,seq,box);}
   box.hidden=false;box.innerHTML='<div class="msg">検索中…</div>';
   const c=curPos||mapCenter(),enc=encodeURIComponent(q);
   const vb=`${c[1]-1},${c[0]+1},${c[1]+1},${c[0]-1}`;
@@ -3017,15 +2958,6 @@ $("pvSum").addEventListener("click",async e=>{
   catch(e){if(seq===planSeq)showPreview("経路が見つかりませんでした");}
 });
 $("pvGo").addEventListener("click",()=>{if(hasRoute())startNav();});
-$("pvPark").addEventListener("click",async()=>{
-  if(!DEST)return;const c=[DEST.lat,DEST.lon],box=$("results"),seq=++searchSeq;
-  document.body.classList.add("srch");box.hidden=false;box.innerHTML='<div class="msg">目的地の近くの駐車場を探しています…</div>';
-  const list=await findParking(c,800);if(seq!==searchSeq)return;
-  if(list==null){box.innerHTML='<div class="msg">駐車場を探せませんでした（少し待ってもう一度）</div>';return;}
-  const own=list.filter(x=>distKm(c,[x.lat,x.lon])>0.03); // 目的地そのものは除く
-  if(!own.length){box.innerHTML='<div class="msg">目的地の近く（800m以内）に駐車場が見つかりませんでした</div>';return;}
-  showParking(own,c,box);
-});
 function clearRoute(){
   ROUTE=[];MANS=[];ATTR=[];SAS=[];DEST=null;STOP=null;OPTS=[];AVOID=[];AVOIDED=null;AVOID_OFF=false;GINFO=null;JAMRAW=[];JAMS=[];DETOUR=null;buildGeom();buildIndex();ECO.key="";ECO.state="none";ECO.z=ECO.g=null;ECO.segs=[];
   MODE="browse";applyMapMode();drawRouteLine();drawMarks();saveRoute();stopPlay();wxDrawn="";drawWx();
