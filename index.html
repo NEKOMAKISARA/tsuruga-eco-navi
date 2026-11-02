@@ -1628,7 +1628,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 14:50";
+const BUILD="2026-11-02 15:20";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2929,13 +2929,13 @@ function setRoute(t,keepSA){
 let ICDB=null,ICRUNS=[],ICKEY="",ICFORCE=[]; // ICFORCE：区間ごとに選んだIC {ent,ex}
 function icDb(){
   if(!ICDB)ICDB=fetch("ic.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
-    .then(d=>d.x.map(r=>({name:r[0],road:r[1],kind:r[2],m:[r[3]/1e5,r[4]/1e5],v:[r[5]/1e5,r[6]/1e5],vh:r[7],mb:r[8],smt:!!r[9]}))).catch(e=>{ICDB=null;throw e;});
+    .then(d=>d.x.map(r=>({name:r[0].replace(/[\s　]+(?=(スマート)?IC$)/,""),road:r[1],kind:r[2],m:[r[3]/1e5,r[4]/1e5],v:[r[5]/1e5,r[6]/1e5],vh:r[7],mb:r[8],smt:!!r[9]}))).catch(e=>{ICDB=null;throw e;});
   return ICDB;
 }
 const icAng=(a,b)=>Math.abs(((a-b)%360+540)%360-180);
 // 今のルートの高速の区間ごとに、乗っているIC・降りているICを探す
 async function icScan(){
-  const key=routeKey();if(!key||!ATTR.some(a=>a.ramp!=null)){ICRUNS=[];return;}
+  const key=routeKey();if(!key||!ATTR.length){ICRUNS=[];return;}
   let db;try{db=await icDb();}catch(e){ICRUNS=[];return;}if(key!==routeKey())return;
   const runs=[];for(const a of ATTR){if(!(a.hx??a.hw))continue;const p=runs[runs.length-1];if(p&&a.a-p.b<0.05)p.b=a.b;else runs.push({a:a.a,b:a.b});}
   const near=r=>{const q=project(r.m[0],r.m[1]);if(q.d>0.06)return null;const v=project(r.v[0],r.v[1]);if(v.d>0.08)return null;
@@ -2965,8 +2965,11 @@ function icStep(rec,dir,db){
 }
 // 表示する名前：スマートICは「三芳」＋SMTの札、都市高速（首都高など）の出入口は IC を付けない
 const icName=x=>x.smt?x.name.replace(/スマートIC$/,""):/首都高|阪神高速|名古屋高速|福岡高速|北九州高速|広島高速|都市高速/.test(x.road)?x.name.replace(/IC$/,""):x.name;
+let ICPEND="";
 function icHtml(){
-  if(ICKEY!==routeKey()||!ICRUNS.length)return"";
+  // 道路の種類（ランプ）が届く前でも、経路検索の「高速かどうか」で先に探しておく（届いたら探し直す）
+  const k=routeKey();if(k&&ICKEY!==k&&ICPEND!==k){ICPEND=k;icScan().then(()=>{if(MODE==="preview"&&!$("pvGo").disabled&&ICKEY===k)showPreview();});}
+  if(ICKEY!==k||!ICRUNS.length)return"";
   let h=`<div class="pv-ic">`;
   ICRUNS.forEach((r,i)=>{
     const row=(lb,rec,k)=>rec?`<div class="icr"><span class="l">${lb}</span><button type="button" data-ic="${i},${k},-1">◀</button><b>${esc(icName(rec))}${rec.smt?'<em class="smt">SMT</em>':""}</b><button type="button" data-ic="${i},${k},1">▶</button></div>`:"";
@@ -3257,7 +3260,7 @@ function checkArrive(km){
     setTimeout(()=>{if(arrived&&MODE==="nav")clearRoute();},15000);}
 }
 /* ---- 道路の種類（高速か）・制限速度：経路の線をValhallaに渡して道路ごとに教えてもらう（60kmごと） ---- */
-async function loadAttr(){
+async function loadAttr(tries=0){
   const key=routeKey();if(!key)return;
   try{
     const out=[],tb=[];
@@ -3281,7 +3284,7 @@ async function loadAttr(){
     ATTR=m;buildIndex();drawRouteLine();saveRoute();scheduleElev();
     if(MODE==="preview")showPreview();render(curKm);
     if(MODE==="preview")icScan().then(()=>{if(MODE==="preview"&&!$("pvGo").disabled)showPreview();});
-  }catch(e){} // 取れない時は経路検索の「高速かどうか」で代用（制限速度なし＝80）
+  }catch(e){if(tries<2){await new Promise(r=>setTimeout(r,5000*(tries+1)));if(key===routeKey())return loadAttr(tries+1);}} // 取れない時は2回まで取り直す。それまでは経路検索の「高速かどうか」で代用（制限速度なし＝80）
 }
 /* ---- 沿線のSA・PA：OpenStreetMap（Overpass）から。混んでいて取れないこともあるので、取れた時だけ出す ----
    左側通行なので、進行方向の左にあるもの（または本線の真ん中にある集約型）だけ使う */
