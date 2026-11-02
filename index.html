@@ -1609,7 +1609,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 13:27";
+const BUILD="2026-11-02 13:30";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2535,7 +2535,28 @@ const fmtD=d=>d<1?Math.round(d*1000)+" m":(d<10?d.toFixed(1):Math.round(d))+" km
 function rowHtml(kind,name,sub,d){return`<span class="ic ${kind}">${kind==="pk"?"P":IC[kind]}</span><span class="tx"><b>${esc(name)}</b>${sub?`<small>${esc(sub)}</small>`:""}</span><span class="ds">${fmtD(d)}</span>`;}
 /* ---- 駐車場：OpenStreetMapの amenity=parking を、指定した場所の周りから探す（私有地は除く） ---- */
 const PARK_RE=/駐車場|コインパーキング|パーキング(?!エリア)/;
+// 駐車場：地図のデータ（名前が無い所が多い）と、Googleの近くの駐車場（タイムズ〇〇などの名前つき。1回だけ）を合わせる
+const DIR8=["北","北東","東","南東","南","南西","西","北西"];
 async function findParking(c,radius){
+  const g=gPlaceOk()&&GPLACE_CAP-(usageGet().gplace||0)>0?gParking(c,radius).catch(()=>null):Promise.resolve(null);
+  const [o,gl]=await Promise.all([osmParking(c,radius),g]);
+  if(o==null&&!gl)return null;
+  const list=(gl||[]).slice();
+  for(const x of o||[]){const same=list.find(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.04);
+    if(same){if(!same.addr&&x.info)same.addr=x.info;else if(x.info&&!same.addr.includes(x.info))same.addr=x.info+"・"+same.addr;continue;}
+    list.push(x);}
+  // 名前の無い所は、目的地からどちら側か
+  for(const x of list)if(!x.named){const b=bearing(c,[x.lat,x.lon]),d=distKm(c,[x.lat,x.lon]);
+    x.name=(x.op?x.op+" ":"")+"駐車場"+(d>0.03?`（${DIR8[((Math.round(b/45)%8)+8)%8]}側）`:"");x.addr=x.info||"";}
+  return list;
+}
+async function gParking(c,radius){
+  const {Place}=await google.maps.importLibrary("places");usageBump("gplace");
+  const {places}=await Place.searchNearby({fields:["displayName","formattedAddress","location"],language:"ja",region:"jp",maxResultCount:20,
+    includedPrimaryTypes:["parking"],locationRestriction:{center:{lat:c[0],lng:c[1]},radius:Math.min(radius,50000)}});
+  return(places||[]).map(p=>({name:p.displayName||"駐車場",named:!!p.displayName,addr:"",lat:p.location.lat(),lon:p.location.lng(),park:true,g:true}));
+}
+async function osmParking(c,radius){
   const q=`[out:json][timeout:40];nwr(around:${radius},${c[0].toFixed(5)},${c[1].toFixed(5)})["amenity"="parking"]["access"!~"private|no|customers"];out center tags;`;
   for(const u of OVERPASS){
     try{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),60000);
@@ -2546,7 +2567,7 @@ async function findParking(c,radius){
         const kind=/multi-storey/.test(t.parking||"")?"立体":/underground/.test(t.parking||"")?"地下":"";
         const fee=t.fee==="no"?"無料":t.fee==="yes"?"有料":"";
         const info=[fee,t.capacity?`${t.capacity}台`:"",kind].filter(Boolean).join("・");
-        return{name:t.name||(t.operator?t.operator+" 駐車場":"駐車場"),addr:info,lat,lon,park:true};}).filter(Boolean);
+        return{name:t.name||"",named:!!t.name,op:t.operator||t.brand||"",info,addr:info,lat,lon,park:true};}).filter(Boolean);
     }catch(e){}
   }
   return null;
