@@ -1,0 +1,21 @@
+{
+ "name": "スキー場えらび",
+ "short_name": "スキー場えらび",
+ "start_url": "ski.html",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#ffffff",
+ "theme_color": "#ffffff",
+ "icons": [
+  {
+   "src": "ski-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "ski-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  }
+ ]
+}

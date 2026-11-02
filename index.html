@@ -748,10 +748,6 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
     <div id="a2hs" class="alert" hidden>iPhoneは、Safari下の共有ボタン →「ホーム画面に追加」で追加したアイコンから開くと、URLバーなしの全画面になります。ホーム画面から開いた時は、Googleマップのキーをもう一度入れてください（保存場所が別のため）。</div>
   </section>
   <section class="settings">
-    <h2>スキー場</h2>
-    <button type="button" onclick="location.href='ski.html'">スキー場えらび</button>
-  </section>
-  <section class="settings">
     <h2>Google</h2>
     <button id="gkeyBtn">Googleマップのキー</button>
     <label>経路（料金・渋滞）1日の上限<input type="number" id="setGCap" min="0" max="200" step="5" inputmode="numeric" style="width:5.5em"></label>
@@ -1632,7 +1628,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 17:00";
+const BUILD="2026-11-02 17:40";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -3975,10 +3971,6 @@ if(MODE==="nav")render(0);
 if(hasRoute()&&ATTR.some(s=>s.lim)&&!MANS.some(m=>m[8]))loadLanes();
 if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
-// スキー場えらび（ski.html）から：#go=緯度,経度,名前 を目的地にする
-{const m=location.hash.match(/^#go=(-?[\d.]+),(-?[\d.]+),(.*)$/);if(m){history.replaceState(null,"",location.pathname+location.search);
-  const d={name:decodeURIComponent(m[3])||"目的地",addr:"",lat:+m[1],lon:+m[2]};
-  setTimeout(()=>{if(MODE==="nav")return;if(MODE==="preview")clearRoute();chooseDest(d);},600);}}
 $("buildTag").textContent="版 "+BUILD;nightCheck(true);setInterval(()=>nightCheck(true),60e3);$("updBar").addEventListener("click",e=>{const b=e.currentTarget;if(b.dataset.done){b.hidden=true;delete b.dataset.done;}else hardReload();});
 // 更新した直後：上に「更新しました」を5秒（自動の更新は気づきにくいので）
 try{const f=localStorage.getItem("updFrom");if(f&&f!==BUILD){localStorage.removeItem("updFrom");const b=$("updBar");b.hidden=false;b.textContent=`最新版（${BUILD}）に更新しました`;b.dataset.done="1";setTimeout(()=>{if(b.dataset.done){b.hidden=true;delete b.dataset.done;}},5000);}else if(f)localStorage.removeItem("updFrom");}catch(e){}$("updNow").addEventListener("click",hardReload);setTimeout(()=>checkUpdate(true),1500);
