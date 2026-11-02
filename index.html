@@ -748,6 +748,10 @@ body.night .nav-eco .spd{background:linear-gradient(180deg,#222C36,#171E25)!impo
     <div id="a2hs" class="alert" hidden>iPhoneは、Safari下の共有ボタン →「ホーム画面に追加」で追加したアイコンから開くと、URLバーなしの全画面になります。ホーム画面から開いた時は、Googleマップのキーをもう一度入れてください（保存場所が別のため）。</div>
   </section>
   <section class="settings">
+    <h2>スキー場</h2>
+    <button type="button" onclick="location.href='ski.html'">スキー場えらび</button>
+  </section>
+  <section class="settings">
     <h2>Google</h2>
     <button id="gkeyBtn">Googleマップのキー</button>
     <label>経路（料金・渋滞）1日の上限<input type="number" id="setGCap" min="0" max="200" step="5" inputmode="numeric" style="width:5.5em"></label>
@@ -1628,7 +1632,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 15:45";
+const BUILD="2026-11-02 17:00";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -3004,7 +3008,7 @@ let SKIDB=null;const SKI={key:"",t:0,busy:false,res:null,pts:null};
 const SKI_RE=/スキー|スノー|ゲレンデ|ski|snow/i;
 function skiDb(){
   if(!SKIDB)SKIDB=fetch("ski.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(d=>d.s.map(r=>{const c=[r[1]/1e5,r[2]/1e5],pl=a=>{const o=[];for(let i=0;i+1<a.length;i+=2)o.push([c[0]+a[i]/1e5,c[1]+a[i+1]/1e5]);return o;};
-    return{name:r[0],c,line:pl(r[3]),lifts:pl(r[4])};})).catch(e=>{SKIDB=null;throw e;});
+    const e=r[5];return{name:r[0],c,line:pl(r[3]),lifts:pl(r[4]),el:e?{top:[e[0]/1e5,e[1]/1e5,e[2]],base:[e[3]/1e5,e[4]/1e5,e[5]]}:null};})).catch(e=>{SKIDB=null;throw e;});
   return SKIDB;
 }
 function inPolyLL(p,line){let ins=false;for(let i=0,j=line.length-1;i<line.length;j=i++){const a=line[i],b=line[j];if((a[0]>p[0])!==(b[0]>p[0])&&p[1]<(b[1]-a[1])*(p[0]-a[0])/(b[0]-a[0])+a[1])ins=!ins;}return ins;}
@@ -3025,11 +3029,14 @@ async function skiLoad(){
     const res=await skiFind(DEST);
     if(!res){SKI.key=key;SKI.t=Date.now();SKI.res=null;SKI.pts=null;return;}
     // 山頂・山麓：リフトの端の標高で一番高い所・低い所（リフトが分からない時は真ん中だけ）
+    let pts;
+    if(res.el){const E=res.el;pts=[{nm:"山麓",p:E.base,e:E.base[2]}];if(E.top[2]-E.base[2]>=80)pts.unshift({nm:"山頂",p:E.top,e:E.top[2]});} // 一覧に標高がある時（tools/make_ski_elev.py）
+    else{
     const cand=res.lifts.length>=2?res.lifts.slice(0,100):[res.c];
     const er=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${cand.map(p=>p[0].toFixed(5)).join(",")}&longitude=${cand.map(p=>p[1].toFixed(5)).join(",")}`);
     const el=(await er.json()).elevation||[];if(!el.length)throw new Error("elev");
     let lo=0,hi=0;el.forEach((e,i)=>{if(e<el[lo])lo=i;if(e>el[hi])hi=i;});
-    const pts=[{nm:"山麓",p:cand[lo],e:el[lo]}];if(cand.length>1&&el[hi]-el[lo]>=80)pts.unshift({nm:"山頂",p:cand[hi],e:el[hi]});
+    pts=[{nm:"山麓",p:cand[lo],e:el[lo]}];if(cand.length>1&&el[hi]-el[lo]>=80)pts.unshift({nm:"山頂",p:cand[hi],e:el[hi]});}
     const u="https://api.open-meteo.com/v1/forecast?latitude="+pts.map(x=>x.p[0].toFixed(4)).join(",")+"&longitude="+pts.map(x=>x.p[1].toFixed(4)).join(",")+"&elevation="+pts.map(x=>Math.round(x.e)).join(",")+
       "&hourly=temperature_2m,snowfall,rain,weather_code,wind_speed_10m,wind_gusts_10m,snow_depth,is_day&past_days=3&forecast_days=7&timezone=Asia%2FTokyo&timeformat=unixtime&wind_speed_unit=ms";
     const r=await fetch(u);if(!r.ok)throw new Error(r.status);
@@ -3119,11 +3126,11 @@ async function skiScan(){
     if(!cs.length){SKS.prop=null;return;}
     const all=[cur,...cs];
     // 標高：リフトの端（1か所6点まで）。山頂＝一番高い所、山麓（行き先にする所）＝一番低い所
-    const ends=[];all.forEach((r,j)=>{const L=r.lifts.length?r.lifts:[r.c],st=Math.max(1,Math.floor(L.length/6));for(let k=0,c=0;k<L.length&&c<6;k+=st,c++)ends.push({j,p:L[k]});});
-    const el=[];for(let i=0;i<ends.length;i+=100){const ch=ends.slice(i,i+100);
+    const ends=[];all.forEach((r,j)=>{if(r.el){ends.push({j,p:r.el.top,e:r.el.top[2]},{j,p:r.el.base,e:r.el.base[2]});return;}const L=r.lifts.length?r.lifts:[r.c],st=Math.max(1,Math.floor(L.length/6));for(let k=0,c=0;k<L.length&&c<6;k+=st,c++)ends.push({j,p:L[k]});});
+    const ask=ends.filter(e=>e.e==null),el=[];for(let i=0;i<ask.length;i+=100){const ch=ask.slice(i,i+100);
       const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${ch.map(e=>e.p[0].toFixed(5)).join(",")}&longitude=${ch.map(e=>e.p[1].toFixed(5)).join(",")}`);
       el.push(...((await r.json()).elevation||[]));}
-    ends.forEach((e,i)=>e.e=el[i]??0);
+    ask.forEach((e,i)=>e.e=el[i]??0);
     const top=all.map((r,j)=>ends.filter(e=>e.j===j).reduce((a,b)=>b.e>a.e?b:a)),base=all.map((r,j)=>ends.filter(e=>e.j===j).reduce((a,b)=>b.e<a.e?b:a));
     // 山頂の予報：まとめて1回。今の目的地よりはっきり良い（+4点以上）所を、点数の高い順に
     const u="https://api.open-meteo.com/v1/forecast?latitude="+top.map(t=>t.p[0].toFixed(4)).join(",")+"&longitude="+top.map(t=>t.p[1].toFixed(4)).join(",")+"&elevation="+top.map(t=>Math.round(t.e)).join(",")+
@@ -3968,6 +3975,10 @@ if(MODE==="nav")render(0);
 if(hasRoute()&&ATTR.some(s=>s.lim)&&!MANS.some(m=>m[8]))loadLanes();
 if(hasRoute()&&!ATTR.some(s=>s.lim))loadAttr().then(()=>{loadJct().then(loadDest);loadLanes();loadClosures();loadCams();if(!SAS.length)loadSA();});
 
+// スキー場えらび（ski.html）から：#go=緯度,経度,名前 を目的地にする
+{const m=location.hash.match(/^#go=(-?[\d.]+),(-?[\d.]+),(.*)$/);if(m){history.replaceState(null,"",location.pathname+location.search);
+  const d={name:decodeURIComponent(m[3])||"目的地",addr:"",lat:+m[1],lon:+m[2]};
+  setTimeout(()=>{if(MODE==="nav")return;if(MODE==="preview")clearRoute();chooseDest(d);},600);}}
 $("buildTag").textContent="版 "+BUILD;nightCheck(true);setInterval(()=>nightCheck(true),60e3);$("updBar").addEventListener("click",e=>{const b=e.currentTarget;if(b.dataset.done){b.hidden=true;delete b.dataset.done;}else hardReload();});
 // 更新した直後：上に「更新しました」を5秒（自動の更新は気づきにくいので）
 try{const f=localStorage.getItem("updFrom");if(f&&f!==BUILD){localStorage.removeItem("updFrom");const b=$("updBar");b.hidden=false;b.textContent=`最新版（${BUILD}）に更新しました`;b.dataset.done="1";setTimeout(()=>{if(b.dataset.done){b.hidden=true;delete b.dataset.done;}},5000);}else if(f)localStorage.removeItem("updFrom");}catch(e){}$("updNow").addEventListener("click",hardReload);setTimeout(()=>checkUpdate(true),1500);

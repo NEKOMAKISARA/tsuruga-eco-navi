@@ -1,0 +1,407 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff"><link rel="apple-touch-icon" href="icon-180.png">
+<title>スキー場えらび</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#f6f8fa;--card:#fff;--fg:#202124;--mut:#5f6368;--line:#e3e6ea;--acc:#1a73e8;--warn:#c5221f;--jp:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 var(--jp);-webkit-text-size-adjust:100%}
+button,select,input{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:1000;background:var(--card);border-bottom:1px solid var(--line);padding:max(6px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) 6px max(10px,env(safe-area-inset-left))}
+.bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bar .ttl{font-size:16px;margin-right:4px}
+.bar a.back{color:var(--acc);text-decoration:none;font-size:13px}
+.from{display:flex;align-items:center;gap:6px;min-width:0;flex:1}
+.from span{color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{border:1px solid var(--line);background:#fff;border-radius:16px;padding:3px 10px;cursor:pointer;white-space:nowrap}
+.btn.on{background:#e8f0fe;border-color:#aecbfa;color:#174ea6;font-weight:700}
+.chips{display:flex;gap:5px;overflow-x:auto;padding:5px 0 1px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips .btn{flex:0 0 auto;font-size:13px}
+.btn .hol{color:var(--warn)}.btn .sat{color:#1967d2}
+.opts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--mut);padding-top:4px}
+.opts input[type=time],.opts select{border:1px solid var(--line);border-radius:6px;padding:1px 4px;background:#fff}
+.opts label{display:flex;align-items:center;gap:4px}
+main{display:grid;grid-template-columns:1fr;gap:0}
+#map{height:34vh;min-height:200px;border-bottom:1px solid var(--line)}
+@media (min-width:900px){main{grid-template-columns:minmax(0,1fr) 38%;height:calc(100dvh - var(--hh,120px))}#map{height:100%;order:2;border-left:1px solid var(--line);border-bottom:0}#listWrap{overflow-y:auto}}
+#status{font-size:12px;color:var(--mut);padding:4px 10px}
+#status.err{color:var(--warn)}
+.row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:2px 8px;align-items:center;background:var(--card);border-bottom:1px solid var(--line);padding:6px 10px;cursor:pointer}
+.row:active{background:#f1f3f4}
+.row .rk{font-weight:700;color:var(--mut);text-align:center;grid-row:1/3}
+.row.top3 .rk{color:#fff;background:var(--acc);border-radius:50%;width:22px;height:22px;line-height:22px;font-size:12px}
+.row .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .nm small{font-weight:400;color:var(--mut);margin-left:6px}
+.row .sc{font-weight:700;font-size:16px;text-align:right}
+.row .sc small{font-size:10px;font-weight:400;color:var(--mut);margin-left:1px}
+.row .ln{grid-column:2/4;display:flex;flex-wrap:wrap;gap:3px 10px;align-items:center;font-size:12px;color:#3c4043}
+.row .ln b{font-size:13px}
+.q{display:inline-block;border-radius:4px;padding:0 4px;font-size:11px;line-height:17px;background:#eceff1;color:#37474f;font-weight:700}
+.q-powder{background:#1a73e8;color:#fff}.q-fresh{background:#d2e3fc;color:#174ea6}.q-pack{background:#e8eaed}.q-ice{background:#fce8e6;color:#c5221f}
+.q-zarame{background:#fef7e0;color:#b06000}.q-wet{background:#f1e4dc;color:#7a4b2a}.q-none{background:#f1f3f4;color:#80868b}
+.qs{display:inline-flex;gap:2px}
+.warn{color:var(--warn);font-weight:700}
+.cr1{color:#188038}.cr2{color:#5f6368}.cr3{color:#b06000}.cr4{color:var(--warn)}
+.wxi{vertical-align:-3px}
+.mut{color:var(--mut)}
+/* 詳細 */
+#detail{position:fixed;z-index:2000;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:flex-end;justify-content:center}
+#detail[hidden]{display:none}
+.dl{background:var(--card);width:min(720px,100%);max-height:92dvh;overflow-y:auto;border-radius:14px 14px 0 0;padding:12px 14px max(14px,env(safe-area-inset-bottom))}
+@media (min-width:900px){#detail{align-items:center}.dl{border-radius:14px}}
+.dl h2{margin:0;font-size:18px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.dl h2 small{font-size:12px;font-weight:400;color:var(--mut)}
+.dl .acts{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.dl .acts a,.dl .acts button{border:1px solid var(--line);border-radius:18px;padding:5px 12px;text-decoration:none;color:var(--fg);background:#fff;font-size:13px;cursor:pointer}
+.dl .acts .go{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.dl h3{font-size:13px;margin:12px 0 4px;color:#174ea6}
+.bd{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px}
+.bd span{background:#f8f9fa;border-radius:8px;padding:4px 7px;font-size:12px}
+.bd span small{display:block;color:var(--mut);font-size:10px}
+.bd span b{font-size:14px}
+.bd span.neg b{color:var(--warn)}
+.tb{display:grid;gap:2px 4px;align-items:center;font-size:12px}
+.tb small{color:var(--mut);font-size:10px;text-align:center}
+.tb b{text-align:center}
+.hr{display:flex;gap:2px;overflow-x:auto;padding-bottom:3px}
+.hr span{flex:0 0 auto;min-width:38px;display:flex;flex-direction:column;align-items:center;font-size:10px;line-height:1.3;background:#f8f9fa;border-radius:6px;padding:2px 0}
+.hr b{font-size:12px}.hr i{font-style:normal;color:#1967d2;min-height:1.3em}.hr em{font-style:normal;color:var(--mut)}.hr em.w{color:var(--warn);font-weight:700}
+.wk{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.wk div{background:#f8f9fa;border-radius:8px;padding:3px 2px;text-align:center;font-size:11px;line-height:1.35}
+.wk div.sel{outline:2px solid var(--acc)}
+.wk div.best{background:#e8f0fe}
+.wk div.far{opacity:.6}
+.wk div b{display:block;font-size:12px}
+.note{font-size:10px;color:var(--mut);margin-top:8px}
+.close{border:0;background:#f1f3f4;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;flex:0 0 auto}
+.leaflet-container{font:12px var(--jp)}
+.pin{background:var(--acc);color:#fff;border:2px solid #fff;border-radius:50%;width:24px;height:24px;line-height:20px;text-align:center;font-weight:700;font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.pin.lo{background:#9aa0a6;width:12px;height:12px;line-height:8px;font-size:0}
+.pin.me{background:#188038}
+</style></head><body>
+<header id="hdr">
+  <div class="bar">
+    <b class="ttl">スキー場えらび</b>
+    <div class="from"><button class="btn" id="locBtn">◎ 現在地</button><span id="fromTx"></span></div>
+    <a class="back" href="./">ナビ</a>
+  </div>
+  <div class="chips" id="days"></div>
+  <div class="opts">
+    <label>出発<input type="time" id="dep"></label>
+    <label>片道<select id="lim"><option value="1.5">1時間半</option><option value="2">2時間</option><option value="3">3時間</option><option value="4">4時間</option><option value="5">5時間</option></select>まで</label>
+    <label><input type="checkbox" id="small">小さいスキー場も</label>
+  </div>
+  <div class="chips" id="sorts"></div>
+</header>
+<main><div id="map"></div><div id="listWrap"><div id="status"></div><div id="list"></div></div></main>
+<div id="detail" hidden><div class="dl" id="dl"></div></div>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function distKm(a,b){const r=Math.PI/180,x=(b[1]-a[1])*r*Math.cos((a[0]+b[0])/2*r),y=(b[0]-a[0])*r;return Math.hypot(x,y)*6371;}
+const VAL="https://valhalla1.openstreetmap.de";
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v);}catch(e){return d;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fmtMin=m=>m<60?Math.round(m)+"分":Math.floor(m/60)+"時間"+(Math.round(m%60)?Math.round(m%60)+"分":"");
+const hm=d=>`${d.getHours()}:${String(d.getMinutes()).padStart(2,"0")}`;
+
+/* ---- 天気のアイコン（ナビと同じ） ---- */
+const WXC=c=>c==null?null:c>=95?["thun","雷雨"]:c>=85?["snow","雪"]:c>=80?["shower","にわか雨"]:c>=71?["snow","雪"]:c>=61?["rain","雨"]:c>=51?["driz","霧雨"]:c>=45?["fog","霧"]:c>=3?["cloud","くもり"]:c>=1?["part","晴れ"]:["sun","晴れ"];
+const WX_SUN=(x,y,r)=>{let d="";for(let i=0;i<8;i++){const a=i*Math.PI/4,c=Math.cos(a),s=Math.sin(a);d+=`M${(x+c*(r+2)).toFixed(2)} ${(y+s*(r+2)).toFixed(2)}L${(x+c*(r+4.2)).toFixed(2)} ${(y+s*(r+4.2)).toFixed(2)}`;}
+  return`<circle cx="${x}" cy="${y}" r="${r}" fill="#f9ab00"/><path d="${d}" stroke="#f9ab00" stroke-width="1.8" stroke-linecap="round"/>`;};
+const WX_CLOUD=(dy,col)=>`<path transform="translate(0 ${dy})" d="M6.5 19h11a4 4 0 0 0 .4-7.98 6 6 0 0 0-11.5-1.3A4.7 4.7 0 0 0 6.5 19z" fill="${col||"#9aa0a6"}" stroke="#fff" stroke-width="1.2"/>`;
+const WX_DROPS=n=>[[8,19],[12,21],[16,19]].slice(0,n).map(([x,y])=>`<path d="M${x} ${y}l-1.2 2.6a1.3 1.3 0 0 0 2.4 0z" fill="#1a73e8"/>`).join("");
+const WXI={sun:WX_SUN(12,12,4.6),part:WX_SUN(8.5,8,3.2)+WX_CLOUD(2),cloud:WX_CLOUD(0),
+  fog:'<path d="M4 8h16M3 12h18M5 16h14" stroke="#9aa0a6" stroke-width="2.2" stroke-linecap="round"/>',
+  driz:WX_CLOUD(-4)+WX_DROPS(2),rain:WX_CLOUD(-4,"#80868b")+WX_DROPS(3),shower:WX_SUN(8,5,2.6)+WX_CLOUD(-3)+WX_DROPS(2),
+  snow:WX_CLOUD(-4)+'<g fill="#4fc3f7"><circle cx="8" cy="20" r="1.5"/><circle cx="12" cy="22" r="1.5"/><circle cx="16" cy="20" r="1.5"/></g>',
+  thun:WX_CLOUD(-4,"#80868b")+'<path d="M12.5 15 9 20.5h3l-1 3.5 4.5-6h-3l1-3z" fill="#fbbc04" stroke="#fff" stroke-width=".6"/>'};
+const wxIcon=(c,sz=16)=>{const k=WXC(c);return k?`<svg class="wxi" width="${sz}" height="${sz}" viewBox="0 0 24 24" aria-label="${k[1]}">${WXI[k[0]]||""}</svg>`:"";};
+
+/* ---- 雪質の予想（ナビのゲレンデ情報と同じ） ---- */
+const QPT={powder:10,fresh:6,pack:4,zarame:3,ice:1,wet:-2,none:-20};
+const QSH={powder:"パウダー",fresh:"新雪",pack:"圧雪",zarame:"ザラメ",ice:"アイス",wet:"重い",none:"雪不足"};
+function snowQ(w,i){
+  if(i<0)return null;
+  const T=w.temp,S=w.snow,R=w.rain,t=T[i];if(t==null)return null;
+  const sum=(a,b)=>{let x=0;for(let k=Math.max(0,a);k<=b;k++)x+=S[k]||0;return x;};
+  const new24=sum(i-24,i),now3=sum(i-2,i);
+  let melt=false;for(let k=Math.max(0,i-48);k<i;k++)if((R[k]||0)>=0.3||T[k]>1.5)melt=true;
+  let last=-1;for(let k=i;k>=Math.max(0,i-48);k--)if((S[k]||0)>=0.3){last=k;break;}
+  let warm=false;if(last>=0)for(let k=last;k<=i;k++)if(T[k]>-0.5||(R[k]||0)>=0.2)warm=true;
+  if((w.depth[i]||0)<0.05&&new24<3)return{k:"none",t:"雪が少ない"};
+  if((R[i]||0)>=0.3)return{k:"wet",t:"雨・重い雪"};
+  if(now3>=1&&t<0)return new24>=10?{k:"powder",t:"パウダー（降雪中）"}:{k:"fresh",t:"新雪（降雪中）"};
+  if(new24>=10&&!warm)return{k:"powder",t:"パウダー"};
+  if(t>=3)return{k:"wet",t:"シャバ雪・重い"};
+  if(t>0)return{k:"zarame",t:melt||warm?"ザラメ・柔らかい":"柔らかめ"};
+  if(new24>=3&&!warm)return{k:"fresh",t:"新雪少し"};
+  if(melt||warm)return{k:"ice",t:"アイスバーン・硬い"};
+  return{k:"pack",t:t<=-8?"圧雪・よく締まる":"圧雪"};
+}
+const qChip=q=>q?`<span class="q q-${q.k}">${QSH[q.k]}</span>`:`<span class="q">—</span>`;
+
+/* ---- 祝日・連休（混雑の予想に使う） ---- */
+function baseHol(d){
+  const y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate(),w=d.getDay(),nth=Math.floor((day-1)/7)+1;
+  const fx={"1-1":1,"2-11":1,"2-23":1,"4-29":1,"5-3":1,"5-4":1,"5-5":1,"8-11":1,"11-3":1,"11-23":1};
+  if(fx[m+"-"+day])return true;
+  if(w===1&&((m===1&&nth===2)||(m===7&&nth===3)||(m===9&&nth===3)||(m===10&&nth===2)))return true;
+  const eq=(b)=>Math.floor(b+0.242194*(y-1980)-Math.floor((y-1980)/4));
+  if(m===3&&day===eq(20.8431))return true;if(m===9&&day===eq(23.2488))return true;
+  return false;
+}
+const addD=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+function isHol(d){
+  if(baseHol(d))return true;
+  let p=addD(d,-1);while(baseHol(p)){if(p.getDay()===0)return true;p=addD(p,-1);} // 振替休日
+  if(d.getDay()!==0&&baseHol(addD(d,-1))&&baseHol(addD(d,1)))return true; // 国民の休日
+  return false;
+}
+const yearEnd=d=>(d.getMonth()===11&&d.getDate()>=29)||(d.getMonth()===0&&d.getDate()<=3);
+const isOff=d=>d.getDay()===0||d.getDay()===6||isHol(d)||yearEnd(d);
+// 休みの続き：その日を含む休みの日数と、その中で何日目か
+function offRun(d){if(!isOff(d))return{len:0,pos:0};let a=0;while(isOff(addD(d,-(a+1)))&&a<10)a++;let b=0;while(isOff(addD(d,b+1))&&b<10)b++;return{len:a+b+1,pos:a+1};}
+
+/* ---- 状態 ---- */
+const S={db:null,from:LS.get("skiFrom",null),fromName:LS.get("skiFromName",""),day:null,dep:null,lim:LS.get("skiLim","3"),small:LS.get("skiSmall",false),sort:"total",cands:[],W:{},seq:0,ttBusy:false,open:null};
+const ELEV={},TT=LS.get("skiTT",{});
+const SORTS=[["total","総合"],["snow","雪質"],["new","新雪"],["depth","積雪"],["sky","天気"],["wind","風"],["crowd","混雑"],["near","近さ"]];
+function dayStart(k){const n=new Date();return addD(new Date(n.getFullYear(),n.getMonth(),n.getDate()),k);}
+// 何日後か：夕方（15時）より後なら明日を最初に選ぶ
+if(S.day==null)S.day=new Date().getHours()>=15?1:0;
+function depAt(k){
+  const d=dayStart(k),[h,m]=(S.dep||"06:00").split(":").map(Number),t=new Date(d.getFullYear(),d.getMonth(),d.getDate(),h,m);
+  return k===0&&t<new Date()?new Date():t;
+}
+const estMin=d=>d*1.3/(d>60?75:45)*60+15; // 直線距離からのおおよその時間（道で測るまでの仮）
+
+/* ---- 出発地 ---- */
+function setFrom(p,name){S.from=p;S.fromName=name||"";LS.set("skiFrom",p);LS.set("skiFromName",S.fromName);showFrom();refresh();}
+function showFrom(){$("fromTx").textContent=S.from?(S.fromName||"指定した場所")+"から":"出発地を決めてください（地図の長押しでも）";if(fromMk)fromMk.setLatLng(S.from||[0,0]);else if(S.from&&map)fromMk=L.marker(S.from,{icon:L.divIcon({className:"",html:'<div class="pin me">発</div>',iconSize:[24,24],iconAnchor:[12,12]}),zIndexOffset:1000}).addTo(map);}
+async function placeName(p){
+  try{const r=await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${p[0]}&lon=${p[1]}`);const j=await r.json();
+    return(j.results||{}).lv01Nm&&j.results.lv01Nm!=="－"?j.results.lv01Nm:"";}catch(e){return"";}
+}
+function locate(){
+  if(!navigator.geolocation){setStatus("位置が取れません",true);return;}
+  setStatus("現在地を確認中…");
+  navigator.geolocation.getCurrentPosition(async pos=>{const p=[pos.coords.latitude,pos.coords.longitude];setFrom(p,"現在地");const n=await placeName(p);if(n&&S.from===p){S.fromName="現在地（"+n+"）";LS.set("skiFromName",S.fromName);showFrom();}},
+    e=>{setStatus(S.from?"現在地が取れないので、前回の出発地を使います":"現在地が取れません。地図を長押しして出発地を決めてください",!S.from);if(S.from)refresh();},{enableHighAccuracy:false,timeout:15000,maximumAge:300000});
+}
+function setStatus(t,err){const s=$("status");s.textContent=t||"";s.className=err?"err":"";}
+
+/* ---- データ ---- */
+async function loadDb(){
+  const d=await (await fetch("ski.json")).json();
+  S.db=d.s.map(r=>{const c=[r[1]/1e5,r[2]/1e5],pl=a=>{const o=[];for(let i=0;i+1<a.length;i+=2)o.push([c[0]+a[i]/1e5,c[1]+a[i+1]/1e5]);return o;};
+    const lifts=pl(r[4]),id=r[0]+"@"+r[1]+","+r[2],e=r[5];
+    if(e)ELEV[id]={top:[e[0]/1e5,e[1]/1e5,e[2]],base:[e[3]/1e5,e[4]/1e5,e[5]]}; // 山頂・山麓の標高（tools/make_ski_elev.py で先に調べてある）
+    return{name:r[0],c,lifts,n:Math.floor(lifts.length/2),id};});
+}
+// 一覧に標高が無いスキー場だけ、その場で測る
+async function ensureElev(list){
+  const need=list.filter(r=>!ELEV[r.id]);if(!need.length)return;
+  const ends=[];need.forEach(r=>{const L=r.lifts.length?r.lifts:[r.c],st=Math.max(1,Math.floor(L.length/8));for(let k=0,c=0;k<L.length&&c<8;k+=st,c++)ends.push({r,p:L[k]});});
+  for(let i=0;i<ends.length;i+=100){const ch=ends.slice(i,i+100);
+    const res=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${ch.map(e=>e.p[0].toFixed(5)).join(",")}&longitude=${ch.map(e=>e.p[1].toFixed(5)).join(",")}`);
+    if(!res.ok)throw new Error("標高 "+res.status);
+    const el=(await res.json()).elevation||[];ch.forEach((e,j)=>e.e=el[j]);}
+  for(const r of need){const es=ends.filter(e=>e.r===r&&e.e!=null);if(!es.length)continue;
+    const hi=es.reduce((a,b)=>b.e>a.e?b:a),lo=es.reduce((a,b)=>b.e<a.e?b:a);
+    ELEV[r.id]={top:[+hi.p[0].toFixed(5),+hi.p[1].toFixed(5),Math.round(hi.e)],base:[+lo.p[0].toFixed(5),+lo.p[1].toFixed(5),Math.round(lo.e)]};}
+}
+// 予報：山頂と山麓（差が80m未満なら山麓だけ）。1時間たったら取り直す
+async function ensureWx(list){
+  const now=Date.now(),need=list.filter(r=>ELEV[r.id]&&(!S.W[r.id]||now-S.W[r.id].t>60*60e3));if(!need.length)return;
+  const pts=[];need.forEach(r=>{const e=ELEV[r.id];if(e.top[2]-e.base[2]>=80)pts.push({r,nm:"山頂",p:e.top});pts.push({r,nm:"山麓",p:e.base});});
+  for(let i=0;i<pts.length;i+=40){const ch=pts.slice(i,i+40);
+    const u="https://api.open-meteo.com/v1/forecast?latitude="+ch.map(x=>x.p[0].toFixed(4)).join(",")+"&longitude="+ch.map(x=>x.p[1].toFixed(4)).join(",")+"&elevation="+ch.map(x=>x.p[2]).join(",")+
+      "&hourly=temperature_2m,snowfall,rain,weather_code,wind_speed_10m,wind_gusts_10m,snow_depth&past_days=2&forecast_days=7&timezone=Asia%2FTokyo&timeformat=unixtime&wind_speed_unit=ms";
+    const res=await fetch(u);if(!res.ok)throw new Error("天気 "+res.status);
+    let d=await res.json();if(!Array.isArray(d))d=[d];
+    ch.forEach((x,j)=>{const h=(d[j]||{}).hourly||{};x.w={nm:x.nm,e:x.p[2],time:h.time||[],temp:h.temperature_2m||[],snow:h.snowfall||[],rain:h.rain||[],code:h.weather_code||[],wind:h.wind_speed_10m||[],gust:h.wind_gusts_10m||[],depth:h.snow_depth||[]};});
+    for(const r of new Set(ch.map(x=>x.r)))S.W[r.id]={t:now,pts:pts.filter(x=>x.r===r&&x.w).map(x=>x.w)};
+    render();if(i+40<pts.length)await sleep(1500);}
+}
+// 時間：道で測る（Valhalla・無料）。出発地ごとに覚えておく（渋滞は入らない）
+const ttKey=r=>S.from[0].toFixed(2)+","+S.from[1].toFixed(2)+"|"+r.id;
+async function measureTT(seq){
+  if(S.ttBusy)return;S.ttBusy=true;
+  try{
+    const todo=S.cands.filter(r=>TT[ttKey(r)]==null).sort((a,b)=>a.est-b.est);
+    for(const r of todo){if(seq!==S.seq)return;
+      const q={locations:[{lat:S.from[0],lon:S.from[1]},{lat:ELEV[r.id]?ELEV[r.id].base[0]:r.c[0],lon:ELEV[r.id]?ELEV[r.id].base[1]:r.c[1]}],costing:"auto",directions_type:"none"};
+      try{const res=await fetch(VAL+"/route?json="+encodeURIComponent(JSON.stringify(q)));
+        if(res.ok){const j=await res.json();const s=j.trip&&j.trip.summary;if(s){TT[ttKey(r)]={m:Math.round(s.time/60),km:Math.round(s.length)};LS.set("skiTT",TT);render();}}
+        else if(res.status===429)await sleep(4000);}catch(e){}
+      await sleep(1100);}
+  }finally{S.ttBusy=false;}
+}
+function ttOf(r){const t=S.from&&TT[ttKey(r)];return t?{m:t.m,km:t.km,ok:true}:{m:r.est,km:null,ok:false};}
+
+/* ---- 評価：その日のスキー場ごと ---- */
+function evalDay(r,k){
+  const W=S.W[r.id];if(!W||!W.pts.length)return null;
+  const P=W.pts,top=P[0],base=P[P.length-1],day=dayStart(k),t0=day.getTime()/1000;
+  const ix=(w,h)=>{if(!w.time.length)return-1;const i=Math.round((t0+h*3600-w.time[0])/3600);return i>=0&&i<w.time.length?i:-1;};
+  if(ix(top,16)<0||ix(top,8)<0)return null;
+  const tt=ttOf(r),arr=new Date(depAt(k).getTime()+tt.m*60e3);
+  const arrH=arr.getDate()!==day.getDate()?24:arr.getHours()+arr.getMinutes()/60;
+  let H=[];for(let h=9;h<=16;h++)if(h>=Math.ceil(arrH))H.push(h);const late=H.length<3;if(!H.length)H=[15,16];
+  // 雪質：滑れる時間（着いてから16時まで）の山頂・山麓
+  let q=0,n=0;for(const p of P)for(const h of H){const s=snowQ(p,ix(p,h));if(s){q+=QPT[s.k];n++;}}
+  const qa=n?q/n:-20;
+  const qs=P.map(p=>[9,12,15].map(h=>snowQ(p,ix(p,h))));
+  const i8=ix(top,8);let nw=0;for(let j=Math.max(0,i8-24);j<=i8;j++)nw+=top.snow[j]||0; // 新雪：前の日の朝8時〜その日の朝8時
+  let dayS=0;for(const h of H)dayS+=top.snow[ix(top,h)]||0; // 滑っている間に降る雪
+  const dep=Math.round((top.depth[i8]||0)*100),depB=Math.round((base.depth[ix(base,8)]||0)*100);
+  let sun=0,rain=0,snowH=0,fog=0,g=0,wm=0,tmin=99,tmax=-99;
+  for(const h of H){const i=ix(top,h),ib=ix(base,h),c=top.code[i];if(c<=2)sun++;if(c===45||c===48)fog++;if((top.rain[i]||0)>=0.3||(base.rain[ib]||0)>=0.3)rain++;if((top.snow[i]||0)>=0.3)snowH++;
+    g=Math.max(g,top.gust[i]||0);wm=Math.max(wm,top.wind[i]||0);tmin=Math.min(tmin,top.temp[i]);tmax=Math.max(tmax,top.temp[i]);}
+  const nH=H.length,code=top.code[ix(top,H[Math.floor(H.length/2)])];
+  // 道（山麓）：着く前の4時間に雪→雪道、0℃以下で前に雨や緩み→凍結
+  let road="",ia=ix(base,Math.min(23,Math.floor(arrH)));if(ia<0)ia=ix(base,9);
+  if(ia>=0){let s=0,wet=false,cold=false;for(let j=Math.max(0,ia-4);j<=ia;j++){s+=base.snow[j]||0;if(base.temp[j]<=0)cold=true;}
+    for(let j=Math.max(0,ia-18);j<ia;j++)if((base.rain[j]||0)>=0.2||base.temp[j]>2)wet=true;
+    road=s>=1?"雪道":cold&&(wet||depB>0)?"凍結注意":cold?"冷え込み":"";}
+  // 混雑の予想（目安）：休みの日・連休・新雪の後・首都圏からの近さ
+  const off=isOff(day),run=offRun(day);let cr=off?3:1;
+  if(off&&(yearEnd(day)||run.len>=3&&run.pos<run.len))cr=4;
+  if(nw>=15)cr+=1;
+  if(off&&distKm(r.c,[35.68,139.77])>250)cr-=1;
+  cr=Math.max(1,Math.min(4,cr));
+  // 点数
+  const p={snow:qa,new:Math.min(nw,40)*0.25,depth:Math.min(Math.max(dep,depB),300)/60,rain:-rain/nH*9,sky:sun/nH*2-fog/nH,wind:g>=20?-6:g>=15?-2:0,crowd:-(cr-1),time:-Math.max(0,tt.m-60)/60*1.5,late:late?-5:0};
+  const total=Object.values(p).reduce((a,b)=>a+b,0);
+  return{r,k,tt,arr,late,H,qs,qa,nw:Math.round(nw),dayS:Math.round(dayS),dep,depB,sun,rain,snowH,fog,nH,g:Math.round(g),wm:Math.round(wm),tmin:Math.round(tmin),tmax:Math.round(tmax),code,road,cr,p,total,P};
+}
+const CR=["","空いている","ふつう","混む","かなり混む"];
+const SORTF={total:e=>-e.total,snow:e=>-(e.qa*10+e.nw),new:e=>-(e.nw*10+e.dayS),depth:e=>-Math.max(e.dep,e.depB),sky:e=>-(e.sun-e.rain*2-e.fog)/e.nH,wind:e=>e.g,crowd:e=>e.cr*100-e.total,near:e=>e.tt.m};
+
+/* ---- 候補 ---- */
+function pickCands(){
+  if(!S.db||!S.from)return[];
+  const lim=+S.lim*60;
+  return S.db.filter(r=>(S.small||r.n>=3)).map(r=>{const d=distKm(S.from,r.c);r.est=estMin(d);return r;})
+    .filter(r=>{const t=TT[ttKey(r)];return t?t.m<=lim:r.est<=lim*1.25;}).sort((a,b)=>a.est-b.est).slice(0,80);
+}
+async function refresh(){
+  if(!S.db||!S.from){render();return;}
+  const seq=++S.seq;S.cands=pickCands();
+  if(!S.cands.length){render();setStatus("この時間で行けるスキー場がありません");return;}
+  setStatus(`${S.cands.length}か所の予報を取得中…`);render();
+  try{await ensureElev(S.cands);if(seq!==S.seq)return;await ensureWx(S.cands);if(seq!==S.seq)return;setStatus("");}
+  catch(e){setStatus("取得できませんでした（"+e.message+"）。少し待ってから開き直してください",true);}
+  render();fitMap();measureTT(seq);
+}
+
+/* ---- 表示 ---- */
+let map=null,fromMk=null,mks=[];
+function initMap(){
+  map=L.map("map",{zoomControl:false,attributionControl:true}).setView(S.from||[36.5,138.6],S.from?7:6);
+  L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",{maxZoom:18,attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>'}).addTo(map);
+  map.on("contextmenu",async e=>{const p=[+e.latlng.lat.toFixed(5),+e.latlng.lng.toFixed(5)];setFrom(p,"指定した場所");const n=await placeName(p);if(n&&S.from===p){S.fromName=n;LS.set("skiFromName",n);showFrom();}});
+}
+let fitted="";
+function fitMap(){const k=S.from+"|"+S.lim;if(fitted===k||!S.cands.length)return;fitted=k;
+  const b=L.latLngBounds([S.from,...S.cands.map(r=>r.c)]);map.fitBounds(b,{padding:[20,20]});}
+function render(){
+  const list=$("list");
+  if(!S.from){list.innerHTML="";return;}
+  const lim=+S.lim*60;
+  const ev=S.cands.map(r=>evalDay(r,S.day)).filter(e=>e&&e.tt.m<=lim);
+  ev.sort((a,b)=>SORTF[S.sort](a)-SORTF[S.sort](b));
+  S.ev=ev;
+  const lbl=S.sort;
+  list.innerHTML=ev.map((e,i)=>{
+    const sc=lbl==="total"?`${Math.round(e.total*10)/10}<small>点</small>`:lbl==="near"?`${fmtMin(e.tt.m)}`:lbl==="crowd"?`<span class="cr${e.cr}">${CR[e.cr]}</span>`:`${Math.round(e.total*10)/10}<small>点</small>`;
+    return`<div class="row${i<3?" top3":""}" data-id="${esc(e.r.id)}"><span class="rk">${i+1}</span>`+
+      `<span class="nm">${esc(e.r.name)}<small>${e.tt.ok?"":"約"}${fmtMin(e.tt.m)}・${hm(e.arr)}着${e.late?'<span class="warn"> 遅い</span>':""}</small></span><span class="sc">${sc}</span>`+
+      `<span class="ln"><span class="qs">${e.qs[0].map(qChip).join("")}</span><span>新雪<b>${e.nw}</b>cm${e.dayS>=1?`<span class="mut">（日中+${e.dayS}）</span>`:""}</span><span>積雪<b>${Math.max(e.dep,e.depB)}</b>cm</span>`+
+      `<span>${wxIcon(e.code)}<b>${e.tmin}〜${e.tmax}°</b>${e.rain?'<span class="warn"> 雨</span>':""}</span>`+
+      `<span class="${e.g>=15?"warn":""}">風${e.wm}m<span class="mut">（瞬間${e.g}）</span></span><span class="cr${e.cr}">${CR[e.cr]}</span>${e.road?`<span class="${e.road==="冷え込み"?"":"warn"}">${e.road}</span>`:""}</span></div>`;}).join("")||
+    (S.cands.length&&!Object.keys(S.W).length?"":`<div class="mut" style="padding:8px 10px">表示できるスキー場がありません</div>`);
+  // 地図
+  mks.forEach(m=>m.remove());mks=[];
+  const rank=new Map(ev.map((e,i)=>[e.r.id,i]));
+  for(const r of S.cands){const i=rank.get(r.id);if(i==null)continue;
+    const top=i<10;const m=L.marker(r.c,{icon:L.divIcon({className:"",html:`<div class="pin${top?"":" lo"}">${top?i+1:""}</div>`,iconSize:top?[24,24]:[12,12],iconAnchor:top?[12,12]:[6,6]}),zIndexOffset:top?500-i:0,title:r.name}).addTo(map);
+    m.on("click",()=>openDetail(r.id));mks.push(m);}
+  if(S.open)drawDetail();
+}
+function dayChips(){
+  const box=$("days");let h="";
+  for(let k=0;k<7;k++){const d=dayStart(k),w="日月火水木金土"[d.getDay()],cls=isHol(d)||d.getDay()===0||yearEnd(d)?"hol":d.getDay()===6?"sat":"";
+    h+=`<button class="btn${k===S.day?" on":""}" data-k="${k}">${k===0?"今日":k===1?"明日":""} ${d.getMonth()+1}/${d.getDate()}<span class="${cls}">(${w})</span></button>`;}
+  box.innerHTML=h;
+}
+function sortChips(){$("sorts").innerHTML=SORTS.map(([k,t])=>`<button class="btn${k===S.sort?" on":""}" data-s="${k}">${t}</button>`).join("");}
+
+/* ---- 詳細 ---- */
+function openDetail(id){S.open=id;$("detail").hidden=false;drawDetail();}
+function drawDetail(){
+  const r=S.cands.find(x=>x.id===S.open)||S.db.find(x=>x.id===S.open);if(!r)return;
+  const e=evalDay(r,S.day),dl=$("dl"),d=dayStart(S.day),wd="日月火水木金土"[d.getDay()];
+  const el=ELEV[r.id],base=el?el.base:[r.c[0],r.c[1]];
+  let h=`<h2><span>${esc(r.name)}</span><button class="close" id="dClose" aria-label="閉じる">✕</button></h2>`;
+  h+=`<div class="mut" style="font-size:12px">${d.getMonth()+1}/${d.getDate()}(${wd})・リフト${r.n}本${el?`・山麓${el.base[2]}m${el.top[2]-el.base[2]>=80?`／山頂${el.top[2]}m`:""}`:""}${e?`・${e.tt.ok?"":"約"}${fmtMin(e.tt.m)}${e.tt.km?`（${e.tt.km}km）`:""}・${hm(e.arr)}着`:""}</div>`;
+  const q=encodeURIComponent(r.name);
+  h+=`<div class="acts"><a class="go" href="./#go=${base[0]},${base[1]},${encodeURIComponent(r.name)}">ナビで行く</a>`+
+    `<a href="https://www.google.com/search?q=${q}+%E5%96%B6%E6%A5%AD%E7%8A%B6%E6%B3%81+%E7%A9%8D%E9%9B%AA" target="_blank" rel="noopener">営業状況・積雪</a>`+
+    `<a href="https://www.google.com/search?q=${q}+%E3%83%A9%E3%82%A4%E3%83%96%E3%82%AB%E3%83%A1%E3%83%A9" target="_blank" rel="noopener">ライブカメラ</a>`+
+    `<a href="https://www.google.com/search?q=${q}+%E3%83%AA%E3%83%95%E3%83%88%E5%88%B8" target="_blank" rel="noopener">リフト券</a></div>`;
+  if(e){
+    const pn=(t,v,u="")=>`<span class="${v<-0.05?"neg":""}"><small>${t}</small><b>${v>0?"+":""}${Math.round(v*10)/10}</b>${u}</span>`;
+    h+=`<h3>総合 ${Math.round(e.total*10)/10}点</h3><div class="bd">`+pn("雪質",e.p.snow)+pn("新雪",e.p.new)+pn("積雪",e.p.depth)+pn("雨",e.p.rain)+pn("天気",e.p.sky)+pn("風",e.p.wind)+pn("混雑",e.p.crowd)+pn("移動時間",e.p.time)+(e.late?pn("着くのが遅い",e.p.late):"")+`</div>`;
+    h+=`<h3>雪</h3><div class="tb" style="grid-template-columns:3.2em repeat(3,1fr) 1.2fr 1.2fr"><span></span><small>朝</small><small>昼</small><small>午後</small><small>積雪</small><small>新雪</small>`+
+      e.P.map((p,j)=>{const i8=Math.round((dayStart(S.day).getTime()/1000+8*3600-p.time[0])/3600);let n=0;for(let k=Math.max(0,i8-24);k<=i8;k++)n+=p.snow[k]||0;
+        return`<small>${p.nm}<br>${p.e}m</small>`+e.qs[j].map(x=>`<b>${x?`<span class="q q-${x.k}">${esc(x.t)}</span>`:"—"}</b>`).join("")+`<b>${Math.round((p.depth[i8]||0)*100)}cm</b><b>${Math.round(n)}cm</b>`;}).join("")+`</div>`;
+    const warn=[];if(e.g>=20)warn.push(`強風（瞬間${e.g}m/s）：リフトが止まるかも`);else if(e.g>=15)warn.push(`風が強い（瞬間${e.g}m/s）：上のリフトは止まるかも`);
+    if(e.rain)warn.push(`雨の時間あり（${e.rain}時間）`);if(e.fog)warn.push("霧で見通しが悪い時間あり");if(e.road==="雪道")warn.push("着く頃、道に雪：スタッドレス・チェーン");else if(e.road==="凍結注意")warn.push("着く頃、道が凍っているかも");
+    if(e.late)warn.push("着くのが遅く、滑れる時間が短い");
+    if(warn.length)h+=`<div class="warn" style="font-size:12px;margin-top:6px">`+warn.map(esc).join("<br>")+`</div>`;
+    h+=`<div style="font-size:12px;margin-top:4px">混雑の予想：<b class="cr${e.cr}">${CR[e.cr]}</b></div>`;
+    // 時間ごと
+    const P=e.P,t0=dayStart(S.day).getTime()/1000,ix=(w,hr)=>Math.round((t0+hr*3600-w.time[0])/3600);
+    h+=`<h3>時間ごと（${P[0].nm}）</h3><div class="hr">`;for(let hr=6;hr<=18;hr++){const w=P[0],i=ix(w,hr);if(i<0||i>=w.time.length)continue;const sn=w.snow[i]||0,rn=w.rain[i]||0;
+      h+=`<span><small>${hr}時</small>${wxIcon(w.code[i],18)}<b>${Math.round(w.temp[i])}°</b><i>${sn>=0.5?Math.round(sn*10)/10+"cm":rn>=0.3?`<span class="warn">${Math.round(rn*10)/10}mm</span>`:""}</i><em class="${(w.gust[i]||0)>=15?"w":""}">${Math.round(w.wind[i]||0)}m</em></span>`;}
+    h+=`</div>`;
+  }else h+=`<div class="mut">予報を取得中です</div>`;
+  // 1週間：日ごとの総合と雪
+  const wk=[];for(let k=0;k<7;k++)wk.push(evalDay(r,k));
+  const best=wk.reduce((b,x,i)=>x&&(b<0||x.total>wk[b].total)?i:b,-1);
+  h+=`<h3>この先1週間</h3><div class="wk">`+wk.map((x,k)=>{const d=dayStart(k),w="日月火水木金土"[d.getDay()],cls=isHol(d)||d.getDay()===0||yearEnd(d)?"hol":d.getDay()===6?"sat":"";
+    if(!x)return`<div>${d.getMonth()+1}/${d.getDate()}<br>—</div>`;
+    return`<div class="${k===S.day?"sel":""}${k===best?" best":""}${k>=4?" far":""}" data-k="${k}">${d.getMonth()+1}/${d.getDate()}<span class="${cls}">(${w})</span><br>${wxIcon(x.code,18)}<b>${Math.round(x.total)}点</b>${qChip(x.qs[0][0])}<br>新${x.nw}cm<br><span class="${x.g>=15?"warn":""}">瞬${x.g}m</span><br><span class="cr${x.cr}">${CR[x.cr].replace("かなり","超")}</span></div>`;}).join("")+`</div>`;
+  h+=`<div class="note">雪質・積雪・混雑は天気予報と曜日からの予想（目安）。5日目以降は外れやすい。時間は渋滞なし。営業しているか・コースの状況は公式で確認してください</div>`;
+  dl.innerHTML=h;
+  $("dClose").onclick=closeDetail;
+  dl.querySelectorAll(".wk div[data-k]").forEach(b=>b.onclick=()=>{S.day=+b.dataset.k;dayChips();render();});
+}
+function closeDetail(){S.open=null;$("detail").hidden=true;}
+$("detail").addEventListener("click",e=>{if(e.target.id==="detail")closeDetail();});
+
+/* ---- 操作 ---- */
+$("days").addEventListener("click",e=>{const b=e.target.closest("[data-k]");if(!b)return;S.day=+b.dataset.k;dayChips();render();});
+$("sorts").addEventListener("click",e=>{const b=e.target.closest("[data-s]");if(!b)return;S.sort=b.dataset.s;sortChips();render();});
+$("list").addEventListener("click",e=>{const b=e.target.closest(".row");if(b)openDetail(b.dataset.id);});
+$("locBtn").addEventListener("click",locate);
+$("dep").addEventListener("change",e=>{S.dep=e.target.value||"06:00";LS.set("skiDep",S.dep);render();});
+$("lim").addEventListener("change",e=>{S.lim=e.target.value;LS.set("skiLim",S.lim);refresh();});
+$("small").addEventListener("change",e=>{S.small=e.target.checked;LS.set("skiSmall",S.small);refresh();});
+const hh=()=>document.documentElement.style.setProperty("--hh",$("hdr").offsetHeight+"px");addEventListener("resize",()=>{hh();if(map)map.invalidateSize();});
+
+S.dep=LS.get("skiDep","06:00");$("dep").value=S.dep;$("lim").value=S.lim;$("small").checked=!!S.small;
+dayChips();sortChips();hh();initMap();showFrom();
+loadDb().then(()=>{if(S.from)refresh();locate();}).catch(e=>setStatus("スキー場の一覧が読めません（"+e.message+"）",true));
+setInterval(()=>{if(!document.hidden&&S.from)refresh();},30*60e3);
+</script>
+</body></html>
