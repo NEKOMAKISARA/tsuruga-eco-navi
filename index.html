@@ -386,6 +386,16 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 .pv-ic .icr b{font-size:15px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pv-ic .icr button{height:30px;border:1px solid #dadce0;background:#fff;color:#1a73e8;border-radius:8px;font-size:13px;padding:0}
 .pv-ic .smt{display:inline-block;margin-left:5px;padding:0 5px;border-radius:5px;background:#7b1fa2;color:#fff;font:700 10px/1.6 var(--num);font-style:normal;vertical-align:2px}
+.pv-ski{margin-top:8px;border:1px solid #c6dafc;background:#f4f8fe;border-radius:10px;padding:6px 8px;font-size:12px;color:#3c4043}
+.pv-ski .sk-h{display:flex;justify-content:space-between;align-items:baseline;gap:6px}.pv-ski .sk-h b{font-size:14px;color:#1967d2}.pv-ski .sk-h span{color:#5f6368;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-ski .sk-s{display:flex;gap:10px;margin-top:3px}.pv-ski .sk-s span{flex:1}.pv-ski .sk-s small{display:block;color:#5f6368;font-size:10px}.pv-ski .sk-s b{font-size:15px;color:#202124}
+.pv-ski .sk-q{display:grid;grid-template-columns:2.6em 1fr 1fr 1fr;gap:2px 4px;margin-top:4px;align-items:center}.pv-ski .sk-q small{color:#5f6368;font-size:10px;text-align:center}
+.pv-ski .sk-q b{font-size:11px;text-align:center;border-radius:5px;padding:2px 1px;background:#eceff1;color:#37474f;line-height:1.25}
+.pv-ski .q-powder{background:#1a73e8!important;color:#fff!important}.pv-ski .q-fresh{background:#d2e3fc!important;color:#174ea6!important}.pv-ski .q-pack{background:#e8eaed!important}
+.pv-ski .q-ice{background:#fce8e6!important;color:#c5221f!important}.pv-ski .q-zarame{background:#fef7e0!important;color:#b06000!important}.pv-ski .q-wet{background:#f1e4dc!important;color:#7a4b2a!important}.pv-ski .q-none{background:#f1f3f4!important;color:#80868b!important}
+.pv-ski .sk-t{display:flex;gap:2px;overflow-x:auto;margin-top:5px;padding-bottom:2px}.pv-ski .sk-t span{flex:0 0 auto;min-width:34px;display:flex;flex-direction:column;align-items:center;font-size:10px;line-height:1.3}
+.pv-ski .sk-t b{font-size:12px}.pv-ski .sk-t i{font-style:normal;color:#1967d2;min-height:1.3em}.pv-ski .sk-t em{font-style:normal;color:#80868b}
+.pv-ski .sk-w{margin-top:4px;color:#c5221f;font-weight:700}.pv-ski .sk-n{display:block;margin-top:3px;color:#80868b;font-size:10px}
 .pv-short.icx{background:#e8f0fe;color:#1967d2}
 .pv-short{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;background:#e6f4ea;color:#137333;font:700 11px/1.5 var(--jp,sans-serif);vertical-align:2px;font-style:normal}
 .wxmk{display:flex!important;color:#202124;align-items:center;justify-content:center;background:rgba(255,255,255,.9);border:2px solid #1a73e8;border-radius:50%;font-size:17px;line-height:1}
@@ -1616,7 +1626,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 13:50";
+const BUILD="2026-11-02 14:02";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2969,6 +2979,95 @@ async function icChange(i,k,dir){
     await icScan();showPreview();
   }catch(e){if(seq===planSeq){showPreview();note("そのICを使う経路が見つかりませんでした");}}
 }
+/* ---- ゲレンデ情報：目的地がスキー場の時、着く日の山頂・山麓の時間ごとの天気・積雪・新雪と、雪質の予想（目安）。
+   スキー場の範囲とリフトの両端は ski.json（tools/make_ski.py で OpenStreetMap の全国データから作る）。
+   山頂・山麓＝リフトの端で一番高い所・低い所（標高は Open-Meteo の標高データ）。予報は Open-Meteo（キー不要・無料） ---- */
+let SKIDB=null;const SKI={key:"",t:0,busy:false,res:null,pts:null};
+const SKI_RE=/スキー|スノー|ゲレンデ|ski|snow/i;
+function skiDb(){
+  if(!SKIDB)SKIDB=fetch("ski.json").then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}).then(d=>d.s.map(r=>{const c=[r[1]/1e5,r[2]/1e5],pl=a=>{const o=[];for(let i=0;i+1<a.length;i+=2)o.push([c[0]+a[i]/1e5,c[1]+a[i+1]/1e5]);return o;};
+    return{name:r[0],c,line:pl(r[3]),lifts:pl(r[4])};})).catch(e=>{SKIDB=null;throw e;});
+  return SKIDB;
+}
+function inPolyLL(p,line){let ins=false;for(let i=0,j=line.length-1;i<line.length;j=i++){const a=line[i],b=line[j];if((a[0]>p[0])!==(b[0]>p[0])&&p[1]<(b[1]-a[1])*(p[0]-a[0])/(b[0]-a[0])+a[1])ins=!ins;}return ins;}
+// 目的地のスキー場：範囲の中か、範囲の線から1.5km以内。名前がスキー場らしい時は中心から6kmまで
+async function skiFind(d){
+  const db=await skiDb(),p=[d.lat,d.lon];let best=null,bd=1e9;
+  for(const r of db){const dc=distKm(p,r.c);if(dc>15)continue;
+    const de=r.line.length>2&&inPolyLL(p,r.line)?0:Math.min(dc,...r.line.map(q=>distKm(p,q)));
+    if(de<bd){bd=de;best=r;}}
+  if(best&&(bd<=1.5||SKI_RE.test(d.name+(d.addr||""))&&distKm(p,best.c)<=6))return best;
+  return null;
+}
+async function skiLoad(){
+  if(!DEST)return;const key=DEST.lat.toFixed(4)+","+DEST.lon.toFixed(4);
+  if(SKI.busy||SKI.key===key&&Date.now()-SKI.t<60*60e3)return;
+  SKI.busy=true;
+  try{
+    const res=await skiFind(DEST);
+    if(!res){SKI.key=key;SKI.t=Date.now();SKI.res=null;SKI.pts=null;return;}
+    // 山頂・山麓：リフトの端の標高で一番高い所・低い所（リフトが分からない時は真ん中だけ）
+    const cand=res.lifts.length>=2?res.lifts.slice(0,100):[res.c];
+    const er=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${cand.map(p=>p[0].toFixed(5)).join(",")}&longitude=${cand.map(p=>p[1].toFixed(5)).join(",")}`);
+    const el=(await er.json()).elevation||[];if(!el.length)throw new Error("elev");
+    let lo=0,hi=0;el.forEach((e,i)=>{if(e<el[lo])lo=i;if(e>el[hi])hi=i;});
+    const pts=[{nm:"山麓",p:cand[lo],e:el[lo]}];if(cand.length>1&&el[hi]-el[lo]>=80)pts.unshift({nm:"山頂",p:cand[hi],e:el[hi]});
+    const u="https://api.open-meteo.com/v1/forecast?latitude="+pts.map(x=>x.p[0].toFixed(4)).join(",")+"&longitude="+pts.map(x=>x.p[1].toFixed(4)).join(",")+"&elevation="+pts.map(x=>Math.round(x.e)).join(",")+
+      "&hourly=temperature_2m,snowfall,rain,weather_code,wind_speed_10m,wind_gusts_10m,snow_depth,is_day&past_days=3&forecast_days=7&timezone=Asia%2FTokyo&timeformat=unixtime&wind_speed_unit=ms";
+    const r=await fetch(u);if(!r.ok)throw new Error(r.status);
+    let d=await r.json();if(!Array.isArray(d))d=[d];
+    pts.forEach((x,i)=>{const h=(d[i]||{}).hourly||{};Object.assign(x,{time:h.time||[],temp:h.temperature_2m||[],snow:h.snowfall||[],rain:h.rain||[],code:h.weather_code||[],wind:h.wind_speed_10m||[],gust:h.wind_gusts_10m||[],depth:h.snow_depth||[],day:h.is_day||[]});});
+    if(!DEST||key!==DEST.lat.toFixed(4)+","+DEST.lon.toFixed(4))return;
+    SKI.key=key;SKI.t=Date.now();SKI.res=res;SKI.pts=pts;
+    if(MODE==="preview"&&!$("pvGo").disabled)showPreview();
+  }catch(e){SKI.key=key;SKI.t=Date.now()-50*60e3;} // 取れない時は10分後にもう一度
+  finally{SKI.busy=false;}
+}
+// 雪質の予想（目安）：その時刻までの新雪・気温・雨から
+function snowQ(w,i){
+  if(i<0)return null;
+  const T=w.temp,S=w.snow,R=w.rain,t=T[i];if(t==null)return null;
+  const sum=(a,b)=>{let x=0;for(let k=Math.max(0,a);k<=b;k++)x+=S[k]||0;return x;};
+  const new24=sum(i-24,i),now3=sum(i-2,i);
+  let melt=false;for(let k=Math.max(0,i-48);k<i;k++)if((R[k]||0)>=0.3||T[k]>1.5)melt=true; // この2日で雨か、プラスの気温
+  let last=-1;for(let k=i;k>=Math.max(0,i-48);k--)if((S[k]||0)>=0.3){last=k;break;}
+  let warm=false;if(last>=0)for(let k=last;k<=i;k++)if(T[k]>-0.5||(R[k]||0)>=0.2)warm=true; // 降った後に緩んだ
+  if((w.depth[i]||0)<0.05&&new24<3)return{k:"none",t:"雪が少ない"};
+  if((R[i]||0)>=0.3)return{k:"wet",t:"雨・重い雪"};
+  if(now3>=1&&t<0)return new24>=10?{k:"powder",t:"パウダー（降雪中）"}:{k:"fresh",t:"新雪（降雪中）"};
+  if(new24>=10&&!warm)return{k:"powder",t:"パウダー"};
+  if(t>0){let fz=false;for(let k=Math.max(0,i-14);k<i;k++)if(T[k]<=-2)fz=true; // 夜に凍ってから緩んだ＝ザラメ。凍らずに暖かい＝シャバ雪
+    if(fz&&t<6)return{k:"zarame",t:"ザラメ"};
+    if(t>=4)return{k:"wet",t:"シャバ雪・重い"};
+    return{k:"zarame",t:"柔らかめ"};}
+  if(new24>=3&&!warm)return{k:"fresh",t:"新雪少し"};
+  if(melt||warm)return{k:"ice",t:"アイスバーン・硬い"};
+  return{k:"pack",t:t<=-8?"圧雪・よく締まる":"圧雪"};
+}
+function skiHtml(){
+  if(!SKI.res||!SKI.pts||!DEST)return"";
+  // 着く日（16時より後に着く時は次の日）の 8時〜17時
+  const eta=new Date(etaAt(TOTAL)),day=new Date(eta.getFullYear(),eta.getMonth(),eta.getDate()+(eta.getHours()>=16?1:0));
+  const t0=day.getTime()/1000;
+  const idx=(w,h)=>{if(!w.time.length)return-1;const i=Math.round((t0+h*3600-w.time[0])/3600);return i>=0&&i<w.time.length?i:-1;};
+  const P=SKI.pts,top=P[0];
+  if(idx(top,8)<0)return"";
+  const wd="日月火水木金土"[day.getDay()];
+  let h=`<div class="pv-ski"><div class="sk-h"><b>ゲレンデ情報</b><span>${esc(SKI.res.name||DEST.name)}・${day.getMonth()+1}/${day.getDate()}(${wd})</span></div>`;
+  // 積雪・新雪（朝8時の時点、新雪は前の24時間）
+  h+=`<div class="sk-s">`+P.map(w=>{const i=idx(w,8),dep=Math.round((w.depth[i]||0)*100);let n=0;for(let k=Math.max(0,i-24);k<=i;k++)n+=w.snow[k]||0;
+    return`<span><small>${w.nm} ${Math.round(w.e)}m</small>積雪 <b>${dep}</b>cm${n>=0.5?` ・ 新雪 <b>${Math.round(n)}</b>cm`:""}</span>`;}).join("")+`</div>`;
+  // 雪質：朝・昼・午後
+  h+=`<div class="sk-q"><span></span><small>朝</small><small>昼</small><small>午後</small>`+
+    P.map(w=>`<small>${w.nm}</small>`+[9,12,15].map(hr=>{const q=snowQ(w,idx(w,hr));return q?`<b class="q-${q.k}">${q.t}</b>`:"<b>—</b>";}).join("")).join("")+`</div>`;
+  // 時間ごと（山頂、なければ山麓）：天気・気温・降雪・風
+  h+=`<div class="sk-t">`;for(let hr=8;hr<=17;hr++){const i=idx(top,hr);if(i<0)continue;const c=WXC(top.code[i]),sn=top.snow[i]||0;
+    h+=`<span><small>${hr}時</small>${c?wxIcon(c[0],18):""}<b>${Math.round(top.temp[i])}°</b><i>${sn>=0.5?Math.round(sn*10)/10+"cm":""}</i><em>${Math.round(top.wind[i]||0)}m</em></span>`;}
+  h+=`</div>`;
+  let g=0;for(let hr=8;hr<=17;hr++){const i=idx(top,hr);if(i>=0)g=Math.max(g,top.gust[i]||0);}
+  if(g>=20)h+=`<div class="sk-w">⚠ 強風（最大 ${Math.round(g)}m/s）：リフトが止まるかも</div>`;else if(g>=15)h+=`<div class="sk-w">風が強い（最大 ${Math.round(g)}m/s）：上のリフトは止まるかも</div>`;
+  return h+`<small class="sk-n">雪質・積雪は天気予報からの目安（時間ごとは${P.length>1?"山頂":"山麓"}）</small></div>`;
+}
 let planSeq=0;
 async function planRoute(){
   const seq=++planSeq;$("pvGo").disabled=true;showPreview("経路を検索中…");ICFORCE=[];ICRUNS=[];
@@ -3013,6 +3112,7 @@ function showPreview(msg){
   ensureWX();
   {const it=SAKM.map(x=>({n:saShort(x.name),km:x.km})).concat([{n:"目的地",km:TOTAL,dst:true}]).map(x=>({...x,w:wxAt(x.km,etaAt(x.km))})).filter(x=>x.w);
     if(it.length)h+=`<div class="pv-wx">`+it.map(x=>`<span class="${x.dst?"dst":wxWet(x.w)?"wet":""}"><small>${esc(x.n)}</small><b>${hm(new Date(etaAt(x.km)))}</b>${wxTxt(x.w,x.dst)}</span>`).join("")+`</div>`;}
+  skiLoad();h+=skiHtml();
   $("pvSum").innerHTML=h;
   {const u=$("undoAvoid");if(u)u.onclick=e=>{e.stopPropagation();undoAvoid();};}
   $("pvGo").disabled=false;
