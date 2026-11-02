@@ -1447,7 +1447,7 @@ $("fullBtn").addEventListener("click",async()=>{
 });
 document.addEventListener("fullscreenchange",()=>{$("fullBtn").textContent=document.fullscreenElement?"全画面を終了":"全画面";});
 /* ---- API使用量（この端末で今日使った分。Google側の実数ではない） ---- */
-const GPLACE_CAP=20; // Googleの場所検索の1日の上限（この端末）
+const GPLACE_CAP=50; // Googleの場所検索の1日の上限（この端末）。無料は月5,000回なので、毎日上限まで使っても無料の範囲
 function usageGet(){const t=new Date().toDateString();let u={};try{u=JSON.parse(localStorage.getItem("apiUsage")||"{}");}catch(e){}return u.d===t?Object.assign({geo:0,groute:0,gplace:0},u):{d:t,gmap:0,route:0,geo:0,groute:0,gplace:0};}
 function usageBump(k){const u=usageGet();u[k]=(u[k]||0)+1;try{localStorage.setItem("apiUsage",JSON.stringify(u));}catch(e){}showUsage();}
 function showUsage(){const u=usageGet();$("usage").innerHTML=`今日の使用量（この端末）<br>Googleマップ読み込み <b>${u.gmap}</b> / 300回<br>Googleの経路（料金・渋滞） <b>${u.groute}</b> / ${SET.gCap}回<br>Googleの場所検索 <b>${u.gplace||0}</b> / ${GPLACE_CAP}回　経路検索 <b>${u.route}</b>回`;}
@@ -1608,7 +1608,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 12:58";
+const BUILD="2026-11-02 13:21";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2589,6 +2589,11 @@ async function search(q){
       .map(p=>({name:p.title.replace(/\s*[(（][^)）]*[)）]$/,""),addr:"",lat:p.coordinates[0].lat,lon:p.coordinates[0].lon,wiki:true}))
       .filter(x=>x.lat>20&&x.lat<46&&x.lon>122&&x.lon<154)).catch(()=>[]);
   let [a,b,w]=await Promise.all([nomi,gsi,wiki]);if(seq!==searchSeq)return;
+  // 駅の中の物（「東京駅(改札外);エレベーター1;地下1階」・出入口など）は、探している時だけ出す
+  {const IN=/エレベーター|エスカレーター|出入口|出口|入口|改札|階段|トイレ|乗り場|のりば|番線/;
+    if(!IN.test(q))a=a.filter(x=>!/;/.test(x.name+x.addr)&&!IN.test(x.name.replace(q,"")));}
+  // ウィキペディアは記事の中身でも当たるので（「イケア立川」でニトリ・南船橋駅など）、名前に検索語の一部が入っている物だけ。ひらがな・カタカナだけの時は読みで当たるのでそのまま
+  if(!/^[぀-ヿー\s]+$/.test(q)){const ps=nameParts(q).filter(p=>!/^(サービスエリア|パーキングエリア|インターチェンジ|ジャンクション|ショッピングセンター|ショッピングモール|スーパー|ホテル|レストラン)$/.test(p));w=w.filter(x=>ps.some(p=>x.name.includes(p)));}
   // 住所（番地・市町村名）の時は国土地理院を先に。施設名の時は、国土地理院は名前に検索語を含むものだけ（「東京駅」で「札幌市東区」等が出るため）
   const isAddr=/\d|[都道府県市区町村]|丁目|番地/.test(q),key=q.replace(/\s/g,"");
   if(!isAddr)b=b.filter(x=>x.name.replace(/\s/g,"").includes(key));
@@ -2599,16 +2604,28 @@ async function search(q){
   const list=[];for(const x of order)if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<(x.wiki||y.wiki?0.15:0.05)))list.push(x);
   w.forEach(x=>x.d=distKm(c,[x.lat,x.lon]));
   // 少ない時：お店の名前と支店名（「ニューグランド」＋「新所沢店」）に分けて、近く（40km）の地図のデータから探す
+  // それでも少ない時は、Googleの場所検索も自動で（小さいお店は地図のデータに無いことが多い）。お店の名前で探すのと同時に
+  let gl=null;
   if(list.length<3&&!isAddr){box.innerHTML='<div class="msg">お店の名前で探しています…</div>';
-    const more=await nameNear(q,c);if(seq!==searchSeq)return;
-    for(const x of more)if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.05))list.push(x);}
-  if(!list.length){box.innerHTML='<div class="msg">見つかりませんでした</div>';gButton(q,c,seq,box);return;}
-  box.innerHTML="";
-  for(const x of list.slice(0,12)){const bt=document.createElement("button");
+    const auto=gPlaceOk()&&GPLACE_CAP-(usageGet().gplace||0)>0;
+    const [more,g]=await Promise.all([auto?Promise.race([nameNear(q,c),new Promise(r=>setTimeout(()=>r([]),10000))]):nameNear(q,c),auto?gPlaces(q,c).catch(()=>null):null]); // Googleがある時は地図のデータを10秒まで待つif(seq!==searchSeq)return;
+    gl=g;
+    for(const x of more)if(!list.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.05))list.push(x);
+    if(gl&&gl.length){for(const x of gl)x.g=true;const rest=list.filter(x=>!gl.some(y=>distKm([y.lat,y.lon],[x.lat,x.lon])<0.05));list.length=0;list.push(...gl,...rest);}}
+  if(!list.length){box.innerHTML=`<div class="msg">見つかりませんでした${gl?"（Googleでも）":""}</div>`;if(!gl)gButton(q,c,seq,box);return;}
+  box.innerHTML=gl&&gl.length?'<div class="hh">Googleの検索結果</div>':"";
+  for(const x of list.slice(0,12)){if(gl&&gl.length&&!x.g&&!box.querySelector(".hh2")&&list.indexOf(x)>0)box.insertAdjacentHTML("beforeend",'<div class="hh hh2">地図のデータ</div>');const bt=document.createElement("button");
     bt.className="rw";bt.innerHTML=rowHtml(PARK_RE.test(x.name)?"pk":"pl",x.name,x.addr,x.d);
     bt.addEventListener("click",()=>{box.hidden=true;document.body.classList.remove("srch");$("q").blur();chooseDest(x);});box.appendChild(bt);
     if(x.wiki&&!x.addr)geoGsi([x.lat,x.lon]).then(g=>{if(seq!==searchSeq)return;x.addr=g.pref+g.full+(g.town||"");bt.innerHTML=rowHtml("pl",x.name,x.addr,x.d);}).catch(()=>{});}
-  gButton(q,c,seq,box);
+  if(!gl)gButton(q,c,seq,box);
+}
+/* Googleの場所検索（Places API の Text Search）。回数を数える */
+async function gPlaces(q,c){
+  const {Place}=await google.maps.importLibrary("places");usageBump("gplace");
+  const {places}=await Place.searchByText({textQuery:q,fields:["displayName","formattedAddress","location"],language:"ja",region:"jp",maxResultCount:8,
+    locationBias:{center:{lat:c[0],lng:c[1]},radius:50000}});
+  return(places||[]).map(p=>({name:p.displayName||"",addr:(p.formattedAddress||"").replace(/^日本、?\s*/,"").replace(/〒\d{3}-?\d{4}\s*/,""),lat:p.location.lat(),lon:p.location.lng()})).map(x=>Object.assign(x,{d:distKm(c,[x.lat,x.lon])}));
 }
 /* Googleで探す：押した時だけGoogleの場所検索（Places API の Text Search）を使う。自動では使わない。1日の回数に上限 */
 const gPlaceOk=()=>typeof google!=="undefined"&&google.maps&&typeof google.maps.importLibrary==="function"&&gState==="ok";
@@ -2617,11 +2634,8 @@ function gButton(q,c,seq,box){
   const left=GPLACE_CAP-(usageGet().gplace||0),bt=document.createElement("button");bt.type="button";bt.className="gfind";
   bt.innerHTML=left>0?`Googleで探す<small>今日あと${left}回</small>`:`Googleで探す<small>今日の上限に達しました</small>`;bt.disabled=left<=0;
   bt.addEventListener("click",async()=>{if(seq!==searchSeq)return;bt.disabled=true;bt.innerHTML="Googleで探しています…";
-    try{const {Place}=await google.maps.importLibrary("places");usageBump("gplace");
-      const {places}=await Place.searchByText({textQuery:q,fields:["displayName","formattedAddress","location"],language:"ja",region:"jp",maxResultCount:8,
-        locationBias:{center:{lat:c[0],lng:c[1]},radius:50000}});
+    try{const gl=await gPlaces(q,c);
       if(seq!==searchSeq)return;
-      const gl=(places||[]).map(p=>({name:p.displayName||"",addr:(p.formattedAddress||"").replace(/^日本、?\s*/,"").replace(/〒\d{3}-?\d{4}\s*/,""),lat:p.location.lat(),lon:p.location.lng()})).map(x=>Object.assign(x,{d:distKm(c,[x.lat,x.lon])}));
       bt.remove();
       if(!gl.length){box.insertAdjacentHTML("beforeend",'<div class="msg">Googleでも見つかりませんでした</div>');return;}
       const hd=document.createElement("div");hd.className="hh";hd.textContent="Googleの検索結果";box.prepend(hd);
