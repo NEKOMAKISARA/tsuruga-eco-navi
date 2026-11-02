@@ -80,8 +80,12 @@ def clean_name(nm):
 
 # ---- 1回目：分かれ口の点（名前・番号） ----
 JN = {}  # id -> {name, ref, loc}
+JX = set()  # JCT・SA・PAの分かれ口（ここから来るランプは乗り口ではない）
 for o in osmium.FileProcessor(PBF, osmium.osm.NODE).with_filter(osmium.filter.TagFilter(("highway", "motorway_junction"))):
-    nm = clean_name(o.tags.get("name:ja") or o.tags.get("name") or "")
+    raw = o.tags.get("name:ja") or o.tags.get("name") or ""
+    if NOT_RE.search(raw) and not SMART_RE.search(raw):
+        JX.add(o.id)
+    nm = clean_name(raw)
     if not nm:
         continue
     JN[o.id] = {"name": nm, "loc": (o.location.lat, o.location.lon)}
@@ -172,7 +176,8 @@ def chain_back(k, limit=VIA_M + 50):
 
 
 def from_motorway(k, depth=12):
-    """このランプをさかのぼると本線から来ているか（JCT・SA・PAから戻る道）"""
+    """このランプをさかのぼると、JCT・SA・PAの分かれ口（または名前の無い本線の分かれ目）から来ているか。
+    トランペット型のICは、反対向きの降り口のランプを通って本線に戻れてしまうので、ICの分かれ口に着いた時は数えない"""
     todo, seen = [k], set()
     while todo and depth > 0:
         depth -= 1
@@ -182,7 +187,9 @@ def from_motorway(k, depth=12):
         seen.add(k)
         s = LINKS[k][0][0]
         if s in ON:
-            return True
+            if s in JX or s not in JN:
+                return True
+            continue
         todo += by_end.get(s, [])
     return False
 
@@ -213,8 +220,7 @@ for jid, j in JN.items():
         continue
     road, mb = ON[jid]
     for k in by_start.get(jid, []):
-        if to_motorway(k):
-            continue  # JCTへ行くランプ
+        # 名前がICの分かれ口から出るランプは降り口（トランペット型は反対向きの乗り口を通って本線に戻れるので、先はたどらない）
         pts = chain_fwd(k)
         p, h = along(pts, VIA_M)
         if p is None:

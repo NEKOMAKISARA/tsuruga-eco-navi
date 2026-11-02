@@ -1628,7 +1628,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 14:16";
+const BUILD="2026-11-02 14:50";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2944,6 +2944,13 @@ async function icScan(){
     let ent=null,ex=null,ek=1e9,xk=-1;
     for(const x of db){if(x.kind===1){const k=near(x);if(k!=null&&k>=r.a-0.3&&k<=r.a+4&&k<ek){ek=k;ent=x;}}
       else{const k=near(x);if(k!=null&&k>=r.b-4&&k<=r.b+0.3&&k>xk){xk=k;ex=x;}}}
+    // 一覧に無いIC（SA・PAの中のスマートIC、国道の自動車専用道路など）：案内の名前と場所で仮のICを作る（◀▶はそこから隣を探す）
+    const fake=(kind,km,nm)=>{const hd=routeHdAt(km),p=posAt(km);let road="",bd=25;
+      for(const x of db)if(x.kind===kind&&icAng(x.mb,hd)<40){const d=distKm(p,x.m);if(d<bd){bd=d;road=x.road;}}
+      return{name:nm,road,kind,m:p,v:posAt(Math.min(TOTAL,km+(kind?-0.15:0.15))),vh:Math.round(routeHdAt(km+(kind?-0.15:0.15))),mb:Math.round(hd),smt:/スマート|SIC/.test(nm),fake:true};};
+    const gName=g=>(g&&(g.name||"")).replace(/[\s　]*[（(](上り|下り|内回り|外回り|[東西南北]行き?)[)）]/g,"").trim();
+    if(!ex){const g=[...GUIDE].reverse().find(j=>j.km<=r.b+0.3&&j.km>=r.b-3&&j.name);if(g)ex=fake(0,g.km,gName(g));}
+    if(!ent){const g=GUIDE.find(j=>j.km>=r.a-1.5&&j.km<=r.a+0.5&&j.name);ent=fake(1,Math.min(TOTAL,r.a+0.3),g?gName(g):"乗り口");}
     return{a:r.a,b:r.b,ent,ex};});
   ICKEY=key;
 }
