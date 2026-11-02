@@ -380,6 +380,7 @@ body.pv .locbtn{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 230px)}
 .pv-opts button{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:baseline;text-align:left;border:1px solid #dadce0;background:#fff;color:#3c4043;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:400}
 .pv-opts button b{font:700 18px var(--num);color:#202124}.pv-opts button small{grid-column:2;color:#5f6368;font-size:12px}
 .pv-opts button.on{border-color:#1a73e8;background:#e8f0fe}
+.pv-short{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;background:#e6f4ea;color:#137333;font:700 11px/1.5 var(--jp,sans-serif);vertical-align:2px;font-style:normal}
 .wxmk{display:flex!important;color:#202124;align-items:center;justify-content:center;background:rgba(255,255,255,.9);border:2px solid #1a73e8;border-radius:50%;font-size:17px;line-height:1}
 .pv-wx{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;scrollbar-width:none}.pv-wx::-webkit-scrollbar{display:none}
 .pv-wx span{flex-shrink:0;display:flex;flex-direction:column;align-items:center;background:#f1f3f4;border-radius:8px;padding:4px 8px;font-size:13px;white-space:nowrap}
@@ -1608,7 +1609,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 13:21";
+const BUILD="2026-11-02 13:27";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2822,9 +2823,18 @@ async function gRoutes(from){
     routeModifiers:{tollPasses:["JP_ETC"],avoidTolls:SET.pref==="notoll"},language:"ja",region:"JP",
     fields:["path","distanceMeters","durationMillis","staticDurationMillis","routeLabels","travelAdvisory"]};
   if(STOP)req.intermediates=[{location:{lat:STOP.lat,lng:STOP.lon}}];
+  else req.requestedReferenceRoutes=["SHORTER_DISTANCE"]; // 距離が一番短いルートも同じ1回で返してもらう（立ち寄りがある時は使えない）
   usageBump("groute");
-  const {routes}=await Route.computeRoutes(req);
-  return(routes||[]).map(gNorm).filter(r=>r.path.length>1);
+  let routes;
+  try{({routes}=await Route.computeRoutes(req));}
+  catch(e){if(!req.requestedReferenceRoutes)throw e;delete req.requestedReferenceRoutes;({routes}=await Route.computeRoutes(req));} // 受け付けられない時は無しでやり直す
+  // 最短距離のルートがおすすめと同じ道の時は1本にまとめる
+  const out=[];for(const r of(routes||[]).map(gNorm).filter(r=>r.path.length>1)){
+    const same=out.find(o=>Math.abs(o.dist-r.dist)<0.2&&Math.abs(o.durMin-r.durMin)<1);
+    if(same){same.short=same.short||r.short;continue;}out.push(r);}
+  // 最短距離と書くのは、本当に一番短い1本だけ（2km以上短い時）
+  const minD=Math.min(...out.map(o=>o.dist));for(const o of out)o.short=o.short&&o.dist<=minD+0.01&&out.some(p=>p!==o&&p.dist-o.dist>=2);
+  return out;
 }
 const num=v=>typeof v==="function"?v():+v;
 function gNorm(r){
@@ -2834,7 +2844,8 @@ function gNorm(r){
   const iv=(ta.speedReadingIntervals&&ta.speedReadingIntervals.length?ta.speedReadingIntervals:(r.legs||[]).flatMap(l=>(l.travelAdvisory&&l.travelAdvisory.speedReadingIntervals)||[]));
   const jams=iv.filter(x=>String(x.speed)!=="NORMAL").map(x=>({i0:x.startPolylinePointIndex||0,i1:x.endPolylinePointIndex??path.length-1,speed:String(x.speed)}));
   const durMin=(r.durationMillis||0)/60000;
-  return{src:"g",path,dist:(r.distanceMeters||0)/1000,durMin,staticMin:(r.staticDurationMillis||r.durationMillis||0)/60000,yen,tollKnown,jams};
+  const labels=(r.routeLabels||[]).map(String);
+  return{src:"g",short:labels.includes("SHORTER_DISTANCE"),path,dist:(r.distanceMeters||0)/1000,durMin,staticMin:(r.staticDurationMillis||r.durationMillis||0)/60000,yen,tollKnown,jams};
 }
 // 渋滞の区間：Googleの線の上の始まり・終わりの点と、遅れ（渋滞を考えた時間−考えない時間を、長さと程度で分ける）
 function gJamList(o){
@@ -2964,7 +2975,7 @@ function showPreview(msg){
   if(OPTS.length>1){
     h+=`<div class="pv-opts">`+OPTS.map((o,i)=>{const om=minOf(o),dm=om-m,dy=o.src==="g"&&sel&&sel.src==="g"&&o.tollKnown&&sel.tollKnown?o.yen-sel.yen:null;
       const diff=i===OPT_I?"選択中":[Math.abs(dm)<1?"同じくらい":`${Math.round(Math.abs(dm))}分${dm>0?"遅い":"早い"}`,dy==null||Math.abs(dy)<1?"":`${yen(Math.abs(dy))}${dy>0?"高い":"安い"}`].filter(Boolean).join("・");
-      return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
+      return `<button type="button" class="${i===OPT_I?"on":""}" data-i="${i}"><b>${hm(new Date(now.getTime()+om*60e3))}${o.short?'<em class="pv-short">最短距離</em>':""}</b><span>${fmtDur(om)} ・ ${o.dist.toFixed(0)}km${o.src==="g"?" ・ "+tollTxt(o):""}${jamTxt(o)?" ・ "+jamTxt(o):""}</span><small>${diff}</small></button>`;}).join("")+`</div>`;
   }
   if(gErr)h+=`<small class="pv-note">料金・渋滞：${esc(gErr)}</small>`;
   if(AVOIDED)h+=`<div class="pv-avoid">✓ 冬期閉鎖の道（${esc(AVOIDED.names.join("・"))}）を避けた経路にしました（${(m=>m>=1?"+"+Math.round(m)+"分":m<=-1?Math.round(m)+"分":"時間はほぼ同じ")(driveMin(0,TOTAL)-AVOIDED.min)}・${(TOTAL-AVOIDED.km>=0?"+":"")+(TOTAL-AVOIDED.km).toFixed(Math.abs(TOTAL-AVOIDED.km)<10?1:0)}km）<button type="button" id="undoAvoid">元の経路に戻す</button></div>`;
