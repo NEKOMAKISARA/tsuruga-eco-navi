@@ -64,10 +64,13 @@ header,main{max-width:520px;margin:0 auto}
 .dl .acts a,.dl .acts button{border:1px solid var(--line);border-radius:18px;padding:5px 12px;text-decoration:none;color:var(--fg);background:#fff;font-size:13px;cursor:pointer}
 .dl .acts .go{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
 .dl h3{font-size:13px;margin:12px 0 4px;color:#174ea6}
-#cmap{height:300px;border-radius:10px;border:1px solid var(--line);margin-top:4px}
+#cmap{position:relative;max-height:480px;overflow:auto;border-radius:10px;border:1px solid var(--line);margin-top:4px;background:linear-gradient(#e9f1f8,#fbfdff 70%);-webkit-overflow-scrolling:touch}
+#cmap svg{display:block}
+#cmap .cmsg{padding:40px 10px;text-align:center;color:var(--mut);font-size:13px}
+#cname{font-size:12px;min-height:1.4em;margin-top:2px}
 .cleg{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:4px;align-items:center}
 .cleg i{display:inline-block;width:16px;height:4px;border-radius:2px;vertical-align:middle;margin-right:3px}
-.cleg i.lift{height:0;border-top:2px dashed #5f6368;border-radius:0}
+.cleg i.lift{height:2px;background:#3c4043;border-radius:0}
 .tb{display:grid;gap:2px 4px;align-items:center;font-size:12px}
 .tb small{color:var(--mut);font-size:10px;text-align:center}
 .tb b{text-align:center}
@@ -242,18 +245,30 @@ async function ensureElev(list){
     ELEV[r.id]={top:[+hi.p[0].toFixed(5),+hi.p[1].toFixed(5),Math.round(hi.e)],base:[+lo.p[0].toFixed(5),+lo.p[1].toFixed(5),Math.round(lo.e)]};}
 }
 // 予報：山頂と山麓（差が80m未満なら山麓だけ）。1時間たったら取り直す
+// 取った予報は端末に残す（IndexedDB）。開き直しても90分以内なら取り直さない＝回数の上限（1時間5000・1日1万）に当たりにくく
+const WXDB={db:null,async open(){if(this.db)return this.db;this.db=await new Promise((ok,ng)=>{const q=indexedDB.open("kawasakiWx",1);q.onupgradeneeded=()=>q.result.createObjectStore("w");q.onsuccess=()=>ok(q.result);q.onerror=()=>ng(q.error);});return this.db;},
+  async all(){try{const db=await this.open();return await new Promise(ok=>{const o={},c=db.transaction("w").objectStore("w").openCursor();c.onsuccess=()=>{const x=c.result;if(x){o[x.key]=x.value;x.continue();}else ok(o);};c.onerror=()=>ok({});});}catch(e){return{};}},
+  async put(k,v){try{const db=await this.open();db.transaction("w","readwrite").objectStore("w").put(v,k);}catch(e){}}};
+async function loadWxCache(){const o=await WXDB.all(),lim=Date.now()-36*3600e3;for(const k in o)if(o[k]&&o[k].t>lim&&!S.W[k])S.W[k]=o[k];}
+const WX_FRESH=90*60e3;
 async function ensureWx(list){
-  const now=Date.now(),need=list.filter(r=>ELEV[r.id]&&(!S.W[r.id]||now-S.W[r.id].t>60*60e3));if(!need.length)return;
+  const now=Date.now(),need=list.filter(r=>ELEV[r.id]&&(!S.W[r.id]||now-S.W[r.id].t>WX_FRESH));if(!need.length)return;
+  if(S.wxBlock&&now<S.wxBlock)throw new Error(S.wxBlockMsg);
   const pts=[];need.forEach(r=>{const e=ELEV[r.id];if(e.top[2]-e.base[2]>=80)pts.push({r,nm:"山頂",p:e.top});pts.push({r,nm:"山麓",p:e.base});});
   for(let i=0;i<pts.length;i+=40){const ch=pts.slice(i,i+40);
     const u="https://api.open-meteo.com/v1/forecast?latitude="+ch.map(x=>x.p[0].toFixed(4)).join(",")+"&longitude="+ch.map(x=>x.p[1].toFixed(4)).join(",")+"&elevation="+ch.map(x=>x.p[2]).join(",")+
       "&hourly=temperature_2m,snowfall,rain,weather_code,wind_speed_10m,wind_gusts_10m,snow_depth&past_days=2&forecast_days="+NDAY+"&timezone=Asia%2FTokyo&timeformat=unixtime&wind_speed_unit=ms";
     // 1分あたりの回数を超えると断られる（ブラウザでは Failed to fetch に見える）→ 少し待って最大3回取り直す
-    let res=null,err=null;for(let t=0;t<4;t++){try{res=await fetch(u);if(res.ok)break;err=new Error("天気 "+res.status);}catch(e){err=e;res=null;}if(t<3){setStatus("天気の取得を待っています…");await sleep(20000);}}
+    // 1時間・1日の上限は待っても無駄なので取り直さない（前に取った予報を出す）
+    let res=null,err=null;for(let t=0;t<4;t++){try{res=await fetch(u);if(res.ok)break;err=new Error("天気 "+res.status);
+        if(res.status===429){let why="";try{why=(await res.json()).reason||"";}catch(e){}
+          if(/hourly|daily/i.test(why)){const daily=/daily/i.test(why);S.wxBlock=Date.now()+(daily?3*3600e3:15*60e3);S.wxBlockMsg=daily?"天気の取得が今日の上限に達しました":"天気の取得が1時間の上限に達しました。しばらくすると取れます";throw new Error(S.wxBlockMsg);}}}
+      catch(e){if(S.wxBlock&&Date.now()<S.wxBlock)throw e;err=e;res=null;}
+      if(t<3){setStatus("天気の取得を待っています…");await sleep(20000);}}
     if(!res||!res.ok)throw err;
     let d=await res.json();if(!Array.isArray(d))d=[d];
     ch.forEach((x,j)=>{const h=(d[j]||{}).hourly||{};x.w={nm:x.nm,e:x.p[2],time:h.time||[],temp:h.temperature_2m||[],snow:h.snowfall||[],rain:h.rain||[],code:h.weather_code||[],wind:h.wind_speed_10m||[],gust:h.wind_gusts_10m||[],depth:h.snow_depth||[]};});
-    for(const r of new Set(ch.map(x=>x.r)))S.W[r.id]={t:now,pts:pts.filter(x=>x.r===r&&x.w).map(x=>x.w)};
+    for(const r of new Set(ch.map(x=>x.r))){S.W[r.id]={t:now,pts:pts.filter(x=>x.r===r&&x.w).map(x=>x.w)};WXDB.put(r.id,S.W[r.id]);}
     render();if(i+40<pts.length)await sleep(pts.length>400?6000:1500);}
 }
 // 時間：道で測る（Valhalla・無料）。出発地ごとに覚えておく（渋滞は入らない）
@@ -321,7 +336,7 @@ async function refresh(){
   if(!S.cands.length){render();setStatus("この時間で行けるスキー場がありません");return;}
   setStatus(`${S.cands.length}か所の予報を取得中…`);render();
   try{await ensureElev(S.cands);if(seq!==S.seq)return;await ensureWx(S.cands);if(seq!==S.seq)return;setStatus("");}
-  catch(e){setStatus("取得できませんでした（"+e.message+"）。少し待ってから開き直してください",true);}
+  catch(e){const old=S.cands.some(r=>S.W[r.id]);setStatus((S.wxBlock?e.message:"取得できませんでした（"+e.message+"）")+(old?"。前に取った予報を出しています":""),true);}
   render();fitMap();measureTT();
 }
 
@@ -383,27 +398,48 @@ function sortChips(){$("sorts").innerHTML=SORTS.map(([k,t])=>`<button class="btn
 /* ---- 詳細 ---- */
 function openDetail(id){S.open=id;$("detail").hidden=false;
   const r=S.cands.find(x=>x.id===id)||S.db.find(x=>x.id===id);
-  $("dl").innerHTML=`<div id="dA"></div><h3>コースマップ</h3><div id="cmap"></div><div class="cleg"><span><i style="background:${PC.g}"></i>初級</span><span><i style="background:${PC.r}"></i>中級</span><span><i style="background:${PC.b}"></i>上級</span><span><i style="background:${PC.f}"></i>非圧雪</span><span><i class="lift"></i>リフト</span>`+
-    `<a href="https://www.google.com/search?tbm=isch&q=${encodeURIComponent(r.name)}+%E3%82%B3%E3%83%BC%E3%82%B9%E3%83%9E%E3%83%83%E3%83%97" target="_blank" rel="noopener" style="margin-left:auto">公式のコースマップ</a></div><div id="dB"></div>`;
+  $("dl").innerHTML=`<div id="dA"></div><h3>コースマップ</h3><div id="cmap"></div><div class="cleg"><span><i style="background:${PC.g}"></i>初級</span><span><i style="background:${PC.r}"></i>中級</span><span><i style="background:${PC.b}"></i>上級</span><span><i style="background:${PC.f}"></i>非圧雪</span><span><i class="lift"></i>リフト</span><button class="btn" id="cBig">拡大</button>`+
+    `<a href="https://www.google.com/search?tbm=isch&q=${encodeURIComponent(r.name)}+%E3%82%B3%E3%83%BC%E3%82%B9%E3%83%9E%E3%83%83%E3%83%97" target="_blank" rel="noopener" style="margin-left:auto">公式のコースマップ</a></div><div id="cname"></div><div id="dB"></div>`;
+  S.cbig=false;$("cBig").onclick=()=>{S.cbig=!S.cbig;$("cBig").textContent=S.cbig?"戻す":"拡大";drawCourse(r);};
   $("dl").scrollTop=0;drawDetail();drawCourse(r);}
-// コースマップ：OpenStreetMap のコース（初級 緑・中級 赤・上級 黒・非圧雪 橙）とリフト。tools/make_ski_course.py で作った ski_course/
-const PC={g:"#1e8e3e",r:"#d93025",b:"#202124",f:"#e8710a","":"#80868b"};
-let cmap=null;
+// コースマップ：ゲレンデマップ風（地図の絵は出さない）。山頂が上・ふもとが下になるよう回す。
+// データは OpenStreetMap のコース（初級 緑・中級 赤・上級 黒・非圧雪 橙）とリフト。tools/make_ski_course.py で作った ski_course/
+const PC={g:"#1e8e3e",r:"#d93025",b:"#202124",f:"#e8710a","":"#9aa0a6"};
+const CDATA={};
 async function drawCourse(r){
-  if(cmap){cmap.remove();cmap=null;}
-  const m=L.map("cmap",{zoomControl:false,attributionControl:true}).setView(r.c,14);cmap=m;
-  L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",{maxZoom:18,attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>・コース © OpenStreetMap'}).addTo(m);
-  let d=null;try{const res=await fetch("ski_course/"+r.cid+".json");if(res.ok)d=await res.json();}catch(e){}
-  if(cmap!==m)return;
-  const pl=a=>{const o=[];for(let i=0;i+1<a.length;i+=2)o.push([r.c[0]+a[i]/1e5,r.c[1]+a[i+1]/1e5]);return o;};
-  const all=[];
-  if(d){
-    for(const[k,nm,cl,a]of d.p.filter(x=>x[2]))  {const ll=pl(a);all.push(...ll);const g=L.polygon(ll,{color:PC[k]||PC[""],weight:1,fillOpacity:.18,opacity:.5}).addTo(m);if(nm)g.bindTooltip(esc(nm));}
-    for(const[k,nm,cl,a]of d.p.filter(x=>!x[2])) {const ll=pl(a);all.push(...ll);const g=L.polyline(ll,{color:PC[k]||PC[""],weight:k==="b"?3.5:3,opacity:.9}).addTo(m);if(nm)g.bindTooltip(esc(nm),{sticky:true});}
-    for(const[k,nm,a]of d.l){const ll=pl(a);all.push(...ll);const g=L.polyline(ll,{color:"#5f6368",weight:2,dashArray:"6 4"}).addTo(m);if(nm)g.bindTooltip(esc(nm),{sticky:true});}
-  }
-  if(all.length)m.fitBounds(L.latLngBounds(all),{padding:[12,12]});
-  else{L.marker(r.c).addTo(m);$("cmap").insertAdjacentHTML("beforeend",'<div style="position:absolute;z-index:500;left:8px;top:8px;background:#fff;border-radius:6px;padding:2px 8px;font-size:12px">コースのデータがありません</div>');}
+  const box=$("cmap"),my=S.open;if(!box)return;
+  let d=CDATA[r.cid];
+  if(d===undefined){box.innerHTML='<div class="cmsg">読み込み中…</div>';d=null;try{const res=await fetch("ski_course/"+r.cid+".json");if(res.ok)d=await res.json();}catch(e){}CDATA[r.cid]=d;}
+  if(S.open!==my)return;
+  if(!d||!(d.p.length||d.l.length)){box.innerHTML='<div class="cmsg">コースのデータがありません</div>';return;}
+  // 1e-5度 → m（東が+x・南が+y）
+  const k=Math.cos(r.c[0]*Math.PI/180),M=(dlat,dlon)=>[dlon*1.1132*k,-dlat*1.1054];
+  const el=ELEV[r.id];let ux=0,uy=-1;
+  if(el){const v=M((el.top[0]-el.base[0])*1e5,(el.top[1]-el.base[1])*1e5),n=Math.hypot(v[0],v[1]);if(n>50){ux=v[0]/n;uy=v[1]/n;}}
+  const T=([x,y])=>[-uy*x+ux*y,-ux*x-uy*y];   // 山麓→山頂の向きを画面の上へ
+  const pts=a=>{const o=[];for(let i=0;i+1<a.length;i+=2)o.push(T(M(a[i],a[i+1])));return o;};
+  const P=d.p.map(([c,nm,cl,a])=>({c,nm,cl,q:pts(a)})),Lf=d.l.map(([t,nm,a])=>({nm,q:pts(a)}));
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const o of[...P,...Lf])for(const[x,y]of o.q){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);}
+  const W0=box.clientWidth||360,pad=0.06*Math.max(x1-x0,y1-y0)+20,vw=x1-x0+pad*2,vh=y1-y0+pad*2;
+  let W=W0*(S.cbig?2.4:1);if(!S.cbig&&vh*W/vw>440)W=440*vw/vh;   // 拡大していない時は全体が枠に収まる大きさ
+  const sc=W/vw,H=vh*sc,px=v=>v/sc;   // px(画面の点) → m
+  const path=q=>"M"+q.map(([x,y])=>x.toFixed(1)+" "+y.toFixed(1)).join("L");
+  const nm=t=>t?` data-n="${esc(t)}"`:"";
+  let g="";
+  for(const o of P.filter(o=>o.cl))g+=`<path d="${path(o.q)}Z" fill="${PC[o.c]||PC[""]}" fill-opacity=".16" stroke="none"${nm(o.nm)}/>`;
+  const lines=P.filter(o=>!o.cl).sort((a,b)=>"fgrb".indexOf(a.c)-"fgrb".indexOf(b.c));
+  for(const o of lines)g+=`<path d="${path(o.q)}" fill="none" stroke="#fff" stroke-width="${px(7)}" stroke-linecap="round" stroke-linejoin="round"${nm(o.nm)}/>`;
+  for(const o of lines)g+=`<path d="${path(o.q)}" fill="none" stroke="${PC[o.c]||PC[""]}" stroke-width="${px(o.c==="b"?3.6:3.2)}" stroke-linecap="round" stroke-linejoin="round"${o.c==="f"?` stroke-dasharray="${px(6)} ${px(4)}"`:""}${nm(o.nm)}/>`;
+  for(const o of Lf){const a=o.q[0],b=o.q[o.q.length-1];
+    g+=`<path d="${path(o.q)}" fill="none" stroke="transparent" stroke-width="${px(12)}"${nm(o.nm||"リフト")}/><path d="${path(o.q)}" fill="none" stroke="#3c4043" stroke-width="${px(1.6)}" pointer-events="none"/>`+
+      [a,b].map(([x,y])=>`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${px(3)}" fill="#fff" stroke="#3c4043" stroke-width="${px(1.4)}" pointer-events="none"/>`).join("");}
+  const fs=px(S.cbig?13:11);
+  if(el){const lab=(p,t,up)=>{const[x,y]=T(M((p[0]-r.c[0])*1e5,(p[1]-r.c[1])*1e5));
+      return`<g pointer-events="none"><path d="M${x} ${y-px(up?7:-7)}l${px(5)} ${px(up?9:-9)}h${-px(10)}z" fill="${up?"#5f6368":"#1a73e8"}"/><text x="${x}" y="${y+(up?-px(10):px(18))}" font-size="${fs}" text-anchor="middle" fill="#3c4043" stroke="#fff" stroke-width="${px(3)}" paint-order="stroke" font-weight="700">${t}</text></g>`;};
+    if(el.top[2]-el.base[2]>=80)g+=lab(el.top,"山頂 "+el.top[2]+"m",true);g+=lab(el.base,"山麓 "+el.base[2]+"m",false);}
+  box.innerHTML=`<svg style="margin:0 auto" width="${Math.round(W)}" height="${Math.round(H)}" viewBox="${(x0-pad).toFixed(1)} ${(y0-pad).toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}">${g}</svg>`;
+  if(S.cbig){box.scrollLeft=(W-W0)/2;box.scrollTop=Math.max(0,(H-box.clientHeight)/2);}
+  box.onclick=e=>{const t=e.target.closest("[data-n]");$("cname").textContent=t?t.dataset.n:"";};
 }
 function drawDetail(){
   const r=S.cands.find(x=>x.id===S.open)||S.db.find(x=>x.id===S.open);if(!r)return;
@@ -441,7 +477,7 @@ function drawDetail(){
   $("dClose").onclick=closeDetail;
   dl.querySelectorAll(".wk div[data-k]").forEach(b=>b.onclick=()=>{S.day=+b.dataset.k;dayChips();render();});
 }
-function closeDetail(){S.open=null;$("detail").hidden=true;if(cmap){cmap.remove();cmap=null;}}
+function closeDetail(){S.open=null;$("detail").hidden=true;}
 $("detail").addEventListener("click",e=>{if(e.target.id==="detail")closeDetail();});
 
 /* ---- 操作 ---- */
@@ -457,7 +493,7 @@ const hh=()=>document.documentElement.style.setProperty("--hh",$("hdr").offsetHe
 
 $("lim").value=S.lim;$("small").checked=!!S.small;
 dayChips();sortChips();hh();initMap();showFrom();
-loadDb().then(()=>{if(S.from)refresh();locate();}).catch(e=>setStatus("スキー場の一覧が読めません（"+e.message+"）",true));
+loadDb().then(loadWxCache).then(()=>{if(S.from)refresh();locate();}).catch(e=>setStatus("スキー場の一覧が読めません（"+e.message+"）",true));
 setInterval(()=>{if(!document.hidden&&S.from)refresh();},30*60e3);
 </script>
 </body></html>
