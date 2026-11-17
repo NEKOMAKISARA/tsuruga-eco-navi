@@ -77,6 +77,7 @@ header,main{max-width:520px;margin:0 auto}
 #cmap .lbl.pk{background:#1a73e8;color:#fff}
 #cmap .lbl.g{border-left:4px solid #1e8e3e}#cmap .lbl.r{border-left:4px solid #d93025}#cmap .lbl.b{border-left:4px solid #202124}#cmap .lbl.f{border-left:4px solid #e8710a}
 #cmap .cbtn{position:absolute;right:8px;top:8px;z-index:5;border:0;border-radius:16px;padding:4px 12px;background:rgba(255,255,255,.92);font-size:13px;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer}
+#cmap .cbtn.nm{right:auto;left:8px}#cmap .cbtn.nm.on{background:#1a73e8;color:#fff}
 #cmap .ccap{position:absolute;left:8px;bottom:8px;z-index:5;background:rgba(255,255,255,.92);border-radius:8px;padding:3px 10px;font-size:13px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 #cmap .ccap:empty{display:none}
 .cleg{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:4px;align-items:center}
@@ -539,12 +540,14 @@ async function draw3D(r,d,my){
     for(let j=0;j<=SZ;j++)for(let i=0;i<=SX;i++){const c=tint((hv[j*(SX+1)+i]-hmin)/Math.max(1,hmax-hmin)),o=(j*(SX+1)+i)*4;li.data[o]=c[0];li.data[o+1]=c[1];li.data[o+2]=c[2];li.data[o+3]=255;}
     lg.putImageData(li,0,0);g.imageSmoothingEnabled=true;g.drawImage(lo,0,0,TW,TH);}
   if(photo&&photo.n>photo.all*0.5){
-    const[a,b]=photo.px(...toLL(x0,z0)),[c,e]=photo.px(...toLL(x1,z1));g.drawImage(photo.cv,a,b,c-a,e-b,0,0,TW,TH);
+    const[a,b]=photo.px(...toLL(x0,z0)),[c,e]=photo.px(...toLL(x1,z1));
+    const sm=document.createElement("canvas");sm.width=TW/4;sm.height=Math.round(TH/4);const sg=sm.getContext("2d");sg.imageSmoothingEnabled=true;sg.imageSmoothingQuality="high";
+    sg.drawImage(photo.cv,a,b,c-a,e-b,0,0,sm.width,sm.height);g.imageSmoothingQuality="high";g.drawImage(sm,0,0,TW,TH);   // ぼかしてザラつきを減らす
     // 夏の写真を雪景色に：暗い・緑の濃い所は森（濃い青緑に雪が少し）、それ以外は雪。写真の明暗は少し残して地肌の感じを出す
     const im=g.getImageData(0,0,TW,TH),q=im.data;
     for(let i=0;i<q.length;i+=4){const R=q[i],G=q[i+1],B=q[i+2],l=0.3*R+0.59*G+0.11*B;
-      let t=(118-l)/48;if(G>R+6&&G>B+4)t+=0.18;t=t<0?0:t>1?1:t;
-      const dl=(l-110)*0.18,sr=236+dl*0.6,sg=241+dl*0.6,sb=247+dl*0.5,fr=46+l*0.22,fg=70+l*0.24,fb=66+l*0.24;
+      let t=(118-l)/40;if(G>R+6&&G>B+4)t+=0.15;t=t<0?0:t>1?1:t;
+      const dl=(l-110)*0.06,sr=240+dl,sg=244+dl,sb=249+dl,fr=88+l*0.14,fg=112+l*0.14,fb=100+l*0.14;
       q[i]=sr+(fr-sr)*t;q[i+1]=sg+(fg-sg)*t;q[i+2]=sb+(fb-sb)*t;}
     g.putImageData(im,0,0);
   }
@@ -572,16 +575,24 @@ async function draw3D(r,d,my){
   // ---- リフト：駅と空中の線 ----
   const rr=S2/1400,lm=new THREE.MeshLambertMaterial({color:0x263238}),up=new THREE.Vector3(0,1,0);
   const L3=[];
-  for(const o of Lf){const a=o.q[0],b=o.q[o.q.length-1],A=new THREE.Vector3(a[0],Y(a[0],a[1])+rr*6,a[1]),B=new THREE.Vector3(b[0],Y(b[0],b[1])+rr*6,b[1]);
-    const v=new THREE.Vector3().subVectors(B,A),len=v.length();if(len<1)continue;
-    const cy=new THREE.Mesh(new THREE.CylinderGeometry(rr*0.9,rr*0.9,len,5),lm);cy.position.copy(A).addScaledVector(v,0.5);cy.quaternion.setFromUnitVectors(up,v.clone().normalize());scene.add(cy);
-    for(const E of[A,B]){const st=new THREE.Mesh(new THREE.BoxGeometry(rr*7,rr*7,rr*7),lm);st.position.copy(E);st.position.y-=rr*3;st.castShadow=true;scene.add(st);}
-    L3.push({o,A,B});}
+  // ワイヤーは地面から CL 以上離す（斜面が盛り上がった所で地形に埋もれないように）。上側の包み線をなめらかにして張る
+  const CL=Math.max(14,rr*7)*EX;
+  for(const o of Lf){const a=o.q[0],b=o.q[o.q.length-1],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L<5)continue;
+    const n=Math.max(4,Math.ceil(L/25)),xs=[],gh=[];for(let i=0;i<=n;i++){const t=i/n,x=a[0]+(b[0]-a[0])*t,z=a[1]+(b[1]-a[1])*t;xs.push([x,z]);gh.push(Y(x,z));}
+    const hA=gh[0]+CL,hB=gh[n]+CL,hc=gh.map((h,i)=>Math.max(hA+(hB-hA)*i/n,h+CL));
+    for(let it=0;it<3;it++)for(let i=1;i<n;i++)hc[i]=Math.max(gh[i]+CL,(hc[i-1]+hc[i]*2+hc[i+1])/4);
+    const pts=xs.map(([x,z],i)=>new THREE.Vector3(x,hc[i],z));
+    const tube=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),n*3,rr*0.9,5,false),lm);scene.add(tube);
+    const tw=Math.max(1,Math.round(L/160));for(let k=1;k<tw;k++){const i=Math.round(n*k/tw),ht=hc[i]-gh[i];   // 支柱
+      const c=new THREE.Mesh(new THREE.CylinderGeometry(rr*0.5,rr*0.7,ht,4),lm);c.position.set(xs[i][0],gh[i]+ht/2,xs[i][1]);scene.add(c);}
+    const A=pts[0],B=pts[n];
+    for(const E of[A,B]){const st=new THREE.Mesh(new THREE.BoxGeometry(rr*7,CL,rr*7),lm);st.position.copy(E);st.position.y-=CL/2;st.castShadow=true;scene.add(st);}
+    L3.push({o,A,B,mid:pts[Math.floor(n/2)]});}
   // ---- 光：空の青みの環境光＋左上からの太陽（尾根の影が谷に落ちる。影は薄め） ----
   const el=ELEV[r.id];let ux=0,uz=-1;
   if(el){const a=M((el.top[0]-r.c[0])*1e5,(el.top[1]-r.c[1])*1e5),b=M((el.base[0]-r.c[0])*1e5,(el.base[1]-r.c[1])*1e5),n=Math.hypot(a[0]-b[0],a[1]-b[1]);if(n>50){ux=(a[0]-b[0])/n;uz=(a[1]-b[1])/n;}}
-  scene.add(new THREE.HemisphereLight(0xdfeaf7,0x8a96a3,1.25));
-  const sun=new THREE.DirectionalLight(0xfff6ea,1.8);sun.position.set(CX+(-uz*0.8-ux*0.6)*S2,(hmax-hmin)*EX+S2*0.9,CZ+(ux*0.8-uz*0.6)*S2);sun.target.position.set(CX,0,CZ);scene.add(sun,sun.target);
+  scene.add(new THREE.HemisphereLight(0xe6eef8,0x9aa6b2,1.55));
+  const sun=new THREE.DirectionalLight(0xfff6ea,1.35);sun.position.set(CX+(-uz*0.8-ux*0.6)*S2,(hmax-hmin)*EX+S2*0.9,CZ+(ux*0.8-uz*0.6)*S2);sun.target.position.set(CX,0,CZ);scene.add(sun,sun.target);
   sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);const sc2=sun.shadow.camera;sc2.left=sc2.bottom=-S2*0.75;sc2.right=sc2.top=S2*0.75;sc2.near=S2*0.1;sc2.far=S2*4;sun.shadow.bias=-0.0004;sun.shadow.normalBias=S2/600;
   scene.fog=new THREE.Fog(0xe4eef7,S2*1.6,S2*FAR*1.15);
   const ren=new THREE.WebGLRenderer({antialias:true,alpha:true});ren.setPixelRatio(Math.min(2,devicePixelRatio||1));
@@ -590,7 +601,11 @@ async function draw3D(r,d,my){
   const lay=document.createElement("div");lay.style.cssText="position:absolute;inset:0;pointer-events:none;overflow:hidden";
   const fb=document.createElement("button");fb.className="cbtn";fb.textContent="全画面";
   const cap=document.createElement("div");cap.className="ccap";
-  box.append(ren.domElement,lay,fb,cap);
+  // リフト名・コース名は最初は隠す（山頂・山麓だけ）。ボタンで切り替え、端末に覚えておく
+  let showNm=!!LS.get("skiNames",false);const nb=document.createElement("button");nb.className="cbtn nm";
+  const nbSet=()=>{nb.textContent="名前";nb.classList.toggle("on",showNm);};nbSet();
+  nb.onclick=()=>{showNm=!showNm;LS.set("skiNames",showNm);nbSet();place();};
+  box.append(ren.domElement,lay,fb,nb,cap);
   // ---- カメラ：ふもとから山頂を見上げる向き ----
   const cam=new THREE.PerspectiveCamera(38,1,S2/200,S2*FAR*3);
   const ctr=new THREE.Vector3(CX,(hmax-hmin)*EX*0.42,CZ);
@@ -601,13 +616,13 @@ async function draw3D(r,d,my){
   const lbs=[];const addL=(p,t,cls,pri)=>{const e=document.createElement("div");e.className="lbl "+cls;e.textContent=t;lay.append(e);lbs.push({p,e,pri,w:0});};
   if(el){if(el.top[2]-el.base[2]>=80){const a=M((el.top[0]-r.c[0])*1e5,(el.top[1]-r.c[1])*1e5);addL(new THREE.Vector3(a[0],Y(a[0],a[1])+rr*14,a[1]),"▲ 山頂 "+el.top[2]+"m","pk",0);}
     const b=M((el.base[0]-r.c[0])*1e5,(el.base[1]-r.c[1])*1e5);addL(new THREE.Vector3(b[0],Y(b[0],b[1])+rr*14,b[1]),"山麓 "+el.base[2]+"m","pk",1);}
-  for(const x of L3)if(x.o.nm)addL(x.A.clone().lerp(x.B,0.5).add(new THREE.Vector3(0,rr*4,0)),x.o.nm,"lift",2);
+  for(const x of L3)if(x.o.nm)addL(x.mid.clone().add(new THREE.Vector3(0,rr*4,0)),x.o.nm,"lift",2);
   const plen=q=>{let s=0;for(let i=1;i<q.length;i++)s+=Math.hypot(q[i][0]-q[i-1][0],q[i][1]-q[i-1][1]);return s;};
-  P.filter(o=>o.nm&&!o.cl).map(o=>({o,L:plen(o.q)})).sort((a,b)=>b.L-a.L).slice(0,40).forEach(({o},i)=>{const m=o.q[Math.floor(o.q.length/2)];addL(new THREE.Vector3(m[0],Y(m[0],m[1])+rr*3,m[1]),o.nm,o.c||"",3+i/100);});
+  P.filter(o=>o.nm&&!o.cl).map(o=>({o,L:plen(o.q)})).sort((a,b)=>b.L-a.L).slice(0,25).forEach(({o},i)=>{const m=o.q[Math.floor(o.q.length/2)];addL(new THREE.Vector3(m[0],Y(m[0],m[1])+rr*3,m[1]),o.nm,o.c||"",3+i/100);});
   lbs.sort((a,b)=>a.pri-b.pri);
   const v3=new THREE.Vector3();
   const place=()=>{const w=box.clientWidth,h=box.clientHeight,used=[];
-    for(const L of lbs){v3.copy(L.p).project(cam);const sx=(v3.x+1)/2*w,sy=(1-v3.y)/2*h;
+    for(const L of lbs){if(L.pri>=2&&!showNm){L.e.style.display="none";continue;}v3.copy(L.p).project(cam);const sx=(v3.x+1)/2*w,sy=(1-v3.y)/2*h;
       if(!L.w)L.w=L.e.offsetWidth||60;
       const rc=[sx-L.w/2,sy-18,sx+L.w/2,sy-2];
       const ok=v3.z<1&&rc[0]>2&&rc[2]<w-2&&rc[1]>2&&rc[3]<h-2&&!used.some(u=>!(rc[2]<u[0]||rc[0]>u[2]||rc[3]<u[1]||rc[1]>u[3]));
