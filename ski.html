@@ -251,8 +251,21 @@ const WXDB={db:null,async open(){if(this.db)return this.db;this.db=await new Pro
   async put(k,v){try{const db=await this.open();db.transaction("w","readwrite").objectStore("w").put(v,k);}catch(e){}}};
 async function loadWxCache(){const o=await WXDB.all(),lim=Date.now()-36*3600e3;for(const k in o)if(o[k]&&o[k].t>lim&&!S.W[k])S.W[k]=o[k];}
 const WX_FRESH=90*60e3;
+// まとめて取った予報（GitHub Actions が3時間ごとに作る wx.json、tools/fetch_wx.py）。まずこれを読み、古い・無い時だけ直接取る
+const WX_SHARED="https://raw.githubusercontent.com/NEKOMAKISARA/tsuruga-eco-navi/wx-data/wx.json",SH_FRESH=4.5*3600e3;
+async function loadShared(){
+  if(S.shT&&Date.now()-S.shT<20*60e3)return;S.shT=Date.now();
+  try{const res=await fetch(WX_SHARED,{cache:"no-cache"});if(!res.ok)return;const j=await res.json(),t=j.t*1000;
+    if(Date.now()-t>SH_FRESH)return;
+    const time=Array.from({length:j.n},(_,i)=>j.t0+i*3600),f=(a,k=10)=>a.map(v=>v==null?null:v/k);
+    for(const id in j.s){const c=S.W[id];if(c&&c.t>=t)continue;
+      S.W[id]={t,shared:true,pts:j.s[id].map(([nm,e,T,Sn,R,C,Wd,G,D])=>({nm,e,time,temp:f(T),snow:f(Sn),rain:f(R),code:C,wind:f(Wd),gust:f(G),depth:f(D,100)}))};}
+  }catch(e){}
+}
+const wxOld=(w,now)=>!w||now-w.t>(w.shared?SH_FRESH:WX_FRESH);
 async function ensureWx(list){
-  const now=Date.now(),need=list.filter(r=>ELEV[r.id]&&(!S.W[r.id]||now-S.W[r.id].t>WX_FRESH));if(!need.length)return;
+  await loadShared();
+  const now=Date.now(),need=list.filter(r=>ELEV[r.id]&&wxOld(S.W[r.id],now));if(!need.length)return;
   if(S.wxBlock&&now<S.wxBlock)throw new Error(S.wxBlockMsg);
   const pts=[];need.forEach(r=>{const e=ELEV[r.id];if(e.top[2]-e.base[2]>=80)pts.push({r,nm:"山頂",p:e.top});pts.push({r,nm:"山麓",p:e.base});});
   for(let i=0;i<pts.length;i+=40){const ch=pts.slice(i,i+40);

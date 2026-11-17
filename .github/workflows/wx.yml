@@ -1,0 +1,29 @@
+# スキー場の天気予報をまとめて取り、wx-data ブランチの wx.json に置く（カワサキサーチ ski.html が読む）
+# 毎回1コミットで上書きするので履歴は増えない
+name: wx
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: wx
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python tools/fetch_wx.py /tmp/wx.json
+      - name: wx-data に置く
+        run: |
+          mkdir /tmp/pub && cd /tmp/pub
+          git init -q -b wx-data
+          cp /tmp/wx.json .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add wx.json && git commit -qm "wx $(date -u +%FT%TZ)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" wx-data
