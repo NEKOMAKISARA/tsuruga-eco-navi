@@ -79,6 +79,7 @@ header,main{max-width:520px;margin:0 auto}
 .wk div.sel{outline:2px solid var(--acc)}
 .wk div.best{background:#e8f0fe}
 .wk div.far{opacity:.6}
+.wk div.far2{opacity:.45}
 .wk div b{display:block;font-size:12px}
 .note{font-size:10px;color:var(--mut);margin-top:8px}
 .close{border:0;background:#f1f3f4;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;flex:0 0 auto}
@@ -173,6 +174,7 @@ function offRun(d){if(!isOff(d))return{len:0,pos:0};let a=0;while(isOff(addD(d,-
 /* ---- 状態 ---- */
 const S={db:null,from:LS.get("skiFrom",null),fromName:LS.get("skiFromName",""),day:null,lim:LS.get("skiLim","3"),small:LS.get("skiSmall",false),sort:"total",cands:[],W:{},seq:0,ttBusy:false,open:null};
 const ELEV={},TT=LS.get("skiTT",{});
+const NDAY=16; // 予報の日数（Open-Meteo の上限）
 const SORTS=[["total","総合"],["snow","雪質"],["new","新雪"],["depth","積雪"],["sky","天気"],["wind","風"],["crowd","混雑"],["near","近さ"]];
 function dayStart(k){const n=new Date();return addD(new Date(n.getFullYear(),n.getMonth(),n.getDate()),k);}
 // 何日後か：夕方（15時）より後なら明日を最初に選ぶ
@@ -220,7 +222,7 @@ async function ensureWx(list){
   const pts=[];need.forEach(r=>{const e=ELEV[r.id];if(e.top[2]-e.base[2]>=80)pts.push({r,nm:"山頂",p:e.top});pts.push({r,nm:"山麓",p:e.base});});
   for(let i=0;i<pts.length;i+=40){const ch=pts.slice(i,i+40);
     const u="https://api.open-meteo.com/v1/forecast?latitude="+ch.map(x=>x.p[0].toFixed(4)).join(",")+"&longitude="+ch.map(x=>x.p[1].toFixed(4)).join(",")+"&elevation="+ch.map(x=>x.p[2]).join(",")+
-      "&hourly=temperature_2m,snowfall,rain,weather_code,wind_speed_10m,wind_gusts_10m,snow_depth&past_days=2&forecast_days=7&timezone=Asia%2FTokyo&timeformat=unixtime&wind_speed_unit=ms";
+      "&hourly=temperature_2m,snowfall,rain,weather_code,wind_speed_10m,wind_gusts_10m,snow_depth&past_days=2&forecast_days="+NDAY+"&timezone=Asia%2FTokyo&timeformat=unixtime&wind_speed_unit=ms";
     const res=await fetch(u);if(!res.ok)throw new Error("天気 "+res.status);
     let d=await res.json();if(!Array.isArray(d))d=[d];
     ch.forEach((x,j)=>{const h=(d[j]||{}).hourly||{};x.w={nm:x.nm,e:x.p[2],time:h.time||[],temp:h.temperature_2m||[],snow:h.snowfall||[],rain:h.rain||[],code:h.weather_code||[],wind:h.wind_speed_10m||[],gust:h.wind_gusts_10m||[],depth:h.snow_depth||[]};});
@@ -285,7 +287,7 @@ function pickCands(){
   if(!S.db||!S.from)return[];
   const lim=+S.lim*60;
   return S.db.filter(r=>(S.small||r.n>=3)).map(r=>{const d=distKm(S.from,r.c);r.est=estMin(d);return r;})
-    .filter(r=>{const t=TT[ttKey(r)];return t?t.m<=lim:r.est<=lim*1.25;}).sort((a,b)=>a.est-b.est).slice(0,80);
+    .filter(r=>{const t=TT[ttKey(r)];return t?t.m<=lim:r.est<=lim*1.25;}).sort((a,b)=>a.est-b.est);
 }
 async function refresh(){
   if(!S.db||!S.from){render();return;}
@@ -333,9 +335,10 @@ function render(){
 }
 function dayChips(){
   const box=$("days");let h="";
-  for(let k=0;k<7;k++){const d=dayStart(k),w="日月火水木金土"[d.getDay()],cls=isHol(d)||d.getDay()===0||yearEnd(d)?"hol":d.getDay()===6?"sat":"";
+  for(let k=0;k<NDAY;k++){const d=dayStart(k),w="日月火水木金土"[d.getDay()],cls=isHol(d)||d.getDay()===0||yearEnd(d)?"hol":d.getDay()===6?"sat":"";
     h+=`<button class="btn${k===S.day?" on":""}" data-k="${k}">${k===0?"今日":k===1?"明日":""} ${d.getMonth()+1}/${d.getDate()}<span class="${cls}">(${w})</span></button>`;}
   box.innerHTML=h;
+  const on=box.querySelector(".on");if(on)on.scrollIntoView({block:"nearest",inline:"nearest"});
 }
 function sortChips(){$("sorts").innerHTML=SORTS.map(([k,t])=>`<button class="btn${k===S.sort?" on":""}" data-s="${k}">${t}</button>`).join("");}
 
@@ -369,12 +372,12 @@ function drawDetail(){
     h+=`</div>`;
   }else h+=`<div class="mut">予報を取得中です</div>`;
   // 1週間：日ごとの総合と雪
-  const wk=[];for(let k=0;k<7;k++)wk.push(evalDay(r,k));
+  const wk=[];for(let k=0;k<NDAY;k++)wk.push(evalDay(r,k));
   const best=wk.reduce((b,x,i)=>x&&(b<0||x.total>wk[b].total)?i:b,-1);
-  h+=`<h3>この先1週間</h3><div class="wk">`+wk.map((x,k)=>{const d=dayStart(k),w="日月火水木金土"[d.getDay()],cls=isHol(d)||d.getDay()===0||yearEnd(d)?"hol":d.getDay()===6?"sat":"";
+  h+=`<h3>この先2週間</h3><div class="wk">`+wk.map((x,k)=>{const d=dayStart(k),w="日月火水木金土"[d.getDay()],cls=isHol(d)||d.getDay()===0||yearEnd(d)?"hol":d.getDay()===6?"sat":"";
     if(!x)return`<div>${d.getMonth()+1}/${d.getDate()}<br>—</div>`;
-    return`<div class="${k===S.day?"sel":""}${k===best?" best":""}${k>=4?" far":""}" data-k="${k}">${d.getMonth()+1}/${d.getDate()}<span class="${cls}">(${w})</span><br>${wxIcon(x.code,18)}<b>${Math.round(x.total)}点</b>${qChip(x.qs[0][0])}<br>新${x.nw}cm<br><span class="${x.g>=15?"warn":""}">瞬${x.g}m</span><br><span class="cr${x.cr}">${CR[x.cr].replace("かなり","超")}</span></div>`;}).join("")+`</div>`;
-  h+=`<div class="note">雪質・積雪・混雑は天気予報と曜日からの予想（目安）。5日目以降は外れやすい。片道の時間は渋滞なし。営業しているか・コースの状況は公式で確認してください</div>`;
+    return`<div class="${k===S.day?"sel":""}${k===best?" best":""}${k>=7?" far2":k>=4?" far":""}" data-k="${k}">${d.getMonth()+1}/${d.getDate()}<span class="${cls}">(${w})</span><br>${wxIcon(x.code,18)}<b>${Math.round(x.total)}点</b>${qChip(x.qs[0][0])}<br>新${x.nw}cm<br><span class="${x.g>=15?"warn":""}">瞬${x.g}m</span><br><span class="cr${x.cr}">${CR[x.cr].replace("かなり","超")}</span></div>`;}).join("")+`</div>`;
+  h+=`<div class="note">雪質・積雪・混雑は天気予報と曜日からの予想（目安）。5日目以降は外れやすく、8日目以降は大まかな傾向だけ。片道の時間は渋滞なし。営業しているか・コースの状況は公式で確認してください</div>`;
   dl.innerHTML=h;
   $("dClose").onclick=closeDetail;
   dl.querySelectorAll(".wk div[data-k]").forEach(b=>b.onclick=()=>{S.day=+b.dataset.k;dayChips();render();});
