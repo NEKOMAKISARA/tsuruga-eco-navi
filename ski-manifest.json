@@ -1,6 +1,6 @@
 {
- "name": "スキー場えらび",
- "short_name": "スキー場えらび",
+ "name": "カワサキサーチ",
+ "short_name": "カワサキサーチ",
  "start_url": "ski.html",
  "scope": "./",
  "display": "standalone",
