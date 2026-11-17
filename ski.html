@@ -583,8 +583,6 @@ async function draw3D(r,d,my){
     for(let it=0;it<3;it++)for(let i=1;i<n;i++)hc[i]=Math.max(gh[i]+CL,(hc[i-1]+hc[i]*2+hc[i+1])/4);
     const pts=xs.map(([x,z],i)=>new THREE.Vector3(x,hc[i],z));
     const tube=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),n*3,rr*0.9,5,false),lm);scene.add(tube);
-    const tw=Math.max(1,Math.round(L/160));for(let k=1;k<tw;k++){const i=Math.round(n*k/tw),ht=hc[i]-gh[i];   // 支柱
-      const c=new THREE.Mesh(new THREE.CylinderGeometry(rr*0.5,rr*0.7,ht,4),lm);c.position.set(xs[i][0],gh[i]+ht/2,xs[i][1]);scene.add(c);}
     const A=pts[0],B=pts[n];
     for(const E of[A,B]){const st=new THREE.Mesh(new THREE.BoxGeometry(rr*7,CL,rr*7),lm);st.position.copy(E);st.position.y-=CL/2;st.castShadow=true;scene.add(st);}
     L3.push({o,A,B,mid:pts[Math.floor(n/2)]});}
