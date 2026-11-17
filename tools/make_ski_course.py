@@ -3,7 +3,8 @@
 使い方:  cd <japan-latest.osm.pbf のフォルダ>  &&  python <このファイル> japan-latest.osm.pbf <ski.json> <出力フォルダ ski_course>
   （osmium は日本語を含むパスの .pbf を開けないので、.pbf のフォルダで相対パスで渡す）
 出力: ski_course/<緯度1e5>_<経度1e5>.json（ski.json の各スキー場の2・3番目の値）
-  {"p": [[難しさ, 名前, 閉じた面か, [dlat, dlon, ...]], ...], "l": [[種類, 名前, [dlat, dlon, ...]], ...]}
+  {"p": [[難しさ, 名前, 閉じた面か, [dlat, dlon, ...]], ...], "l": [[種類, 名前, [dlat, dlon, ...]], ...], "f": [[施設, 名前, dlat, dlon], ...]}
+  施設: P=駐車場 H=センターハウス等
   座標は 1e-5 度の整数で、スキー場の中心からの差。難しさ: g=初級 r=中級 b=上級 f=非圧雪/フリーライド ""=不明
 """
 import json, os, sys
@@ -25,6 +26,15 @@ for r in ski:
     geoms.append(g.buffer(0.004))   # 範囲から約400mまで
 tree = shapely.STRtree(geoms)
 
+FAC_RE = __import__("re").compile("センター|ハウス|ベース|ヒュッテ|レストハウス|休憩所")
+INN_RE = __import__("re").compile("ホテル|ゲストハウス|ペンション|民宿|旅館|ロッジ|ハウス.*[0-9０-９]号|コテージ|山荘|宿")   # 宿は除く
+def fac_kind(t):
+    a, sh = t.get("amenity"), t.get("shop")
+    nm = t.get("name:ja") or t.get("name") or ""
+    if a == "parking" and t.get("access") not in ("private", "no") and t.get("parking") != "underground": return "P"
+    if nm and FAC_RE.search(nm) and not INN_RE.search(nm) and t.get("tourism") not in ("hotel", "guest_house", "hostel", "motel", "apartment", "chalet")             and (t.get("building") or a in ("restaurant", "cafe", "food_court", "shelter", "information") or t.get("tourism") == "information"): return "H"
+    return None   # 食事・ショップは印が多すぎて見づらいので出さない
+
 def owner(line):
     mid = line.interpolate(0.5, normalized=True)
     hits = [i for i in tree.query(mid) if geoms[i].contains(mid)]
@@ -32,11 +42,34 @@ def owner(line):
     return min(hits, key=lambda i: Point(ski[i][2] / 1e5, ski[i][1] / 1e5).distance(mid))
 
 data = {}
-F = osmium.filter.KeyFilter("piste:type", "aerialway")
+F = osmium.filter.KeyFilter("piste:type", "aerialway", "amenity", "shop", "name")
+fgeoms = [g.buffer(0.004) for g in geoms]   # 駐車場は範囲から少し離れていることがあるので広め（約800m）
+ftree = shapely.STRtree(fgeoms)
+fseen = {}
 n = 0
 for o in osmium.FileProcessor(PBF, osmium.osm.NODE | osmium.osm.WAY).with_locations().with_filter(F):
-    if not isinstance(o, osmium.osm.Way): continue
     t = o.tags
+    fk = fac_kind(t)
+    if fk:
+        try:
+            if isinstance(o, osmium.osm.Way):
+                ll = [(nd.location.lon, nd.location.lat) for nd in o.nodes]
+                pt = Point(sum(x for x, _ in ll) / len(ll), sum(y for _, y in ll) / len(ll))
+            else:
+                pt = Point(o.location.lon, o.location.lat)
+        except Exception:
+            pt = None
+        if pt is not None:
+            hits = [i for i in ftree.query(pt) if fgeoms[i].contains(pt)]
+            if hits:
+                k = min(hits, key=lambda i: Point(ski[i][2] / 1e5, ski[i][1] / 1e5).distance(pt))
+                r = ski[k]; c = (r[1] / 1e5, r[2] / 1e5)
+                nm = t.get("name:ja") or t.get("name") or ""
+                key = (k, fk, nm, round(pt.y, 3), round(pt.x, 3))
+                if key not in fseen:
+                    fseen[key] = 1
+                    data.setdefault(k, {"p": [], "l": []}).setdefault("f", []).append([fk, nm, round((pt.y - c[0]) * 1e5), round((pt.x - c[1]) * 1e5)])
+    if not isinstance(o, osmium.osm.Way): continue
     pt, aw = t.get("piste:type"), t.get("aerialway")
     if pt != "downhill" and aw not in LIFTS: continue
     try: pts = [(nd.location.lon, nd.location.lat) for nd in o.nodes]
@@ -64,4 +97,4 @@ for k, d in data.items():
     p = os.path.join(OUT, f"{r[1]}_{r[2]}.json")
     s = json.dumps(d, ensure_ascii=False, separators=(",", ":"))
     open(p, "w", encoding="utf-8").write(s); tot += len(s)
-print("files", len(data), "コースあり", sum(1 for d in data.values() if d["p"]), "合計", tot // 1024, "KB", file=sys.stderr)
+print("files", len(data), "コースあり", sum(1 for d in data.values() if d["p"]), "施設あり", sum(1 for d in data.values() if d.get("f")), "合計", tot // 1024, "KB", file=sys.stderr)

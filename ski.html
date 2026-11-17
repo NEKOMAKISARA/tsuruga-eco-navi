@@ -78,6 +78,10 @@ header,main{max-width:520px;margin:0 auto}
 #cmap .lbl.g{border-left:4px solid #1e8e3e}#cmap .lbl.r{border-left:4px solid #d93025}#cmap .lbl.b{border-left:4px solid #202124}#cmap .lbl.f{border-left:4px solid #e8710a}
 #cmap .cbtn{position:absolute;right:8px;top:8px;z-index:5;border:0;border-radius:16px;padding:4px 12px;background:rgba(255,255,255,.92);font-size:13px;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer}
 #cmap .cbtn.nm{right:auto;left:8px}#cmap .cbtn.nm.on{background:#1a73e8;color:#fff}
+#cmap .fac{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:3px;white-space:nowrap;font-size:11px;font-weight:700;color:#202124;line-height:18px}
+#cmap .fac i{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;color:#fff;font-style:normal;font-size:12px;box-shadow:0 1px 2px rgba(0,0,0,.35);border:1.5px solid #fff}
+#cmap .fac.P i{background:#1a73e8}#cmap .fac.H i{background:#e8710a}#cmap .fac.E i{background:#188038}#cmap .fac.S i{background:#8430ce}
+#cmap .fac span{background:rgba(255,255,255,.88);border-radius:4px;padding:0 4px;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 #cmap .ccap{position:absolute;left:8px;bottom:8px;z-index:5;background:rgba(255,255,255,.92);border-radius:8px;padding:3px 10px;font-size:13px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 #cmap .ccap:empty{display:none}
 .cleg{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:4px;align-items:center}
@@ -424,7 +428,7 @@ function sortChips(){$("sorts").innerHTML=SORTS.map(([k,t])=>`<button class="btn
 /* ---- 詳細 ---- */
 function openDetail(id){S.open=id;$("detail").hidden=false;
   const r=S.cands.find(x=>x.id===id)||S.db.find(x=>x.id===id);
-  $("dl").innerHTML=`<div id="dA"></div><h3>コースマップ</h3><div id="cmap"></div><div class="cleg"><span><i style="background:${PC.g}"></i>初級</span><span><i style="background:${PC.r}"></i>中級</span><span><i style="background:${PC.b}"></i>上級</span><span><i style="background:${PC.f}"></i>非圧雪</span><span><i class="lift"></i>リフト</span><button class="btn" id="cBig">拡大</button>`+
+  $("dl").innerHTML=`<div id="dA"></div><h3>コースマップ</h3><div id="cmap"></div><div class="cleg"><span><i style="background:${PC.g}"></i>初級</span><span><i style="background:${PC.r}"></i>中級</span><span><i style="background:${PC.b}"></i>上級</span><span><i style="background:${PC.f}"></i>非圧雪</span><span><i class="lift"></i>リフト</span><span><b style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:3px;background:#1a73e8;color:#fff;font-size:10px">P</b> 駐車場</span><span><b style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#e8710a;vertical-align:-2px"></b> センターハウス</span><button class="btn" id="cBig">拡大</button>`+
     `<a href="https://www.google.com/search?tbm=isch&q=${encodeURIComponent(r.name)}+%E3%82%B3%E3%83%BC%E3%82%B9%E3%83%9E%E3%83%83%E3%83%97" target="_blank" rel="noopener" style="margin-left:auto">公式のコースマップ</a></div><div id="cname"></div><div id="dB"></div>`;
   S.cbig=false;$("cBig").onclick=()=>{if(S.c3){c3Full(true);return;}S.cbig=!S.cbig;$("cBig").textContent=S.cbig?"戻す":"拡大";drawCourse2D(r);};
   $("dl").scrollTop=0;drawDetail();drawCourse(r);}
@@ -602,7 +606,7 @@ async function draw3D(r,d,my){
   // リフト名・コース名は最初は隠す（山頂・山麓だけ）。ボタンで切り替え、端末に覚えておく
   let showNm=!!LS.get("skiNames",false);const nb=document.createElement("button");nb.className="cbtn nm";
   const nbSet=()=>{nb.textContent="名前";nb.classList.toggle("on",showNm);};nbSet();
-  nb.onclick=()=>{showNm=!showNm;LS.set("skiNames",showNm);nbSet();place();};
+  nb.onclick=()=>{showNm=!showNm;LS.set("skiNames",showNm);nbSet();for(const L of lbs){if(L.fac)L.e.querySelector("span").hidden=!showNm;L.w=0;}place();};
   box.append(ren.domElement,lay,fb,nb,cap);
   // ---- カメラ：ふもとから山頂を見上げる向き ----
   const cam=new THREE.PerspectiveCamera(38,1,S2/200,S2*FAR*3);
@@ -617,12 +621,19 @@ async function draw3D(r,d,my){
   for(const x of L3)if(x.o.nm)addL(x.mid.clone().add(new THREE.Vector3(0,rr*4,0)),x.o.nm,"lift",2);
   const plen=q=>{let s=0;for(let i=1;i<q.length;i++)s+=Math.hypot(q[i][0]-q[i-1][0],q[i][1]-q[i-1][1]);return s;};
   P.filter(o=>o.nm&&!o.cl).map(o=>({o,L:plen(o.q)})).sort((a,b)=>b.L-a.L).slice(0,25).forEach(({o},i)=>{const m=o.q[Math.floor(o.q.length/2)];addL(new THREE.Vector3(m[0],Y(m[0],m[1])+rr*3,m[1]),o.nm,o.c||"",3+i/100);});
+  // 施設：P=駐車場 H=センターハウス等（OpenStreetMap に載っている所だけ）
+  const FI={P:"P",H:'<svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 3 2 12h3v8h5v-5h4v5h5v-8h3z" fill="#fff"/></svg>',E:'<svg width="12" height="12" viewBox="0 0 24 24"><path d="M7 2v9a2 2 0 0 0 2 2v9h2V2h-1v7H9V2H8v7H7.9zM16 2c-1.7 0-3 2-3 5v6h2v9h2V2z" fill="#fff"/></svg>',S:'<svg width="12" height="12" viewBox="0 0 24 24"><path d="M3 18 21 6M5 21 22 10" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>'};
+  const FN={P:"駐車場",H:"センターハウス"};
+  for(const[t,nm,dla,dlo]of(d.f||[])){if(!FI[t])continue;const[x,z]=M(dla,dlo);if(x<x0||x>x1||z<z0||z>z1)continue;
+    const e=document.createElement("div");e.className="fac "+t;e.innerHTML=`<i>${FI[t]}</i><span hidden>${esc(nm||FN[t])}</span>`;
+    e.onclick=()=>{cap.textContent=(nm||FN[t])+(nm&&t==="P"&&!/駐車/.test(nm)?"（駐車場）":"");};lay.append(e);
+    lbs.push({p:new THREE.Vector3(x,Y(x,z)+rr*2,z),e,pri:t==="H"?1.4:1.5,w:0,fac:true});}
   lbs.sort((a,b)=>a.pri-b.pri);
   const v3=new THREE.Vector3();
   const place=()=>{const w=box.clientWidth,h=box.clientHeight,used=[];
-    for(const L of lbs){if(L.pri>=2&&!showNm){L.e.style.display="none";continue;}v3.copy(L.p).project(cam);const sx=(v3.x+1)/2*w,sy=(1-v3.y)/2*h;
-      if(!L.w)L.w=L.e.offsetWidth||60;
-      const rc=[sx-L.w/2,sy-18,sx+L.w/2,sy-2];
+    for(const L of lbs){if(L.pri>=2&&!showNm){L.e.style.display="none";continue;}if(L.fac&&!L.init){L.init=1;L.e.querySelector("span").hidden=!showNm;}v3.copy(L.p).project(cam);const sx=(v3.x+1)/2*w,sy=(1-v3.y)/2*h;
+      if(!L.w){L.e.style.display="";L.w=L.e.offsetWidth||60;}
+      const rc=L.fac?[sx-9,sy-9,sx-9+L.w,sy+9]:[sx-L.w/2,sy-18,sx+L.w/2,sy-2];
       const ok=v3.z<1&&rc[0]>2&&rc[2]<w-2&&rc[1]>2&&rc[3]<h-2&&!used.some(u=>!(rc[2]<u[0]||rc[0]>u[2]||rc[3]<u[1]||rc[1]>u[3]));
       L.e.style.display=ok?"":"none";if(ok){used.push([rc[0]-3,rc[1]-2,rc[2]+3,rc[3]+2]);L.e.style.transform=`translate(${Math.round(rc[0])}px,${Math.round(rc[1])}px)`;}}};
   const draw=()=>{ren.render(scene,cam);place();};
