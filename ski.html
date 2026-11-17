@@ -253,8 +253,9 @@ async function loadWxCache(){const o=await WXDB.all(),lim=Date.now()-36*3600e3;f
 const WX_FRESH=90*60e3;
 // まとめて取った予報（GitHub Actions が3時間ごとに作る wx.json、tools/fetch_wx.py）。まずこれを読み、古い・無い時だけ直接取る
 const WX_SHARED="https://raw.githubusercontent.com/NEKOMAKISARA/tsuruga-eco-navi/wx-data/wx.json",SH_FRESH=4.5*3600e3;
-async function loadShared(){
-  if(S.shT&&Date.now()-S.shT<20*60e3)return;S.shT=Date.now();
+// 同時に呼ばれても読み込みは1回、2回目は1回目の終わりを待つ
+function loadShared(){if(!S.shP||Date.now()-S.shT>20*60e3){S.shT=Date.now();S.shP=loadShared0();}return S.shP;}
+async function loadShared0(){
   try{const res=await fetch(WX_SHARED,{cache:"no-cache"});if(!res.ok)return;const j=await res.json(),t=j.t*1000;
     if(Date.now()-t>SH_FRESH)return;
     const time=Array.from({length:j.n},(_,i)=>j.t0+i*3600),f=(a,k=10)=>a.map(v=>v==null?null:v/k);
