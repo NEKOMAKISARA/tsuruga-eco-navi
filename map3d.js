@@ -169,7 +169,8 @@ export async function build3D(box, opt) {
       L.e.style.display = ok ? "" : "none"; if (ok) { used.push([rc[0] - 3, rc[1] - 2, rc[2] + 3, rc[3] + 2]); L.e.style.transform = `translate(${Math.round(rc[0])}px,${Math.round(rc[1])}px)`; } } };
   nb.onclick = () => { showNm = !showNm; LS.set("skiNames", showNm); nbSet(); for (const L of lbs) { if (L.fac) L.e.querySelector("span").hidden = !showNm; L.w = 0; } place(); };
   const api = {};
-  const draw = () => { ren.render(scene, cam); place(); api.onDraw && api.onDraw(); };
+  // api.paused の間は描かない(ポケットモードで電池を節約)。戻した時に api.draw() で描き直す
+  const draw = () => { if (api.paused) return; ren.render(scene, cam); place(); api.onDraw && api.onDraw(); };
   ctl.addEventListener("change", draw);
   const tLines = [];
   const resize = () => { const w = box.clientWidth, h = box.clientHeight; if (!w || !h) return; ren.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); for (const l of tLines) l.material.resolution.set(w, h); draw(); };

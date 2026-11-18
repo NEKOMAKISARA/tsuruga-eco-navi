@@ -76,6 +76,7 @@ h2{font-size:16px;margin:0}
 .ls .sp{margin-left:auto}.ls .sp b{font-size:22px}
 .lb{display:flex;gap:6px;margin-top:8px;align-items:center}
 .lb .grow{flex:1}
+.lb .btn{padding:6px 11px;font-size:14px}
 #lfr{display:flex;gap:6px;overflow-x:auto;margin-top:6px}
 #lfr:empty{display:none}
 .fchip{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 10px;font-size:12px;white-space:nowrap}
@@ -100,6 +101,11 @@ h2{font-size:16px;margin:0}
 .tl .it.lf{color:var(--mut);font-size:12px}.tl .it.lf .no{font-weight:400}
 .tl .it.fl{color:var(--warn);font-size:12px}.tl .it.fl .no{font-weight:400}
 .cdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px;vertical-align:1px}
+#pocket{position:fixed;inset:0;z-index:300;background:#000;color:#555;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;user-select:none;-webkit-user-select:none;touch-action:none}
+#pocket b{font-size:40px;font-weight:400;font-variant-numeric:tabular-nums}
+#pocket .pr{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 40px);width:120px;height:4px;background:#222;border-radius:2px;overflow:hidden}
+#pocket .pr i{display:block;height:100%;width:0;background:#666}
+#pocket.hold .pr i{width:100%;transition:width .8s linear}
 [hidden]{display:none!important}
 body>#cmap{display:none}
 </style></head><body>
@@ -115,9 +121,9 @@ body>#cmap{display:none}
 </main>
 <section id="live" hidden>
   <div id="lbar">
-    <div class="ls"><span><b id="lTime">0:00:00</b></span><span>滑走 <b id="lRuns">0</b>本</span><span>最高 <b id="lMax">-</b></span><span>転倒 <b id="lFall">0</b></span><span class="sp"><b id="lSpd">-</b></span></div>
+    <div class="ls"><span><b id="lTime">0:00:00</b></span><span>滑走 <b id="lRuns">0</b>本</span><span>最高 <b id="lMax">-</b></span><span>転倒 <b id="lFall">0</b></span><span class="sp"><small id="lAcc"></small> <b id="lSpd">-</b></span></div>
     <div id="lfr"></div>
-    <div class="lb"><button class="btn" id="lMe">現在地</button><button class="btn" id="lFo">追いかける</button><span class="grow mut" id="lAcc" style="font-size:12px"></span><button class="btn red" id="lOut">チェックアウト</button></div>
+    <div class="lb"><button class="btn" id="lMe">現在地</button><button class="btn" id="lFo">追いかける</button><span class="grow"></span><button class="btn" id="lPk">ポケット</button><button class="btn red" id="lOut">チェックアウト</button></div>
   </div>
 </section>
 <main id="view" hidden>
@@ -135,6 +141,7 @@ body>#cmap{display:none}
 </main>
 <div id="cmap"></div>
 <div id="toast" hidden></div>
+<div id="pocket" hidden><b id="pkTime">0:00</b><span id="pkSub"></span><span style="font-size:12px">長押しで戻る</span><div class="pr"><i></i></div></div>
 <script type="module">
 import { build3D, makeProj, courseXZ, loadDem, segDist, DN, PC, THREE } from "./map3d.js";
 const $ = id => document.getElementById(id);
@@ -380,7 +387,8 @@ async function enterLive(r) {
   const box = $("cmap"); $("live").prepend(box); box.innerHTML = '<div class="cmsg" style="padding-top:40vh">山の形を読み込み中…</div>';
   $("lFall").textContent = REC.falls.length; $("lRuns").textContent = "0"; $("lMax").textContent = "-"; $("lfr").innerHTML = "";
   wake(); startGPS();
-  clearInterval(tick); tick = setInterval(() => { if (REC) $("lTime").textContent = hms(Date.now() - REC.t0); }, 1000);
+  clearInterval(tick); tick = setInterval(() => { if (!REC) return; if (pocket) pkShow(); else $("lTime").textContent = hms(Date.now() - REC.t0); }, 1000);
+  idle();
   const d = await course(r);
   if (LIVE !== sess) return;
   if (!d || !(d.p.length || d.l.length)) { box.innerHTML = '<div class="cmsg" style="padding-top:40vh">' + esc(r.nm) + ' のコースのデータがありません</div>'; return; }
@@ -398,11 +406,11 @@ async function enterLive(r) {
     const xyz = [], col = []; for (let i = 0; i < P.length; i++) { const v = at(P[i][1], P[i][2], 0.8); xyz.push(v.x, v.y, v.z);
       const sp = i ? hdist([P[i - 1][1], P[i - 1][2]], [P[i][1], P[i][2]]) / Math.max(1, (P[i][0] - P[i - 1][0]) / 1000) : 0; const c = new THREE.Color(spdCol(sp)); col.push(c.r, c.g, c.b); }
     sess.under = api.addLine(xyz, null, 6, 0xffffff, 1); track = api.addLine(xyz, col, 3.5, 0, 2); };
-  sess.onFix = q => { me.position.copy(at(q[1], q[2], 3)); me.visible = true;
+  sess.onFix = q => { if (pocket) return; me.position.copy(at(q[1], q[2], 3)); me.visible = true;
     if (first) { first = false; const [x, z] = proj.fromLL(q[1], q[2]), b = api.bounds; if (x > b[0] && x < b[2] && z > b[1] && z < b[3]) api.aim(me.position); }
     if (follow) api.aim(me.position, 0.25);
     if (REC.pts.length - trackN >= 5 || !track) drawTrack(); api.draw(); };
-  sess.updFriends = () => { const all = friends().filter(f => f.on), L = all.filter(f => f.cid === r.cid), seen = {};
+  sess.updFriends = () => { if (pocket) return; const all = friends().filter(f => f.on), L = all.filter(f => f.cid === r.cid), seen = {};
     for (const f of L) { seen[f.uid] = 1; let m = fm[f.uid]; if (!m) { m = fm[f.uid] = { g: dot(new THREE.Color(f.col), 4), l: api.addL(new THREE.Vector3(), "", "me", -1) }; m.l.dyn = true; m.l.e.style.background = f.col; }
       m.g.position.copy(at(f.la, f.lo, 3)); m.g.visible = true; m.l.p.copy(m.g.position).add(new THREE.Vector3(0, api.rr * 7, 0)); m.l.e.textContent = f.n || "?"; }
     for (const u in fm) if (!seen[u]) { fm[u].g.visible = false; fm[u].l.p.set(1e9, 0, 1e9); }
@@ -415,8 +423,8 @@ async function enterLive(r) {
   $("lMe").onclick = () => { if (me.visible) api.aim(me.position); };
   $("lFo").classList.remove("pri"); $("lFo").onclick = () => { follow = !follow; $("lFo").classList.toggle("pri", follow); if (follow && me.visible) api.aim(me.position); };
   // 1分ごとに今日の集計（コース名は調べない軽い集計）
-  const sumUp = async () => { if (LIVE !== sess || !REC || REC.pts.length < 20) return; try { const an = await analyze(REC, { r, d, dem: sess.dem, noCourse: true }); if (LIVE !== sess) return; $("lRuns").textContent = an.sum.runs; $("lMax").textContent = an.sum.runs ? kmh(an.sum.vmax) : "-"; } catch (e) { } };
-  sess.sumT = setInterval(sumUp, 60000); sumUp();
+  const sumUp = async () => { if (pocket && sess.sumN++ % 5) return; if (LIVE !== sess || !REC || REC.pts.length < 20) return; try { const an = await analyze(REC, { r, d, dem: sess.dem, noCourse: true }); if (LIVE !== sess) return; $("lRuns").textContent = an.sum.runs; $("lMax").textContent = an.sum.runs ? kmh(an.sum.vmax) : "-"; } catch (e) { } };
+  sess.sumN = 0; sess.sumT = setInterval(sumUp, 60000); sumUp();
   if (REC.pts.length) sess.onFix(REC.pts[REC.pts.length - 1]);
   sess.updFriends(); sess.fT = setInterval(() => LIVE === sess && sess.updFriends(), 30000);
   api.resize();
@@ -430,7 +438,7 @@ function startGPS() {
     if (L && q[0] - L[0] < 900) return;
     let v = c.speed != null && c.speed >= 0 ? c.speed : null;
     if (L) { const dd = hdist([L[1], L[2]], [q[1], q[2]]), dt = (q[0] - L[0]) / 1000; if (dd / dt > 45) { if (++jumps < 3) return; } else if (v == null) v = dd / dt; jumps = 0; }
-    REC.pts.push(q); $("lSpd").textContent = v != null ? kmh(v) : "-";
+    REC.pts.push(q); if (!pocket) $("lSpd").textContent = v != null ? kmh(v) : "-";
     checkFall(q);
     if (Date.now() - lastSave > 15000) { lastSave = Date.now(); dbPut(REC); }
     if (LIVE && LIVE.onFix) LIVE.onFix(q);
@@ -438,7 +446,7 @@ function startGPS() {
   }, e => { $("lAcc").textContent = e.code === 1 ? "位置の利用が許可されていません" : "現在地が取れません"; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
 }
 async function checkOut() {
-  if (!REC) return; navigator.geolocation.clearWatch(watch); watch = null; clearInterval(tick); motionOff();
+  if (!REC) return; pocketOff(); clearTimeout(idleT); navigator.geolocation.clearWatch(watch); watch = null; clearInterval(tick); motionOff();
   try { lock && lock.release(); } catch (e) { } lock = null;
   if (FR.last) await frSend({ ...FR.last, on: false, t: Date.now() }, true);
   const L = REC; REC = null; dispose3D();
@@ -446,6 +454,18 @@ async function checkOut() {
   L.done = true; await dbPut(L); openLog(L);
 }
 $("lOut").onclick = () => { if (confirm("チェックアウトしますか？")) checkOut(); };
+/* ---- ポケットモード：黒い画面にして3Dの描き直しを止める(記録・転倒・友だちへの送信は続ける)。触らないまま90秒で自動で入る ---- */
+let pocket = false, idleT = null, holdT = null;
+function pkShow() { if (!REC) return; $("pkTime").textContent = hms(Date.now() - REC.t0).replace(/:\d\d$/, ""); $("pkSub").textContent = `滑走 ${$("lRuns").textContent}本・転倒 ${REC.falls.length}`; }
+function pocketOn() { if (!REC || pocket) return; pocket = true; clearTimeout(idleT); if (A3) A3.paused = true; $("cmap").style.visibility = "hidden"; pkShow(); $("pocket").hidden = false; }
+function pocketOff() { if (!pocket) return; pocket = false; $("pocket").hidden = true; $("cmap").style.visibility = ""; if (A3) A3.paused = false; if (LIVE && LIVE.onFix && REC && REC.pts.length) LIVE.onFix(REC.pts[REC.pts.length - 1]); else if (A3) A3.draw(); if (LIVE && LIVE.updFriends) LIVE.updFriends(); idle(); }
+function idle() { clearTimeout(idleT); if (REC && !pocket) idleT = setTimeout(pocketOn, 90000); }
+$("lPk").onclick = pocketOn;
+$("live").addEventListener("pointerdown", idle, true);
+const pk = $("pocket");
+pk.addEventListener("pointerdown", e => { e.preventDefault(); pk.classList.add("hold"); clearTimeout(holdT); holdT = setTimeout(() => { pk.classList.remove("hold"); pocketOff(); }, 800); });
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) pk.addEventListener(ev, () => { pk.classList.remove("hold"); clearTimeout(holdT); });
+pk.addEventListener("contextmenu", e => e.preventDefault());
 function dispose3D() { stopPlay(); if (LIVE) { clearInterval(LIVE.sumT); clearInterval(LIVE.fT); LIVE = null; } if (A3) A3.dispose(); A3 = null; RP = null; const b = $("cmap"); b.innerHTML = ""; b.className = ""; document.body.append(b); }
 
 /* ---- GPX ---- */
@@ -565,6 +585,6 @@ const QS = new URLSearchParams(location.search);
   await showHome(); if (!REC) locate();
 })();
 setInterval(() => { if (!$("home").hidden) renderFriends(); }, 30000);
-window.__ride = { analyze, FR, friends, checkIn, rows, frSend, get REC() { return REC; }, get LIVE() { return LIVE; }, get spike() { return spike; } };
+window.__ride = { analyze, FR, friends, checkIn, rows, frSend, get REC() { return REC; }, get LIVE() { return LIVE; }, get spike() { return spike; }, get pocket() { return pocket; } };
 </script>
 </body></html>
