@@ -4,6 +4,9 @@
    座標：スキー場の中心からの m。x=東、z=南。 */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { Line2 } from "three/addons/lines/Line2.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 export { THREE };
 export const PC = { g: "#1e8e3e", r: "#d93025", b: "#202124", f: "#e8710a", "": "#9aa0a6" };
 export const DN = { g: "初級", r: "中級", b: "上級", f: "非圧雪" };
@@ -136,7 +139,7 @@ export async function build3D(box, opt) {
   const cap = document.createElement("div"); cap.className = "ccap";
   let showNm = !!LS.get("skiNames", false); const nb = document.createElement("button"); nb.className = "cbtn nm";
   const nbSet = () => { nb.textContent = "名前"; nb.classList.toggle("on", showNm); }; nbSet();
-  box.append(ren.domElement, lay, fb, nb, cap);
+  box.append(ren.domElement, lay, nb, cap); if (!opt.noFull) box.append(fb);
   // カメラ：ふもとから山頂を見上げる
   const cam = new THREE.PerspectiveCamera(38, 1, S2 / 200, S2 * FAR * 3);
   const ctr = new THREE.Vector3(CX, (hmax - hmin) * EX * 0.42, CZ);
@@ -168,7 +171,15 @@ export async function build3D(box, opt) {
   const api = {};
   const draw = () => { ren.render(scene, cam); place(); api.onDraw && api.onDraw(); };
   ctl.addEventListener("change", draw);
-  const resize = () => { const w = box.clientWidth, h = box.clientHeight; if (!w || !h) return; ren.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); draw(); };
+  const tLines = [];
+  const resize = () => { const w = box.clientWidth, h = box.clientHeight; if (!w || !h) return; ren.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); for (const l of tLines) l.material.resolution.set(w, h); draw(); };
+  // 画面の上で太さが変わらない線（滑った跡）。xyz=[x,y,z,…]、cols=[r,g,b,…](0〜1) か null
+  const addLine = (xyz, cols, width, color, order) => { if (xyz.length < 6) return null; const g2 = new LineGeometry(); g2.setPositions(xyz); if (cols) g2.setColors(cols);
+    const m = new LineMaterial({ color: cols ? 0xffffff : color, linewidth: width, vertexColors: !!cols, transparent: false }); m.resolution.set(box.clientWidth || 1, box.clientHeight || 1);
+    const l = new Line2(g2, m); l.computeLineDistances(); l.renderOrder = order || 0; scene.add(l); tLines.push(l); return l; };
+  const removeLine = l => { if (!l) return; scene.remove(l); l.geometry.dispose(); l.material.dispose(); const i = tLines.indexOf(l); if (i >= 0) tLines.splice(i, 1); };
+  // 見る向きと距離はそのまま、中心を p に寄せる（k=1 で一度に）
+  const aim = (p, k = 1) => { const d = new THREE.Vector3().subVectors(p, ctl.target).multiplyScalar(k); ctl.target.add(d); cam.position.add(d); ctl.update(); };
   const ro = new ResizeObserver(resize); ro.observe(box);
   const full = on => { box.classList.toggle("full", on); document.body.style.overflow = on ? "hidden" : ""; fb.textContent = on ? "閉じる" : "全画面"; resize(); };
   fb.onclick = () => full(!box.classList.contains("full"));
@@ -193,7 +204,7 @@ export async function build3D(box, opt) {
   const dispose = () => { try { ro.disconnect(); ctl.dispose(); ren.dispose(); ren.forceContextLoss(); scene.traverse(o => { o.geometry && o.geometry.dispose(); if (o.material) { o.material.map && o.material.map.dispose(); o.material.dispose(); } }); } catch (e) { } box.classList.remove("full"); document.body.style.overflow = ""; };
   // 地形の絵に描く（滑った跡など）。fn(g, T, lw) を呼んでから絵を更新
   const paint = fn => { fn(g, T, lw, sc); tex.needsUpdate = true; draw(); };
-  Object.assign(api, { THREE, scene, cam, ctl, ren, box, cap, Y, hAt, proj, P, Lf, rr, S2, EX, hmin, draw, resize, dispose, paint, addL, slope });
+  Object.assign(api, { THREE, scene, cam, ctl, ren, box, cap, Y, hAt, proj, P, Lf, rr, S2, EX, hmin, draw, resize, dispose, paint, addL, slope, addLine, removeLine, aim, bounds: [x0, z0, x1, z1] });
   resize();
   return api;
 }

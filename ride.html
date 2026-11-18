@@ -5,43 +5,55 @@
 <title>滑走ログ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
 :root{--bg:#f6f8fa;--card:#fff;--fg:#202124;--mut:#5f6368;--line:#e3e6ea;--acc:#1a73e8;--warn:#c5221f;--jp:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--jp);font-size:14px;-webkit-text-size-adjust:100%}
-header{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top) + 8px) 12px 8px;display:flex;align-items:center;gap:8px}
-header h1{font-size:18px;margin:0;flex:1}
 button{font-family:inherit;font-size:14px;cursor:pointer}
-.btn{border:1px solid var(--line);background:#fff;border-radius:18px;padding:6px 14px;color:var(--fg)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:18px;padding:6px 14px;color:var(--fg);white-space:nowrap}
 .btn.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
 .btn.red{background:var(--warn);border-color:var(--warn);color:#fff;font-weight:700}
-main{max-width:760px;margin:0 auto;padding:10px 12px 40px}
+.btn.sm{padding:3px 10px;font-size:13px}
+main{max-width:760px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 10px) 12px 40px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
 .mut{color:var(--mut)}
-.rec{text-align:center}
-.rec .big{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;margin:4px 0}
-.rec .row{display:flex;justify-content:center;gap:16px;font-size:13px;color:var(--mut);flex-wrap:wrap}
-.rec .row b{color:var(--fg);font-size:16px}
-.rec .btn{margin-top:10px;padding:10px 32px;font-size:16px}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:6px}.hd h2{flex:1}
+h2{font-size:16px;margin:0}
+#hmap{height:230px;border-radius:10px;border:1px solid var(--line);z-index:0}
+.here{font-size:12px;color:var(--mut);margin:6px 0 0;display:flex;gap:8px;align-items:center}
+.here span{flex:1}
+#q{width:100%;font:inherit;font-size:16px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;margin:8px 0 2px}
+.rs{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.rs:first-child{border-top:0}
+.rs .t{flex:1;min-width:0;cursor:pointer}.rs .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs .t small{color:var(--mut)}
+.rs.sel{background:#e8f0fe;margin:0 -12px;padding-left:12px;padding-right:12px}
+.fr{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.fr:first-child{border-top:0}
+.fr .t{flex:1;min-width:0}.fr small{color:var(--mut)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}
 .log{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line);cursor:pointer}
-.log:first-of-type{border-top:0}
+.log:first-child{border-top:0}
 .log .t{flex:1;min-width:0}.log .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .log .t small{color:var(--mut)}
 .log .x{border:0;background:none;color:var(--mut);font-size:18px;padding:4px 8px}
-.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.tiles div{background:var(--bg);border-radius:8px;padding:6px 8px}
-.tiles small{display:block;color:var(--mut);font-size:11px}.tiles b{font-size:17px;font-variant-numeric:tabular-nums}
-h2{font-size:16px;margin:0 0 6px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tiles div{background:var(--bg);border-radius:8px;padding:6px 8px;min-width:0}
+.tiles small{display:block;color:var(--mut);font-size:11px}.tiles b{font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.top{display:flex;align-items:center;gap:8px;margin-bottom:10px}.top b{font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #cmap{position:relative;border-radius:10px;border:1px solid var(--line);margin-top:4px}
 #cmap .cmsg{padding:60px 0;text-align:center;color:var(--mut)}
-#cmap.c3{height:420px;overflow:hidden;background:linear-gradient(#a9cdee,#e3eef8 55%,#f4f8fb);touch-action:none}
+#cmap.c3{height:440px;overflow:hidden;background:linear-gradient(#a9cdee,#e3eef8 55%,#f4f8fb);touch-action:none}
 #cmap.c3 canvas{display:block}
 #cmap.full{position:fixed;inset:0;z-index:3000;height:100dvh;border-radius:0;border:0;margin:0}
 #cmap .lbl{position:absolute;left:0;top:0;pointer-events:none;white-space:nowrap;font-size:11px;font-weight:700;color:#202124;background:rgba(255,255,255,.85);border-radius:4px;padding:0 4px;line-height:16px;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 #cmap .lbl.lift{background:#37474f;color:#fff}
 #cmap .lbl.pk{background:#1a73e8;color:#fff}
-#cmap .lbl.me{background:#d93025;color:#fff;font-size:12px;z-index:4}
+#cmap .lbl.me{background:#d93025;color:#fff;font-size:12px}
+#cmap .lbl.fall{background:#fff;color:#c5221f;border:1.5px solid #c5221f}
 #cmap .lbl.g{border-left:4px solid #1e8e3e}#cmap .lbl.r{border-left:4px solid #d93025}#cmap .lbl.b{border-left:4px solid #202124}#cmap .lbl.f{border-left:4px solid #e8710a}
 #cmap .cbtn{position:absolute;right:8px;top:8px;z-index:5;border:0;border-radius:16px;padding:4px 12px;background:rgba(255,255,255,.92);font-size:13px;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer}
 #cmap .cbtn.nm{right:auto;left:8px}#cmap .cbtn.nm.on{background:#1a73e8;color:#fff}
@@ -53,6 +65,21 @@ h2{font-size:16px;margin:0 0 6px}
 #cmap .ccap:empty{display:none}
 #cmap .rpbar{position:absolute;left:0;right:0;bottom:0;z-index:6;display:none;padding:6px 10px calc(env(safe-area-inset-bottom) + 8px);background:rgba(255,255,255,.92)}
 #cmap.full .rpbar{display:block}#cmap.full .ccap{bottom:120px}#cmap .rpbar .rp{margin-top:0}
+/* チェックイン中：3Dマップを画面いっぱいに */
+#live{position:fixed;inset:0;z-index:100;background:#e3eef8}
+#live #cmap{position:absolute;inset:0;height:auto;border:0;border-radius:0;margin:0}
+#live #cmap .cbtn.nm{top:calc(env(safe-area-inset-top) + 8px)}
+#live #cmap .ccap{bottom:auto;top:calc(env(safe-area-inset-top) + 44px)}
+#lbar{position:absolute;left:0;right:0;bottom:0;z-index:20;background:rgba(255,255,255,.94);box-shadow:0 -1px 4px rgba(0,0,0,.15);padding:8px 12px calc(env(safe-area-inset-bottom) + 8px)}
+.ls{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.ls b{color:var(--fg);font-size:17px;font-variant-numeric:tabular-nums}
+.ls .sp{margin-left:auto}.ls .sp b{font-size:22px}
+.lb{display:flex;gap:6px;margin-top:8px;align-items:center}
+.lb .grow{flex:1}
+#lfr{display:flex;gap:6px;overflow-x:auto;margin-top:6px}
+#lfr:empty{display:none}
+.fchip{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 10px;font-size:12px;white-space:nowrap}
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 50px);transform:translateX(-50%);z-index:4000;background:#202124;color:#fff;border-radius:10px;padding:8px 14px;font-size:13px;max-width:90vw}
 .rp{display:flex;align-items:center;gap:8px;margin-top:8px}
 .rp .pp{width:40px;height:40px;border-radius:50%;border:0;background:var(--acc);color:#fff;font-size:16px;flex:none}
 .rp input{flex:1;min-width:0;accent-color:var(--acc)}
@@ -66,45 +93,48 @@ h2{font-size:16px;margin:0 0 6px}
 .tl .it{display:flex;gap:8px;padding:7px 0;border-top:1px solid var(--line);align-items:baseline;cursor:pointer}
 .tl .it:first-child{border-top:0}
 .tl .it.on{background:#e8f0fe;margin:0 -12px;padding-left:12px;padding-right:12px}
-.tl .no{font-weight:700;min-width:2.6em}
+.tl .no{font-weight:700;min-width:2.8em}
 .tl .bd{flex:1;min-width:0}
 .tl .bd b{display:block}
 .tl .bd small{color:var(--mut);font-variant-numeric:tabular-nums}
-.tl .it.lf{color:var(--mut);font-size:12px}
-.tl .it.lf .no{font-weight:400}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px;vertical-align:1px}
+.tl .it.lf{color:var(--mut);font-size:12px}.tl .it.lf .no{font-weight:400}
+.tl .it.fl{color:var(--warn);font-size:12px}.tl .it.fl .no{font-weight:400}
+.cdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px;vertical-align:1px}
 [hidden]{display:none!important}
+body>#cmap{display:none}
 </style></head><body>
-<header><button class="btn" id="back" hidden>戻る</button><h1 id="ttl">滑走ログ</h1>
-  <label class="btn" id="gpxB">GPX<input type="file" id="gpx" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden></label></header>
-<main>
-  <section id="home">
-    <div class="card rec" id="recC">
-      <div id="recIdle"><button class="btn pri" id="start">記録を始める</button></div>
-      <div id="recOn" hidden>
-        <div class="mut" id="recWhere">記録中</div>
-        <div class="big" id="recTime">0:00:00</div>
-        <div class="row"><span>速さ <b id="recSpd">-</b></span><span>距離 <b id="recDist">0</b></span><span>精度 <b id="recAcc">-</b></span></div>
-        <div class="mut" style="font-size:12px;margin-top:6px">画面を消すと記録が止まります</div>
-        <button class="btn red" id="stop">記録を終える</button>
-      </div>
-    </div>
-    <div class="card"><h2>記録</h2><div id="logs"></div></div>
-  </section>
-  <section id="view" hidden>
-    <div class="card"><div class="tiles" id="tiles"></div></div>
-    <div class="card">
-      <div id="cmap"></div>
-      <div id="rpw">
-        <div class="rp"><button class="pp" id="pp">▶</button><input type="range" id="sl" min="0" max="1000" value="0"><span class="tm" id="tm">--:--</span></div>
-        <div class="rp2" id="spdC"></div>
-        <div class="leg">0<i></i>70km/h</div>
-      </div>
-    </div>
-    <div class="card"><h2>滑走</h2><div class="tl" id="tl"></div></div>
-    <div style="display:flex;gap:8px"><button class="btn" id="dlG">GPXで保存</button></div>
-  </section>
+<main id="home">
+  <div class="card">
+    <div id="hmap"></div>
+    <div class="here"><span id="here">現在地を取得中…</span><button class="btn sm" id="reloc">更新</button></div>
+    <input id="q" type="search" placeholder="スキー場を探す" autocomplete="off">
+    <div id="near"></div>
+  </div>
+  <div class="card"><div class="hd"><h2>友だち</h2><span id="frBtns"></span></div><div id="frs"></div></div>
+  <div class="card"><div class="hd"><h2>記録</h2><label class="btn sm">GPX<input type="file" id="gpx" accept=".gpx,application/gpx+xml,application/xml,text/xml" hidden></label></div><div id="logs"></div></div>
 </main>
+<section id="live" hidden>
+  <div id="lbar">
+    <div class="ls"><span><b id="lTime">0:00:00</b></span><span>滑走 <b id="lRuns">0</b>本</span><span>最高 <b id="lMax">-</b></span><span>転倒 <b id="lFall">0</b></span><span class="sp"><b id="lSpd">-</b></span></div>
+    <div id="lfr"></div>
+    <div class="lb"><button class="btn" id="lMe">現在地</button><button class="btn" id="lFo">追いかける</button><span class="grow mut" id="lAcc" style="font-size:12px"></span><button class="btn red" id="lOut">チェックアウト</button></div>
+  </div>
+</section>
+<main id="view" hidden>
+  <div class="top"><button class="btn" id="back">戻る</button><b id="vName"></b></div>
+  <div class="card"><div class="tiles" id="tiles"></div></div>
+  <div class="card" id="vMapC">
+    <div id="rpw" hidden>
+      <div class="rp"><button class="pp" id="pp">▶</button><input type="range" id="sl" min="0" max="1000" value="0"><span class="tm" id="tm">--:--</span></div>
+      <div class="rp2" id="spdC"></div>
+      <div class="leg">0<i></i>70km/h</div>
+    </div>
+  </div>
+  <div class="card"><div class="tl" id="tl"></div></div>
+  <div style="display:flex;gap:8px"><button class="btn" id="dlG">GPXで保存</button></div>
+</main>
+<div id="cmap"></div>
+<div id="toast" hidden></div>
 <script type="module">
 import { build3D, makeProj, courseXZ, loadDem, segDist, DN, PC, THREE } from "./map3d.js";
 const $ = id => document.getElementById(id);
@@ -116,6 +146,10 @@ const clockS = t => { const d = new Date(t); return `${pad(d.getHours())}:${pad(
 const km = v => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "km" : Math.round(v) + "m";
 const kmh = v => Math.round(v * 3.6) + "km/h";
 const hdist = (a, b) => { const k = Math.cos(a[0] * Math.PI / 180); return Math.hypot((b[0] - a[0]) * 110540, (b[1] - a[1]) * 111320 * k); };
+const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "今" : m < 60 ? m + "分前" : Math.round(m / 60) + "時間前"; };
+const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } } };
+const norm = t => String(t).normalize("NFKC").toLowerCase().replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).replace(/[\s・･.,、。'’\-‐]/g, "");
+let toastT = 0; const toast = (m, ms = 3500) => { $("toast").textContent = m; $("toast").hidden = false; clearTimeout(toastT); toastT = setTimeout(() => $("toast").hidden = true, ms); };
 
 /* ---- 保存（端末の IndexedDB。使えない時はこの画面の間だけ） ---- */
 let memDB = null;
@@ -126,12 +160,12 @@ const dbAll = () => st("readonly", s => s ? s.getAll() : { result: [...memDB.val
 const dbPut = o => st("readwrite", s => s ? s.put(o) : (memDB.set(o.id, o), null));
 const dbDel = id => st("readwrite", s => s ? s.delete(id) : (memDB.delete(id), null));
 
-/* ---- スキー場の一覧（カワサキサーチと同じ ski.json） ---- */
+/* ---- スキー場（カワサキサーチと同じ ski.json） ---- */
 let ROWS = null;
-const rows = async () => ROWS || (ROWS = (await (await fetch("ski.json")).json()).s.map(r => ({ nm: r[0], c: [r[1] / 1e5, r[2] / 1e5], cid: r[1] + "_" + r[2], elev: r[5] ? { top: [r[5][0] / 1e5, r[5][1] / 1e5, r[5][2]], base: [r[5][3] / 1e5, r[5][4] / 1e5, r[5][5]] } : null })));
+const rows = async () => ROWS || (ROWS = (await (await fetch("ski.json")).json()).s.map(r => ({ nm: r[0], c: [r[1] / 1e5, r[2] / 1e5], cid: r[1] + "_" + r[2], yk: norm(r[6] || ""), key: norm(r[0]), elev: r[5] ? { top: [r[5][0] / 1e5, r[5][1] / 1e5, r[5][2]], base: [r[5][3] / 1e5, r[5][4] / 1e5, r[5][5]] } : null })));
 const CD = {};
 const course = async r => { if (!(r.cid in CD)) { try { const x = await fetch("ski_course/" + r.cid + ".json"); CD[r.cid] = x.ok ? await x.json() : null; } catch (e) { CD[r.cid] = null; } } return CD[r.cid]; };
-// どのスキー場か：近く(12km)のスキー場のコース・リフトから 100m 以内にある点が一番多い所（隣り合うスキー場を取り違えないように）
+// どのスキー場か：近く(12km)のスキー場のコース・リフトから 100m 以内にある点が一番多い所
 async function findResort(pts) {
   const s = pts.filter((_, i) => i % Math.max(1, Math.floor(pts.length / 300)) === 0), R = await rows();
   const near = R.filter(r => s.some(p => hdist(r.c, [p[1], p[2]]) < 12000));
@@ -144,15 +178,18 @@ async function findResort(pts) {
 }
 
 /* ---- 分析：標高（国土地理院）で上り下りを見て、リフトと滑走に分ける ----
-   pts: [[時刻ms, 緯度, 経度, 精度m], …] */
-async function analyze(log) {
-  const r = await findResort(log.pts); if (!r) throw new Error("近くにスキー場がありません");
-  const d = await course(r); if (!d) throw new Error(r.nm + " のコースのデータがありません");
+   log.pts: [[時刻ms, 緯度, 経度, 精度m], …]、log.falls: [[時刻ms, 緯度, 経度, 強さG], …]
+   opt: r（スキー場）, d（コース）, dem（緯度,経度→標高）, noCourse（通ったコースを調べない＝チェックイン中の軽い集計） */
+async function analyze(log, opt = {}) {
+  const R = await rows();
+  const r = opt.r || (log.cid && R.find(x => x.cid === log.cid)) || await findResort(log.pts); if (!r) throw new Error("近くにスキー場がありません");
+  const d = opt.d || await course(r); if (!d) throw new Error(r.nm + " のコースのデータがありません");
   const proj = makeProj(r.c), { P, Lf } = courseXZ(d, proj);
   const raw = log.pts.filter(p => hdist(r.c, [p[1], p[2]]) < 9000);
   if (raw.length < 10) throw new Error("スキー場の中の記録がほとんどありません");
-  let la0 = 90, la1 = -90, lo0 = 180, lo1 = -180; for (const p of raw) { la0 = Math.min(la0, p[1]); la1 = Math.max(la1, p[1]); lo0 = Math.min(lo0, p[2]); lo1 = Math.max(lo1, p[2]); }
-  const dem = await loadDem([la1 + .003, lo0 - .004], [la0 - .003, lo1 + .004], 14, 36);
+  let dem = opt.dem;
+  if (!dem) { let la0 = 90, la1 = -90, lo0 = 180, lo1 = -180; for (const p of raw) { la0 = Math.min(la0, p[1]); la1 = Math.max(la1, p[1]); lo0 = Math.min(lo0, p[2]); lo1 = Math.max(lo1, p[2]); }
+    dem = await loadDem([la1 + .003, lo0 - .004], [la0 - .003, lo1 + .004], 14, 36); }
   const pt = raw.map(p => { const [x, z] = proj.fromLL(p[1], p[2]); return { t: p[0], la: p[1], lo: p[2], x, z, e: dem(p[1], p[2]) }; });
   const n = pt.length;
   // 速さ（前後3秒）・上下の速さ（前後20秒）。60秒以上の切れ目はまたがない
@@ -165,7 +202,7 @@ async function analyze(log) {
   // 上り(U)・下り(D)・平ら(F) → 短い区切りは前に混ぜる
   let parts = []; for (let i = 0; i < n; i++) { const k = pt[i].vz > .3 ? "U" : pt[i].vz < -.25 ? "D" : "F"; const l = parts[parts.length - 1]; if (l && l.k === k && !brk[i]) l.b = i; else parts.push({ k, a: i, b: i }); }
   for (let it = 0; it < 3; it++) { const o = []; for (const p of parts) { const l = o[o.length - 1]; if (l && !brk[p.a] && (pt[p.b].t - pt[p.a].t < 25000 || l.k === p.k)) l.b = p.b; else o.push({ ...p }); } parts = o; }
-  // リフト：上りで 30m 以上・1分以上
+  // リフト：上りで 30m 以上・1分以上。リフトの線から遠い上りは「登り」
   const lifts = parts.filter(p => p.k === "U" && pt[p.b].e - pt[p.a].e >= 30 && pt[p.b].t - pt[p.a].t >= 60000).map(p => {
     let best = null, bd = 80; for (const o of Lf) { let s = 0, m = 0; for (let i = p.a; i <= p.b; i += 3) { let dm = 1e9; for (let j = 1; j < o.q.length; j++) dm = Math.min(dm, segDist([pt[i].x, pt[i].z], o.q[j - 1], o.q[j])); s += dm; m++; } if (s / m < bd) { bd = s / m; best = o; } }
     return { kind: "lift", a: p.a, b: p.b, nm: best ? best.nm || "リフト" : "登り", walk: !best, rise: pt[p.b].e - pt[p.a].e }; });
@@ -174,69 +211,242 @@ async function analyze(log) {
   for (let k = 0; k + 1 < bounds.length; k += 2) { const A = bounds[k] + 1, B = bounds[k + 1] - 1; if (B - A < 5) continue;
     const ds = parts.filter(p => p.k === "D" && p.b >= A && p.a <= B); if (!ds.length) continue;
     let a = Math.max(A, ds[0].a), b = Math.min(B, ds[ds.length - 1].b);
-    // 前後の止まっている所は削る
     while (a < b && pt[a].v < 1.5) a++; while (b > a && pt[b].v < 1.5) b--;
     let emax = -1e9, emin = 1e9; for (let i = a; i <= b; i++) { emax = Math.max(emax, pt[i].e); emin = Math.min(emin, pt[i].e); }
     if (emax - emin < 30) continue;
     let mv = 0, vmax = 0; for (let i = a + 1; i <= b; i++) { if (!brk[i] && pt[i].v > 1.5) mv += (pt[i].t - pt[i - 1].t) / 1000; vmax = Math.max(vmax, pt[i].v); }
-    // 通ったコース（35m 以内で一番近いコース。続けて 8 点以上の物だけ）
-    const seq = []; let cur = null, cnt = 0;
-    for (let i = a; i <= b; i++) { let best = null, bd = 35; for (const o of P) { if (o.cl) continue; for (let j = 1; j < o.q.length; j++) { const dd = segDist([pt[i].x, pt[i].z], o.q[j - 1], o.q[j]); if (dd < bd) { bd = dd; best = o; } } }
-      const key = best ? (best.nm || "(" + (DN[best.c] || "コース") + ")") + "|" + (best.c || "") : null;
-      if (key === cur) cnt++; else { if (cur && cnt >= 8 && (!seq.length || seq[seq.length - 1] !== cur)) seq.push(cur); cur = key; cnt = 1; } }
-    if (cur && cnt >= 8 && (!seq.length || seq[seq.length - 1] !== cur)) seq.push(cur);
+    const seq = [];
+    if (!opt.noCourse) { let cur = null, cnt = 0;   // 通ったコース（35m 以内で一番近いコース。続けて 8 点以上の物だけ）
+      for (let i = a; i <= b; i++) { let best = null, bd = 35; for (const o of P) { if (o.cl) continue; for (let j = 1; j < o.q.length; j++) { const dd = segDist([pt[i].x, pt[i].z], o.q[j - 1], o.q[j]); if (dd < bd) { bd = dd; best = o; } } }
+        const key = best ? (best.nm || "(" + (DN[best.c] || "コース") + ")") + "|" + (best.c || "") : null;
+        if (key === cur) cnt++; else { if (cur && cnt >= 8 && (!seq.length || seq[seq.length - 1] !== cur)) seq.push(cur); cur = key; cnt = 1; } }
+      if (cur && cnt >= 8 && (!seq.length || seq[seq.length - 1] !== cur)) seq.push(cur); }
     runs.push({ kind: "run", a, b, dist: cum[b] - cum[a], drop: emax - emin, vmax, avg: mv > 0 ? (cum[b] - cum[a]) / mv : 0, crs: seq.map(s => s.split("|")) }); }
-  const items = [...lifts, ...runs].sort((x, y) => x.a - y.a);
-  const sum = { resort: r.nm, runs: runs.length, lifts: lifts.filter(l => !l.walk).length, dist: runs.reduce((s, x) => s + x.dist, 0), drop: runs.reduce((s, x) => s + x.drop, 0), vmax: Math.max(0, ...runs.map(x => x.vmax)), time: pt[n - 1].t - pt[0].t };
+  // 転倒：記録の時刻に一番近い点
+  const falls = (log.falls || []).map(f => { let lo = 0, hi = n - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (pt[m].t < f[0]) lo = m + 1; else hi = m; } const [x, z] = proj.fromLL(f[1], f[2]); return { kind: "fall", a: lo, b: lo, t: f[0], x, z, g: f[3] }; });
+  const items = [...lifts, ...runs, ...falls].sort((x, y) => x.a - y.a || (x.kind === "fall") - (y.kind === "fall"));
+  const sum = { resort: r.nm, runs: runs.length, lifts: lifts.filter(l => !l.walk).length, falls: falls.length, dist: runs.reduce((s, x) => s + x.dist, 0), drop: runs.reduce((s, x) => s + x.drop, 0), vmax: Math.max(0, ...runs.map(x => x.vmax)), time: pt[n - 1].t - pt[0].t };
   return { r, d, proj, pt, items, sum };
 }
 
-/* ---- 一覧 ---- */
-let LOGS = [];
+/* ---- 友だち：位置を公開の中継サーバー(MQTT)に、グループの合言葉で暗号化して置く ----
+   話題名・鍵はどちらも合言葉から作る（中継サーバーには中身は読めない）。2か所の中継に同じ物を送り、届いた新しい方を使う */
+const BROKERS = ["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt"];
+const FR = { code: LS.get("rideGroup", null), name: LS.get("rideName", ""), uid: LS.get("rideUid", null), cl: [], all: {} };
+if (!FR.uid) { FR.uid = Math.random().toString(36).slice(2, 10); LS.set("rideUid", FR.uid); }
+const FCOL = ["#e8710a", "#9334e6", "#188038", "#d01884", "#12b5cb", "#b06000", "#3949ab", "#c5221f"];
+const fcol = u => { let h = 0; for (const c of u) h = (h * 31 + c.charCodeAt(0)) >>> 0; return FCOL[h % FCOL.length]; };
+const enc = new TextEncoder(), dec = new TextDecoder();
+const b64 = u8 => { let s = ""; for (const b of u8) s += String.fromCharCode(b); return btoa(s); }, unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function frKeys(code) {
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode("kwsk-ride-topic:" + code)));
+  const k = await crypto.subtle.digest("SHA-256", enc.encode("kwsk-ride-key:" + code));
+  return { base: "kwskride/" + [...h.slice(0, 12)].map(b => b.toString(16).padStart(2, "0")).join(""), key: await crypto.subtle.importKey("raw", k, "AES-GCM", false, ["encrypt", "decrypt"]) };
+}
+let MQ = null;
+async function frConnect() {
+  frClose(); if (!FR.code || !window.crypto || !crypto.subtle) return;
+  const { base, key } = await frKeys(FR.code); FR.base = base; FR.key = key;
+  try { if (!MQ) { const m = (await import("https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.esm.js")).default; MQ = m.connect ? m : m.default; } } catch (e) { console.warn("mqtt", e); return; }
+  for (const u of BROKERS) { try {
+    const c = MQ.connect(u, { clientId: "kr_" + FR.uid + "_" + Math.random().toString(36).slice(2, 6), clean: true, reconnectPeriod: 6000, connectTimeout: 10000, keepalive: 45 });
+    c.on("connect", () => { c.subscribe(base + "/+"); if (FR.last) frSend(FR.last, true); });
+    c.on("error", () => { });
+    c.on("message", async (tp, msg) => { const uid = tp.split("/").pop(); if (uid === FR.uid) return; const s = typeof msg === "string" ? msg : dec.decode(msg);
+      if (!s) { delete FR.all[uid]; frShow(); return; }
+      try { const raw = unb64(s), o = JSON.parse(dec.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: raw.slice(0, 12) }, FR.key, raw.slice(12))));
+        if (!FR.all[uid] || FR.all[uid].t <= o.t) { FR.all[uid] = o; frShow(); } } catch (e) { } });
+    FR.cl.push(c); } catch (e) { console.warn("broker", u, e); } }
+}
+function frClose() { for (const c of FR.cl) try { c.end(true); } catch (e) { } FR.cl = []; FR.all = {}; }
+let lastSend = 0;
+async function frSend(o, force) {
+  if (!FR.code || !FR.key) return; FR.last = o; if (!force && Date.now() - lastSend < 12000) return; lastSend = Date.now();
+  const iv = crypto.getRandomValues(new Uint8Array(12)), ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, FR.key, enc.encode(JSON.stringify(o))));
+  const p = new Uint8Array(12 + ct.length); p.set(iv); p.set(ct, 12); const s = b64(p);
+  for (const c of FR.cl) try { if (c.connected) c.publish(FR.base + "/" + FR.uid, s, { retain: true, qos: 0 }); } catch (e) { }
+}
+function frClear() { for (const c of FR.cl) try { c.publish(FR.base + "/" + FR.uid, "", { retain: true, qos: 0 }); } catch (e) { } FR.last = null; }
+const friends = () => Object.entries(FR.all).filter(([u, o]) => Date.now() - o.t < 12 * 3600e3).map(([u, o]) => ({ uid: u, ...o, col: fcol(u) })).sort((a, b) => b.t - a.t);
+function frShow() { renderFriends(); if (LIVE && LIVE.updFriends) LIVE.updFriends(); if (HM && !$("home").hidden) { homeMarkers(); listNear(); } }
+const newCode = () => { const A = "abcdefghjkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(10)); return [...r].map(b => A[b % A.length]).join(""); };
+function askName() { const n = (prompt("みんなに見える名前", FR.name || "") || "").trim().slice(0, 12); if (n) { FR.name = n; LS.set("rideName", n); } return !!FR.name; }
+function renderFriends() {
+  const b = $("frBtns"), box = $("frs");
+  if (!FR.code) { b.innerHTML = ""; box.innerHTML = '<button class="btn pri sm" id="frNew">グループを作る</button>';
+    $("frNew").onclick = () => { if (!askName()) return; FR.code = newCode(); LS.set("rideGroup", FR.code); frConnect(); renderFriends(); invite(); }; return; }
+  b.innerHTML = '<button class="btn sm" id="frInv">招待</button> <button class="btn sm" id="frLeave">抜ける</button>';
+  $("frInv").onclick = invite; $("frLeave").onclick = () => { if (!confirm("グループを抜けますか？")) return; frClear(); setTimeout(() => { frClose(); FR.code = null; LS.set("rideGroup", null); renderFriends(); if (HM) homeMarkers(); }, 600); };
+  const L = friends();
+  box.innerHTML = `<div class="fr"><span class="dot" style="background:#1a73e8"></span><span class="t"><b>${esc(FR.name || "自分")}</b> <small>（自分）</small></span><button class="btn sm" id="frName">名前</button></div>` +
+    L.map(f => `<div class="fr"><span class="dot" style="background:${f.col}"></span><span class="t"><b>${esc(f.n || "?")}</b><br><small>${f.on ? esc(f.rn || "") + "・" + (f.v != null ? kmh(f.v) + "・" : "") : "チェックアウト・"}${ago(f.t)}${HERE && f.on ? "・" + km(hdist(HERE, [f.la, f.lo])) : ""}</small></span></div>`).join("");
+  $("frName").onclick = () => { askName(); renderFriends(); };
+}
+async function invite() {
+  const u = location.origin + location.pathname + "?g=" + FR.code;
+  try { if (navigator.share) { await navigator.share({ title: "滑走ログ", text: "滑走ログのグループ", url: u }); return; } } catch (e) { if (e.name === "AbortError") return; }
+  try { await navigator.clipboard.writeText(u); toast("招待のリンクをコピーしました"); } catch (e) { prompt("招待のリンク", u); }
+}
+
+/* ---- ホーム：現在地・近くのスキー場・友だち・記録 ---- */
+let HERE = null, HM = null, HL = null, SEL = null;
+function locate() { $("here").textContent = "現在地を取得中…";
+  if (!navigator.geolocation) { $("here").textContent = "位置が取れません"; return; }
+  navigator.geolocation.getCurrentPosition(p => { HERE = [p.coords.latitude, p.coords.longitude]; $("here").textContent = "現在地 精度" + Math.round(p.coords.accuracy) + "m"; listNear(); homeMarkers(true); renderFriends(); },
+    e => { $("here").textContent = e.code === 1 ? "位置の利用が許可されていません" : "現在地が取れません"; listNear(); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }); }
+function homeMap() {
+  if (HM || !window.L) return;
+  HM = L.map("hmap", { zoomControl: false, attributionControl: false }).setView([36.5, 138.2], 6);
+  L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(HM);
+  HL = L.layerGroup().addTo(HM);
+}
+async function homeMarkers(fit) {
+  if (!HM) return; const R = await rows(); HL.clearLayers();
+  const list = nearList(R);
+  for (const r of list) L.circleMarker(r.c, { radius: SEL === r ? 8 : 6, color: "#fff", weight: 2, fillColor: SEL === r ? "#d93025" : "#1a73e8", fillOpacity: 1 }).on("click", () => pick(r)).bindTooltip(r.nm, { permanent: SEL === r, direction: "top", offset: [0, -6] }).addTo(HL);
+  for (const f of friends()) if (f.on) L.circleMarker([f.la, f.lo], { radius: 7, color: "#fff", weight: 2, fillColor: f.col, fillOpacity: 1 }).bindTooltip(esc(f.n || "?"), { permanent: true, direction: "right", offset: [6, 0] }).addTo(HL);
+  if (HERE) L.circleMarker(HERE, { radius: 7, color: "#fff", weight: 3, fillColor: "#1a73e8", fillOpacity: 1 }).addTo(HL);
+  if (fit && HERE) { const b = L.latLngBounds([HERE]); list.slice(0, 5).forEach(r => b.extend(r.c)); HM.fitBounds(b, { padding: [20, 20], maxZoom: 12 }); }
+}
+function nearList(R) {
+  const q = norm($("q").value);
+  if (q) { const m = R.filter(r => r.key.includes(q) || r.yk.includes(q)); if (HERE) m.sort((a, b) => hdist(HERE, a.c) - hdist(HERE, b.c)); return m.slice(0, 30); }
+  if (!HERE) return [];
+  return R.map(r => [r, hdist(HERE, r.c)]).sort((a, b) => a[1] - b[1]).slice(0, 12).map(x => x[0]);
+}
+async function listNear() {
+  const R = await rows(), list = nearList(R), box = $("near");
+  if (!list.length) { box.innerHTML = $("q").value ? '<div class="mut" style="padding:8px 0">見つかりません</div>' : ""; return; }
+  box.innerHTML = "";
+  for (const r of list) { const e = document.createElement("div"); e.className = "rs" + (SEL === r ? " sel" : "");
+    const fs = friends().filter(f => f.on && f.cid === r.cid);
+    e.innerHTML = `<span class="t"><b>${esc(r.nm)}</b><small>${HERE ? km(hdist(HERE, r.c)) : ""}${fs.map(f => ` <span class="dot" style="background:${f.col};width:8px;height:8px"></span>${esc(f.n || "")}`).join("")}</small></span><button class="btn ${SEL === r ? "pri" : ""} sm">チェックイン</button>`;
+    e.querySelector(".t").onclick = () => pick(r);
+    e.querySelector("button").onclick = () => checkIn(r);
+    box.append(e); }
+}
+function pick(r) { SEL = r; listNear(); homeMarkers(); if (HM) HM.setView(r.c, Math.max(HM.getZoom(), 11)); }
+let qT = 0; $("q").oninput = () => { clearTimeout(qT); qT = setTimeout(() => { listNear(); homeMarkers(); }, 200); };
+$("reloc").onclick = locate;
 async function showHome() {
-  stopPlay(); A3 && A3.dispose(); A3 = null; $("cmap").innerHTML = ""; $("cmap").className = "";
-  $("home").hidden = false; $("view").hidden = true; $("back").hidden = true; $("gpxB").hidden = false; $("ttl").textContent = "滑走ログ"; history.replaceState(null, "", location.pathname);
-  LOGS = (await dbAll()).sort((a, b) => b.t0 - a.t0);
-  const done = LOGS.filter(l => l.done !== false);
-  $("logs").innerHTML = done.length ? "" : '<div class="mut">まだありません</div>';
-  for (const l of done) { const e = document.createElement("div"); e.className = "log"; const s = l.sum;
-    const dt = new Date(l.t0);
-    e.innerHTML = `<div class="t"><b>${esc(s ? s.resort : l.name || "記録")}</b><small>${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()} ${clock(l.t0)}${s ? `・${s.runs}本・${km(s.dist)}・最高${kmh(s.vmax)}` : ""}${l.src ? "・" + esc(l.src) : ""}</small></div><button class="x" title="削除">×</button>`;
+  dispose3D();
+  $("home").hidden = false; $("view").hidden = true; $("live").hidden = true; scrollTo(0, 0);
+  homeMap(); setTimeout(() => HM && HM.invalidateSize(), 50);
+  const LOGS = (await dbAll()).sort((a, b) => b.t0 - a.t0);
+  const live = LOGS.find(l => l.done === false);
+  if (live) { const r = (await rows()).find(x => x.cid === live.cid); if (r) { REC = live; motionOn(); enterLive(r); return; } live.done = true; await dbPut(live); }
+  $("logs").innerHTML = LOGS.length ? "" : '<div class="mut">まだありません</div>';
+  for (const l of LOGS) { const e = document.createElement("div"); e.className = "log"; const s = l.sum, dt = new Date(l.t0);
+    e.innerHTML = `<div class="t"><b>${esc(s ? s.resort : l.name || "記録")}</b><small>${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()} ${clock(l.t0)}${s ? `・${s.runs}本・${km(s.dist)}・最高${kmh(s.vmax)}${s.falls ? "・転倒" + s.falls : ""}` : ""}${l.src ? "・" + esc(l.src) : ""}</small></div><button class="x">×</button>`;
     e.onclick = ev => { if (ev.target.closest(".x")) return; openLog(l); };
     e.querySelector(".x").onclick = async () => { if (!confirm("この記録を消しますか？")) return; await dbDel(l.id); showHome(); };
     $("logs").append(e); }
-  const live = LOGS.find(l => l.done === false);
-  if (live && !REC) { REC = live; $("recWhere").textContent = "記録中（続きから）"; startRec(true); }
+  renderFriends(); listNear(); homeMarkers();
 }
 
-/* ---- 記録（GPS） ---- */
-let REC = null, watch = null, lock = null, tick = null, lastSave = 0;
+/* ---- チェックイン中：3Dマップ・自動の記録・友だち・転倒 ---- */
+let REC = null, LIVE = null, watch = null, lock = null, tick = null, lastSave = 0, A3 = null, jumps = 0;
 async function wake() { try { if ("wakeLock" in navigator && document.visibilityState === "visible") lock = await navigator.wakeLock.request("screen"); } catch (e) { } }
-document.addEventListener("visibilitychange", () => { if (REC && document.visibilityState === "visible") wake(); });
-function startRec(resume) {
+let hiddenAt = 0;
+document.addEventListener("visibilitychange", () => { if (!REC) return; if (document.visibilityState === "hidden") { hiddenAt = Date.now(); dbPut(REC); } else { wake(); if (hiddenAt && Date.now() - hiddenAt > 30000) toast("画面を消していた " + Math.round((Date.now() - hiddenAt) / 60000) + "分間は記録されていません", 5000); hiddenAt = 0; } });
+// 転倒：強い衝撃(2.8G以上)のあと4秒以内に止まった(4km/h未満)、その前は動いていた(15km/h以上)
+let spike = null; const onMotion = e => { const a = e.accelerationIncludingGravity; if (!a || a.x == null) return; const g = Math.hypot(a.x, a.y, a.z) / 9.81; if (g >= 2.8 && (!spike || Date.now() - spike.t > 1500 || g > spike.g)) spike = { t: Date.now(), g }; };
+// 揺れの検出は許可が要る端末あり(iPhone等)。画面操作の中でしか頼めないので、許可されなかったら次に画面を触った時にもう一度頼む
+let motionAsk = null;
+async function motionOn() {
+  if (motionAsk) { document.removeEventListener("pointerdown", motionAsk, true); motionAsk = null; }
+  try { if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === "function") { if (await DeviceMotionEvent.requestPermission() !== "granted") throw 0; } window.addEventListener("devicemotion", onMotion); }
+  catch (e) { if (REC && !REC.done) { motionAsk = () => motionOn(); document.addEventListener("pointerdown", motionAsk, { capture: true, once: true }); } }
+}
+function motionOff() { window.removeEventListener("devicemotion", onMotion); if (motionAsk) { document.removeEventListener("pointerdown", motionAsk, true); motionAsk = null; } }
+function checkFall(q) {
+  if (!spike || q[0] < spike.t) return; if (q[0] - spike.t > 4000) { spike = null; return; }
+  const P = REC.pts; if (P.length < 4) return;
+  let bi = P.length - 2; while (bi > 0 && P[bi][0] > spike.t - 1500) bi--; const back = P[bi], prev = P[Math.max(0, bi - 2)];
+  const vb = hdist([prev[1], prev[2]], [back[1], back[2]]) / Math.max(1, (back[0] - prev[0]) / 1000), L = P[P.length - 2], vn = hdist([L[1], L[2]], [q[1], q[2]]) / Math.max(1, (q[0] - L[0]) / 1000);
+  if (vn >= 1.1) return;
+  const lf = REC.falls[REC.falls.length - 1];
+  if (vb > 4.2 && (!lf || spike.t - lf[0] > 30000)) { const f = [spike.t, q[1], q[2], +spike.g.toFixed(1)]; REC.falls.push(f); $("lFall").textContent = REC.falls.length; toast("転倒を記録しました"); if (LIVE && LIVE.addFall) LIVE.addFall(f); dbPut(REC); }
+  spike = null;
+}
+async function checkIn(r) {
   if (!navigator.geolocation) { alert("この端末では位置が取れません"); return; }
-  if (!resume) REC = { id: "r" + Date.now(), t0: Date.now(), pts: [], done: false };
-  $("recIdle").hidden = true; $("recOn").hidden = false; if (!resume) $("recWhere").textContent = "記録中";
-  wake(); dbPut(REC);
+  REC = { id: "r" + Date.now(), t0: Date.now(), pts: [], falls: [], done: false, cid: r.cid, name: r.nm }; motionOn(); await dbPut(REC);
+  enterLive(r);
+}
+async function enterLive(r) {
+  dispose3D(); const sess = {}; LIVE = sess; REC.falls = REC.falls || [];
+  $("home").hidden = true; $("view").hidden = true; $("live").hidden = false;
+  const box = $("cmap"); $("live").prepend(box); box.innerHTML = '<div class="cmsg" style="padding-top:40vh">山の形を読み込み中…</div>';
+  $("lFall").textContent = REC.falls.length; $("lRuns").textContent = "0"; $("lMax").textContent = "-"; $("lfr").innerHTML = "";
+  wake(); startGPS();
+  clearInterval(tick); tick = setInterval(() => { if (REC) $("lTime").textContent = hms(Date.now() - REC.t0); }, 1000);
+  const d = await course(r);
+  if (LIVE !== sess) return;
+  if (!d || !(d.p.length || d.l.length)) { box.innerHTML = '<div class="cmsg" style="padding-top:40vh">' + esc(r.nm) + ' のコースのデータがありません</div>'; return; }
+  let api; try { api = await build3D(box, { c: r.c, d, elev: r.elev, noFull: true, alive: () => LIVE === sess }); } catch (e) { console.warn(e); box.innerHTML = '<div class="cmsg" style="padding-top:40vh">3Dの地図を作れませんでした</div>'; return; }
+  if (!api || LIVE !== sess) { api && api.dispose(); return; }
+  A3 = api; const { proj } = api;
+  const dot = (col, s) => { const g = new THREE.Group(); const o = new THREE.Mesh(new THREE.SphereGeometry(api.rr * s * 1.35, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false })); o.renderOrder = 9;
+    const i = new THREE.Mesh(new THREE.SphereGeometry(api.rr * s, 16, 12), new THREE.MeshBasicMaterial({ color: col, depthTest: false })); i.renderOrder = 10; g.add(o, i); g.visible = false; api.scene.add(g); return g; };
+  const at = (la, lo, up = 2) => { const [x, z] = proj.fromLL(la, lo); return new THREE.Vector3(x, api.Y(x, z) + api.rr * up, z); };
+  const me = dot(0x1a73e8, 4.5); let track = null, trackN = 0, follow = false, first = true;
+  const fm = {};
+  sess.dem = (la, lo) => { const [x, z] = proj.fromLL(la, lo); return api.hAt(x, z); };
+  // 今日の跡：速さで色分け（画面の上で同じ太さ。寄ると細かい所まで見える）
+  const drawTrack = () => { const P = REC.pts; trackN = P.length; api.removeLine(track); api.removeLine(sess.under); track = sess.under = null; if (P.length < 2) return;
+    const xyz = [], col = []; for (let i = 0; i < P.length; i++) { const v = at(P[i][1], P[i][2], 0.8); xyz.push(v.x, v.y, v.z);
+      const sp = i ? hdist([P[i - 1][1], P[i - 1][2]], [P[i][1], P[i][2]]) / Math.max(1, (P[i][0] - P[i - 1][0]) / 1000) : 0; const c = new THREE.Color(spdCol(sp)); col.push(c.r, c.g, c.b); }
+    sess.under = api.addLine(xyz, null, 6, 0xffffff, 1); track = api.addLine(xyz, col, 3.5, 0, 2); };
+  sess.onFix = q => { me.position.copy(at(q[1], q[2], 3)); me.visible = true;
+    if (first) { first = false; const [x, z] = proj.fromLL(q[1], q[2]), b = api.bounds; if (x > b[0] && x < b[2] && z > b[1] && z < b[3]) api.aim(me.position); }
+    if (follow) api.aim(me.position, 0.25);
+    if (REC.pts.length - trackN >= 5 || !track) drawTrack(); api.draw(); };
+  sess.updFriends = () => { const all = friends().filter(f => f.on), L = all.filter(f => f.cid === r.cid), seen = {};
+    for (const f of L) { seen[f.uid] = 1; let m = fm[f.uid]; if (!m) { m = fm[f.uid] = { g: dot(new THREE.Color(f.col), 4), l: api.addL(new THREE.Vector3(), "", "me", -1) }; m.l.dyn = true; m.l.e.style.background = f.col; }
+      m.g.position.copy(at(f.la, f.lo, 3)); m.g.visible = true; m.l.p.copy(m.g.position).add(new THREE.Vector3(0, api.rr * 7, 0)); m.l.e.textContent = f.n || "?"; }
+    for (const u in fm) if (!seen[u]) { fm[u].g.visible = false; fm[u].l.p.set(1e9, 0, 1e9); }
+    const last = REC && REC.pts[REC.pts.length - 1];
+    $("lfr").innerHTML = all.map(f => `<button class="fchip" data-u="${f.uid}"><span class="dot" style="background:${f.col}"></span>${esc(f.n || "?")} ${f.cid === r.cid ? (last ? km(hdist([last[1], last[2]], [f.la, f.lo])) : "") : esc(f.rn || "")}・${ago(f.t)}</button>`).join("");
+    api.draw(); };
+  $("lfr").onclick = e => { const b = e.target.closest(".fchip"); if (!b || !fm[b.dataset.u] || !fm[b.dataset.u].g.visible) return; follow = false; $("lFo").classList.remove("pri"); api.aim(fm[b.dataset.u].g.position); };
+  sess.addFall = f => { api.addL(at(f[1], f[2], 2), "✕ 転倒", "fall", -0.5); api.draw(); };
+  REC.falls.forEach(sess.addFall);
+  $("lMe").onclick = () => { if (me.visible) api.aim(me.position); };
+  $("lFo").classList.remove("pri"); $("lFo").onclick = () => { follow = !follow; $("lFo").classList.toggle("pri", follow); if (follow && me.visible) api.aim(me.position); };
+  // 1分ごとに今日の集計（コース名は調べない軽い集計）
+  const sumUp = async () => { if (LIVE !== sess || !REC || REC.pts.length < 20) return; try { const an = await analyze(REC, { r, d, dem: sess.dem, noCourse: true }); if (LIVE !== sess) return; $("lRuns").textContent = an.sum.runs; $("lMax").textContent = an.sum.runs ? kmh(an.sum.vmax) : "-"; } catch (e) { } };
+  sess.sumT = setInterval(sumUp, 60000); sumUp();
+  if (REC.pts.length) sess.onFix(REC.pts[REC.pts.length - 1]);
+  sess.updFriends(); sess.fT = setInterval(() => LIVE === sess && sess.updFriends(), 30000);
+  api.resize();
+}
+function startGPS() {
+  if (watch != null) navigator.geolocation.clearWatch(watch);
   watch = navigator.geolocation.watchPosition(p => {
-    const c = p.coords; $("recAcc").textContent = Math.round(c.accuracy) + "m";
-    if (c.accuracy > 40) return;
+    const c = p.coords; $("lAcc").textContent = "精度" + Math.round(c.accuracy) + "m";
+    if (c.accuracy > 40 || !REC) return;
     const q = [p.timestamp || Date.now(), +c.latitude.toFixed(6), +c.longitude.toFixed(6), Math.round(c.accuracy)], L = REC.pts[REC.pts.length - 1];
     if (L && q[0] - L[0] < 900) return;
-    if (L) { const dd = hdist([L[1], L[2]], [q[1], q[2]]), dt = (q[0] - L[0]) / 1000; if (dd / dt > 45) return; REC.dist = (REC.dist || 0) + dd; $("recSpd").textContent = c.speed != null && c.speed >= 0 ? kmh(c.speed) : kmh(dd / dt); }
-    REC.pts.push(q); $("recDist").textContent = km(REC.dist || 0);
+    let v = c.speed != null && c.speed >= 0 ? c.speed : null;
+    if (L) { const dd = hdist([L[1], L[2]], [q[1], q[2]]), dt = (q[0] - L[0]) / 1000; if (dd / dt > 45) { if (++jumps < 3) return; } else if (v == null) v = dd / dt; jumps = 0; }
+    REC.pts.push(q); $("lSpd").textContent = v != null ? kmh(v) : "-";
+    checkFall(q);
     if (Date.now() - lastSave > 15000) { lastSave = Date.now(); dbPut(REC); }
-  }, e => { $("recAcc").textContent = e.code === 1 ? "許可なし" : "取れません"; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
-  clearInterval(tick); tick = setInterval(() => { $("recTime").textContent = hms(Date.now() - REC.t0); }, 1000);
+    if (LIVE && LIVE.onFix) LIVE.onFix(q);
+    frSend({ n: FR.name, la: q[1], lo: q[2], t: q[0], v: v != null ? +v.toFixed(1) : null, cid: REC.cid, rn: REC.name, on: true });
+  }, e => { $("lAcc").textContent = e.code === 1 ? "位置の利用が許可されていません" : "現在地が取れません"; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
 }
-async function stopRec() {
-  if (!REC) return; navigator.geolocation.clearWatch(watch); clearInterval(tick); try { lock && lock.release(); } catch (e) { } lock = null;
-  const L = REC; REC = null; $("recIdle").hidden = false; $("recOn").hidden = true;
+async function checkOut() {
+  if (!REC) return; navigator.geolocation.clearWatch(watch); watch = null; clearInterval(tick); motionOff();
+  try { lock && lock.release(); } catch (e) { } lock = null;
+  if (FR.last) await frSend({ ...FR.last, on: false, t: Date.now() }, true);
+  const L = REC; REC = null; dispose3D();
   if (L.pts.length < 10) { await dbDel(L.id); showHome(); return; }
   L.done = true; await dbPut(L); openLog(L);
 }
-$("start").onclick = () => startRec(false);
-$("stop").onclick = () => { if (confirm("記録を終えますか？")) stopRec(); };
+$("lOut").onclick = () => { if (confirm("チェックアウトしますか？")) checkOut(); };
+function dispose3D() { stopPlay(); if (LIVE) { clearInterval(LIVE.sumT); clearInterval(LIVE.fT); LIVE = null; } if (A3) A3.dispose(); A3 = null; RP = null; const b = $("cmap"); b.innerHTML = ""; b.className = ""; document.body.append(b); }
 
 /* ---- GPX ---- */
 $("gpx").onchange = async e => { const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -244,77 +454,77 @@ $("gpx").onchange = async e => { const f = e.target.files[0]; e.target.value = "
     for (const p of x.querySelectorAll("trkpt,rtept")) { const t = p.querySelector("time"); if (!t) continue; const tm = Date.parse(t.textContent.trim()); if (!(tm > 0)) continue; pts.push([tm, +(+p.getAttribute("lat")).toFixed(6), +(+p.getAttribute("lon")).toFixed(6), 0]); }
     pts.sort((a, b) => a[0] - b[0]);
     if (pts.length < 10) { alert("時刻つきの記録が入っていません"); return; }
-    const L = { id: "g" + Date.now(), t0: pts[0][0], pts, done: true, src: "GPX" }; await dbPut(L); openLog(L);
+    const L = { id: "g" + Date.now(), t0: pts[0][0], pts, falls: [], done: true, src: "GPX" }; await dbPut(L); openLog(L);
   } catch (err) { alert("読み込めません：" + err.message); } };
-function toGPX(L) {
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="滑走ログ" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${esc(L.sum ? L.sum.resort : "記録")}</name><trkseg>\n` +
-    L.pts.map(p => `<trkpt lat="${p[1]}" lon="${p[2]}"><time>${new Date(p[0]).toISOString()}</time></trkpt>`).join("\n") + "\n</trkseg></trk></gpx>\n";
-}
+const toGPX = L => `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="滑走ログ" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${esc(L.sum ? L.sum.resort : "記録")}</name><trkseg>\n` +
+  L.pts.map(p => `<trkpt lat="${p[1]}" lon="${p[2]}"><time>${new Date(p[0]).toISOString()}</time></trkpt>`).join("\n") + "\n</trkseg></trk></gpx>\n";
 
 /* ---- 1つの記録：集計・3Dリプレイ・滑走の一覧 ---- */
-let A3 = null, AN = null, CUR = null;
+let CUR = null;
 const SPC = [[0, [66, 133, 244]], [25, [52, 168, 83]], [45, [251, 188, 4]], [65, [234, 67, 53]]];
 const spdCol = v => { const k = v * 3.6; let i = 0; while (i < SPC.length - 2 && k > SPC[i + 1][0]) i++; const [a, ca] = SPC[i], [b, cb] = SPC[i + 1], t = Math.max(0, Math.min(1, (k - a) / (b - a))); return `rgb(${ca.map((c, j) => Math.round(c + (cb[j] - c) * t)).join(",")})`; };
 async function openLog(L) {
-  CUR = L; $("home").hidden = true; $("view").hidden = false; $("back").hidden = false; $("gpxB").hidden = true; scrollTo(0, 0);
-  $("ttl").textContent = "読み込み中…"; $("tiles").innerHTML = ""; $("tl").innerHTML = ""; $("cmap").innerHTML = '<div class="cmsg">分析中…</div>'; $("rpw").hidden = true;
-  let an; try { an = await analyze(L); } catch (e) { $("ttl").textContent = "記録"; $("cmap").innerHTML = `<div class="cmsg">${esc(e.message)}</div>`; return; }
-  if (CUR !== L) return; AN = an;
+  CUR = L; dispose3D(); $("home").hidden = true; $("live").hidden = true; $("view").hidden = false; scrollTo(0, 0);
+  const box = $("cmap"); $("vMapC").prepend(box);
+  $("vName").textContent = L.sum ? L.sum.resort : L.name || "記録"; $("tiles").innerHTML = ""; $("tl").innerHTML = ""; box.innerHTML = '<div class="cmsg">分析中…</div>'; $("rpw").hidden = true;
+  let an; try { an = await analyze(L); } catch (e) { box.innerHTML = `<div class="cmsg">${esc(e.message)}</div>`; return; }
+  if (CUR !== L) return;
   if (!L.sum || JSON.stringify(L.sum) !== JSON.stringify(an.sum)) { L.sum = an.sum; dbPut(L); }
   const s = an.sum, dt = new Date(L.t0);
-  $("ttl").textContent = s.resort;
-  $("tiles").innerHTML = [["日付", `${dt.getMonth() + 1}/${dt.getDate()} ${clock(an.pt[0].t)}〜`], ["滑走", s.runs + "本"], ["リフト", s.lifts + "回"], ["滑走距離", km(s.dist)], ["下った高さ", km(s.drop)], ["最高速度", kmh(s.vmax)]].map(([a, b]) => `<div><small>${a}</small><b>${b}</b></div>`).join("");
-  // 一覧
-  let rn = 0; $("tl").innerHTML = "";
-  an.items.forEach((it, idx) => { const e = document.createElement("div"); e.className = "it" + (it.kind === "lift" ? " lf" : ""); it.el = e;
-    if (it.kind === "lift") e.innerHTML = `<span class="no">${clock(an.pt[it.a].t)}</span><span class="bd">${esc(it.nm)}・${Math.round((an.pt[it.b].t - an.pt[it.a].t) / 60000)}分・↑${Math.round(it.rise)}m</span>`;
-    else { rn++; it.no = rn; const cs = it.crs.length ? it.crs.map(([nm, c]) => `<span class="dot" style="background:${PC[c] || PC[""]}"></span>${esc(nm)}`).join(" → ") : "コース外";
-      e.innerHTML = `<span class="no">${rn}本目</span><span class="bd"><b>${cs}</b><small>${clock(an.pt[it.a].t)}・${km(it.dist)}・↓${Math.round(it.drop)}m・最高${kmh(it.vmax)}・平均${kmh(it.avg)}・${hms((an.pt[it.b].t - an.pt[it.a].t)).replace(/^0:/, "")}</small></span>`; }
-    e.onclick = () => { seek(an.pt[it.a].t); playUntil = it.kind === "run" ? an.pt[it.b].t : null; if (A3) { play(true); $("cmap").scrollIntoView({ behavior: "smooth", block: "center" }); } };
+  $("vName").textContent = s.resort;
+  $("tiles").innerHTML = [["日付", `${dt.getMonth() + 1}/${dt.getDate()}`], ["滑走", s.runs + "本"], ["リフト", s.lifts + "回"], ["転倒", s.falls + "回"], ["滑走距離", km(s.dist)], ["下った高さ", km(s.drop)], ["最高速度", kmh(s.vmax)], ["時間", hms(s.time).replace(/:\d\d$/, "")]].map(([a, b]) => `<div><small>${a}</small><b>${b}</b></div>`).join("");
+  let rn = 0;
+  an.items.forEach(it => { const e = document.createElement("div"); it.el = e;
+    if (it.kind === "lift") { e.className = "it lf"; e.innerHTML = `<span class="no">${clock(an.pt[it.a].t)}</span><span class="bd">${esc(it.nm)}・${Math.round((an.pt[it.b].t - an.pt[it.a].t) / 60000)}分・↑${Math.round(it.rise)}m</span>`; }
+    else if (it.kind === "fall") { e.className = "it fl"; e.innerHTML = `<span class="no">${clock(it.t)}</span><span class="bd">✕ 転倒（${it.g}G）</span>`; }
+    else { rn++; it.no = rn; e.className = "it"; const cs = it.crs.length ? it.crs.map(([nm, c]) => `<span class="cdot" style="background:${PC[c] || PC[""]}"></span>${esc(nm)}`).join(" → ") : "コース外";
+      e.innerHTML = `<span class="no">${rn}本目</span><span class="bd"><b>${cs}</b><small>${clock(an.pt[it.a].t)}・${km(it.dist)}・↓${Math.round(it.drop)}m・最高${kmh(it.vmax)}・平均${kmh(it.avg)}・${hms(an.pt[it.b].t - an.pt[it.a].t).replace(/^0:/, "")}</small></span>`; }
+    e.onclick = () => { if (!RP) return; seek(it.kind === "fall" ? it.t - 8000 : an.pt[it.a].t); playUntil = it.kind === "run" ? an.pt[it.b].t : it.kind === "fall" ? it.t + 3000 : null;
+      frame(it); play(true); $("cmap").scrollIntoView({ behavior: "smooth", block: "center" }); };
     $("tl").append(e); });
   if (!an.items.length) $("tl").innerHTML = '<div class="mut">滑走が見つかりません</div>';
-  // 3D
-  $("cmap").innerHTML = '<div class="cmsg">山の形を読み込み中…</div>';
+  box.innerHTML = '<div class="cmsg">山の形を読み込み中…</div>';
   try {
     const ext = an.pt.filter((_, i) => i % 10 === 0).map(p => [p.x, p.z]);
-    const api = await build3D($("cmap"), { c: an.r.c, d: an.d, elev: an.r.elev, extra: ext, dimCourse: true, alive: () => CUR === L });
+    const api = await build3D(box, { c: an.r.c, d: an.d, elev: an.r.elev, extra: ext, dimCourse: true, alive: () => CUR === L });
     if (!api || CUR !== L) { api && api.dispose(); return; }
     A3 = api; setup3D(an);
-  } catch (e) { console.warn(e); $("cmap").innerHTML = '<div class="cmsg">3Dの地図を作れませんでした</div>'; }
+  } catch (e) { console.warn(e); box.innerHTML = '<div class="cmsg">3Dの地図を作れませんでした</div>'; }
 }
+// 選んだ1本（または転倒の所）に寄る
+function frame(it) { const api = A3, { pt } = RP.an; let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9;
+  if (it.kind === "fall") { x0 = x1 = it.x; z0 = z1 = it.z; } else for (let i = it.a; i <= it.b; i++) { x0 = Math.min(x0, pt[i].x); x1 = Math.max(x1, pt[i].x); z0 = Math.min(z0, pt[i].z); z1 = Math.max(z1, pt[i].z); }
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, span = Math.max(x1 - x0, z1 - z0, 150);
+  api.aim(new THREE.Vector3(cx, api.Y(cx, cz), cz)); const dir = api.cam.position.clone().sub(api.ctl.target).normalize();
+  api.cam.position.copy(api.ctl.target).addScaledVector(dir, Math.max(span * 1.5, api.S2 * 0.06)); api.ctl.update(); }
 function setup3D(an) {
   const api = A3, { pt } = an;
-  // 滑った跡（滑走＝速さで色分け、それ以外＝細い灰色）を地形の絵に描く
+  // 滑った跡：画面の上で同じ太さの線（寄ると細かい曲がり方まで見える）。滑走＝速さの色、それ以外＝灰色
   const inRun = new Uint8Array(pt.length); for (const it of an.items) if (it.kind === "run") for (let i = it.a; i <= it.b; i++) inRun[i] = 1;
-  api.paint((g, T, lw, sc) => {
-    g.setLineDash([]); g.lineCap = "round"; g.lineJoin = "round";
-    g.strokeStyle = "rgba(60,64,67,.55)"; g.lineWidth = Math.max(2 * sc, lw(3)); g.beginPath();
-    for (let i = 1; i < pt.length; i++) { if (inRun[i] || pt[i].t - pt[i - 1].t > 60000) continue; const [a, b] = T([pt[i - 1].x, pt[i - 1].z]), [c, d] = T([pt[i].x, pt[i].z]); g.moveTo(a, b); g.lineTo(c, d); } g.stroke();
-    const w = Math.max(10 * sc, lw(14));
-    g.strokeStyle = "rgba(255,255,255,.95)"; g.lineWidth = w + 4 * sc; g.beginPath();
-    for (let i = 1; i < pt.length; i++) if (inRun[i] && inRun[i - 1]) { const [a, b] = T([pt[i - 1].x, pt[i - 1].z]), [c, d] = T([pt[i].x, pt[i].z]); g.moveTo(a, b); g.lineTo(c, d); } g.stroke();
-    g.lineWidth = w; for (let i = 1; i < pt.length; i++) if (inRun[i] && inRun[i - 1]) { const [a, b] = T([pt[i - 1].x, pt[i - 1].z]), [c, d] = T([pt[i].x, pt[i].z]); g.strokeStyle = spdCol(pt[i].v); g.beginPath(); g.moveTo(a, b); g.lineTo(c, d); g.stroke(); }
-  });
-  // 自分の印
-  const mk = new THREE.Mesh(new THREE.SphereGeometry(api.rr * 4, 16, 12), new THREE.MeshBasicMaterial({ color: 0xd93025, depthTest: false }));
-  mk.renderOrder = 10; api.scene.add(mk);
+  const off = Math.max(1.5, api.rr * 0.5);
+  let xyz = [], col = [], cur = -1;
+  const flush = () => { if (xyz.length >= 6) { if (cur) api.addLine(xyz, null, 6.5, 0xffffff, 1); api.addLine(xyz, col, cur ? 3.5 : 2, 0, 2); } };
+  for (let i = 0; i < pt.length; i++) { const run = inRun[i];
+    if (i && (pt[i].t - pt[i - 1].t > 60000 || run !== cur)) { flush(); const join = pt[i].t - pt[i - 1].t <= 60000; const lx = xyz.slice(-3), lc = col.slice(-3); xyz = join ? lx : []; col = join ? lc : []; }
+    cur = run; xyz.push(pt[i].x, api.Y(pt[i].x, pt[i].z) + off, pt[i].z); const c = new THREE.Color(run ? spdCol(pt[i].v) : "#80868b"); col.push(c.r, c.g, c.b); }
+  flush();
+  for (const it of an.items) if (it.kind === "fall") api.addL(new THREE.Vector3(it.x, api.Y(it.x, it.z) + api.rr * 2, it.z), "✕ 転倒", "fall", -0.5);
+  const mk = new THREE.Mesh(new THREE.SphereGeometry(api.rr * 4, 16, 12), new THREE.MeshBasicMaterial({ color: 0xd93025, depthTest: false })); mk.renderOrder = 10; api.scene.add(mk);
   const ring = new THREE.Mesh(new THREE.SphereGeometry(api.rr * 5.4, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false })); ring.renderOrder = 9; api.scene.add(ring);
   const lab = api.addL(new THREE.Vector3(), "", "me", -1); lab.dyn = true;
-  const liftAt = new Int32Array(pt.length).fill(-1); an.items.forEach((it, k) => { if (it.kind === "lift") for (let i = it.a; i <= it.b; i++) liftAt[i] = k; });
-  const runAt = new Int32Array(pt.length).fill(-1); an.items.forEach((it, k) => { if (it.kind === "run") for (let i = it.a; i <= it.b; i++) runAt[i] = k; });
-  const CL = Math.max(14, api.rr * 7) * api.EX;
-  RP = { an, mk, ring, lab, liftAt, runAt, CL, t: pt[0].t, i: 0 };
-  $("rpw").hidden = false; $("sl").max = 1000;
-  // 全画面の時も操作できるよう、地図の下の操作を全画面の中にも置く
+  const liftAt = new Int32Array(pt.length).fill(-1), runAt = new Int32Array(pt.length).fill(-1);
+  an.items.forEach((it, k) => { if (it.kind === "lift") for (let i = it.a; i <= it.b; i++) liftAt[i] = k; if (it.kind === "run") for (let i = it.a; i <= it.b; i++) runAt[i] = k; });
+  RP = { an, mk, ring, lab, liftAt, runAt, CL: Math.max(14, api.rr * 7) * api.EX, t: pt[0].t, i: 0 };
+  $("rpw").hidden = false;
   const bar = document.createElement("div"); bar.className = "rpbar"; $("cmap").append(bar);
-  const home = $("rpw").parentNode; api.box.querySelector(".cbtn").addEventListener("click", () => { (api.box.classList.contains("full") ? bar : home).append($("rpw")); });
+  const home = $("vMapC"); api.box.querySelector(".cbtn:not(.nm)").addEventListener("click", () => { (api.box.classList.contains("full") ? bar : home).append($("rpw")); });
   seek(pt[0].t);
 }
 /* ---- リプレイ ---- */
 let RP = null, playing = false, raf = 0, lastF = 0, playUntil = null, mult = 30, follow = false;
 const MULTS = [10, 30, 60, 120];
 $("spdC").innerHTML = MULTS.map(m => `<button class="chip${m === mult ? " on" : ""}" data-m="${m}">${m}倍</button>`).join("") + `<button class="chip" id="fo">追いかける</button><span class="now" id="now"></span>`;
-$("spdC").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.id === "fo") { follow = !follow; b.classList.toggle("on", follow); if (follow) aim(true); return; }
+$("spdC").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.id === "fo") { follow = !follow; b.classList.toggle("on", follow); if (follow && A3 && RP) A3.aim(RP.mk.position); return; }
   mult = +b.dataset.m; $("spdC").querySelectorAll("[data-m]").forEach(x => x.classList.toggle("on", +x.dataset.m === mult)); };
 function posAt(t) { const { pt } = RP.an; let i = RP.i; if (pt[i].t > t) i = 0; while (i < pt.length - 2 && pt[i + 1].t <= t) i++; RP.i = i;
   const a = pt[i], b = pt[Math.min(pt.length - 1, i + 1)], f = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
@@ -326,29 +536,35 @@ function render() { if (!RP || !A3) return; const { an, mk, ring, lab } = RP, q 
   const pt = an.pt, t0 = pt[0].t, t1 = pt[pt.length - 1].t; $("sl").value = Math.round((RP.t - t0) / Math.max(1, t1 - t0) * 1000); $("tm").textContent = clockS(RP.t);
   const ri = RP.runAt[q.i], it = ri >= 0 ? an.items[ri] : li >= 0 ? an.items[li] : null;
   $("now").textContent = (it ? (it.kind === "run" ? it.no + "本目" : it.nm) + "・" : "") + Math.round(q.e) + "m";
-  const sel = it || null; if (RP.sel !== sel) { RP.sel && RP.sel.el && RP.sel.el.classList.remove("on"); sel && sel.el && sel.el.classList.add("on"); RP.sel = sel; }
-  if (follow) aim(false);
+  if (RP.sel !== it) { RP.sel && RP.sel.el && RP.sel.el.classList.remove("on"); it && it.el && it.el.classList.add("on"); RP.sel = it; }
+  if (follow) api.aim(mk.position, 0.08);
   api.draw(); }
-// 追いかける：見る向きと距離はそのまま、中心だけ自分に合わせる（ゆっくり寄せて揺れを抑える）
-function aim(jump) { const api = A3, m = RP.mk.position, tg = api.ctl.target, k = jump ? 1 : 0.08, d = new THREE.Vector3().subVectors(m, tg).multiplyScalar(k); tg.add(d); api.cam.position.add(d); api.ctl.update(); }
 function seek(t) { if (!RP) return; const pt = RP.an.pt; RP.t = Math.max(pt[0].t, Math.min(pt[pt.length - 1].t, t)); RP.i = 0; render(); }
 function play(on) { playing = on; $("pp").textContent = on ? "❚❚" : "▶"; cancelAnimationFrame(raf); if (on) { lastF = performance.now(); raf = requestAnimationFrame(step); } }
 function stopPlay() { play(false); playUntil = null; }
 function step(now) { if (!playing || !RP) return; const dt = Math.min(100, now - lastF); lastF = now; const pt = RP.an.pt;
-  let t = RP.t + dt * mult; const nx = pt[Math.min(pt.length - 1, RP.i + 1)]; if (nx.t - pt[RP.i].t > 60000 && t > pt[RP.i].t + 3000) t = Math.max(t, nx.t);   // 記録の切れ目（休憩など）は飛ばす
-  if (playUntil && t >= playUntil) { t = playUntil; RP.t = t; render(); play(false); playUntil = null; return; }
+  let t = RP.t + dt * mult; const nx = pt[Math.min(pt.length - 1, RP.i + 1)]; if (nx.t - pt[RP.i].t > 60000 && t > pt[RP.i].t + 3000) t = Math.max(t, nx.t);
+  if (playUntil && t >= playUntil) { RP.t = playUntil; render(); play(false); playUntil = null; return; }
   if (t >= pt[pt.length - 1].t) { RP.t = pt[pt.length - 1].t; render(); play(false); return; }
   RP.t = t; render(); raf = requestAnimationFrame(step); }
 $("pp").onclick = () => { if (!RP) return; const pt = RP.an.pt; if (!playing && RP.t >= pt[pt.length - 1].t) seek(pt[0].t); playUntil = null; play(!playing); };
 $("sl").oninput = e => { if (!RP) return; const pt = RP.an.pt; playUntil = null; seek(pt[0].t + (pt[pt.length - 1].t - pt[0].t) * e.target.value / 1000); };
-
 $("back").onclick = () => showHome();
 $("dlG").onclick = () => { if (!CUR) return; const b = new Blob([toGPX(CUR)], { type: "application/gpx+xml" }), a = document.createElement("a"); a.href = URL.createObjectURL(b); const d = new Date(CUR.t0); a.download = `滑走ログ_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.gpx`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
-window.addEventListener("beforeunload", () => { if (REC) dbPut(REC); });
-// 試し用：?gpx=URL で読み込んで開く
-const qg = new URLSearchParams(location.search).get("gpx");
-if (qg) { fetch(qg).then(r => r.text()).then(async tx => { const f = new File([tx], "a.gpx"); const dt = new DataTransfer(); dt.items.add(f); $("gpx").files = dt.files; $("gpx").onchange({ target: $("gpx") }); }); }
-else showHome();
-window.__ride = { analyze, seek, play };
+window.addEventListener("pagehide", () => { if (REC) dbPut(REC); });
+
+/* ---- 起動 ---- */
+const QS = new URLSearchParams(location.search);
+(async () => {
+  const g = QS.get("g");
+  if (g && /^[a-z0-9]{6,20}$/.test(g)) { history.replaceState(null, "", location.pathname);
+    if (g !== FR.code && confirm("友だちのグループに入りますか？") && (FR.name || askName())) { FR.code = g; LS.set("rideGroup", g); } }
+  frConnect(); renderFriends();
+  const qg = QS.get("gpx");
+  if (qg) { const tx = await (await fetch(qg)).text(); const f = new File([tx], "a.gpx"), dt = new DataTransfer(); dt.items.add(f); $("gpx").files = dt.files; $("gpx").onchange({ target: $("gpx") }); return; }
+  await showHome(); if (!REC) locate();
+})();
+setInterval(() => { if (!$("home").hidden) renderFriends(); }, 30000);
+window.__ride = { analyze, FR, friends, checkIn, rows, frSend, get REC() { return REC; }, get LIVE() { return LIVE; }, get spike() { return spike; } };
 </script>
 </body></html>
