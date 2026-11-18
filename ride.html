@@ -144,6 +144,7 @@ body>#cmap{display:none}
 <div id="pocket" hidden><b id="pkTime">0:00</b><span id="pkSub"></span><span style="font-size:12px">長押しで戻る</span><div class="pr"><i></i></div></div>
 <script type="module">
 import { build3D, makeProj, courseXZ, loadDem, segDist, DN, PC, THREE } from "./map3d.js";
+import { fuseTurns, makeGyroRec } from "./turns.js";
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const pad = n => String(n).padStart(2, "0");
@@ -233,7 +234,10 @@ async function analyze(log, opt = {}) {
   const falls = (log.falls || []).map(f => { let lo = 0, hi = n - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (pt[m].t < f[0]) lo = m + 1; else hi = m; } const [x, z] = proj.fromLL(f[1], f[2]); return { kind: "fall", a: lo, b: lo, t: f[0], x, z, g: f[3] }; });
   const items = [...lifts, ...runs, ...falls].sort((x, y) => x.a - y.a || (x.kind === "fall") - (y.kind === "fall"));
   const sum = { resort: r.nm, runs: runs.length, lifts: lifts.filter(l => !l.walk).length, falls: falls.length, dist: runs.reduce((s, x) => s + x.dist, 0), drop: runs.reduce((s, x) => s + x.drop, 0), vmax: Math.max(0, ...runs.map(x => x.vmax)), time: pt[n - 1].t - pt[0].t };
-  return { r, d, proj, pt, items, sum };
+  // ターンの左右：記録中に取った回転があれば、滑走の道を0.1秒ごとに描き足す
+  let fine = null; if (!opt.noCourse && log.gy && log.gy.length) try { fine = fuseTurns(pt, log.gy, { cal: LS.get("rideTurnCal", null) });
+    if (fine && fine.sure) LS.set("rideTurnCal", { gain: +fine.gain.toFixed(3), t: Date.now() }); } catch (e) { console.warn(e); }
+  return { r, d, proj, pt, items, sum, fine, fineWhy: fine ? null : fuseTurns.why };
 }
 
 /* ---- 友だち：位置を公開の中継サーバー(MQTT)に、グループの合言葉で暗号化して置く ----
@@ -341,7 +345,7 @@ async function showHome() {
   homeMap(); setTimeout(() => HM && HM.invalidateSize(), 50);
   const LOGS = (await dbAll()).sort((a, b) => b.t0 - a.t0);
   const live = LOGS.find(l => l.done === false);
-  if (live) { const r = (await rows()).find(x => x.cid === live.cid); if (r) { REC = live; motionOn(); enterLive(r); return; } live.done = true; await dbPut(live); }
+  if (live) { const r = (await rows()).find(x => x.cid === live.cid); if (r) { REC = live; gyroOn(); motionOn(); enterLive(r); return; } live.done = true; await dbPut(live); }
   $("logs").innerHTML = LOGS.length ? "" : '<div class="mut">まだありません</div>';
   for (const l of LOGS) { const e = document.createElement("div"); e.className = "log"; const s = l.sum, dt = new Date(l.t0);
     e.innerHTML = `<div class="t"><b>${esc(s ? s.resort : l.name || "記録")}</b><small>${dt.getFullYear()}/${dt.getMonth() + 1}/${dt.getDate()} ${clock(l.t0)}${s ? `・${s.runs}本・${km(s.dist)}・最高${kmh(s.vmax)}${s.falls ? "・転倒" + s.falls : ""}` : ""}${l.src ? "・" + esc(l.src) : ""}</small></div><button class="x">×</button>`;
@@ -357,7 +361,8 @@ async function wake() { try { if ("wakeLock" in navigator && document.visibility
 let hiddenAt = 0;
 document.addEventListener("visibilitychange", () => { if (!REC) return; if (document.visibilityState === "hidden") { hiddenAt = Date.now(); dbPut(REC); } else { wake(); if (hiddenAt && Date.now() - hiddenAt > 30000) toast("画面を消していた " + Math.round((Date.now() - hiddenAt) / 60000) + "分間は記録されていません", 5000); hiddenAt = 0; } });
 // 転倒：強い衝撃(2.8G以上)のあと4秒以内に止まった(4km/h未満)、その前は動いていた(15km/h以上)
-let spike = null; const onMotion = e => { const a = e.accelerationIncludingGravity; if (!a || a.x == null) return; const g = Math.hypot(a.x, a.y, a.z) / 9.81; if (g >= 2.8 && (!spike || Date.now() - spike.t > 1500 || g > spike.g)) spike = { t: Date.now(), g }; };
+let gyroFn = null; const gyroOn = () => { gyroFn = makeGyroRec(() => REC.gy || (REC.gy = [])); };
+let spike = null; const onMotion = e => { if (gyroFn && REC) gyroFn(e); const a = e.accelerationIncludingGravity; if (!a || a.x == null) return; const g = Math.hypot(a.x, a.y, a.z) / 9.81; if (g >= 2.8 && (!spike || Date.now() - spike.t > 1500 || g > spike.g)) spike = { t: Date.now(), g }; };
 // 揺れの検出は許可が要る端末あり(iPhone等)。画面操作の中でしか頼めないので、許可されなかったら次に画面を触った時にもう一度頼む
 let motionAsk = null;
 async function motionOn() {
@@ -365,7 +370,7 @@ async function motionOn() {
   try { if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === "function") { if (await DeviceMotionEvent.requestPermission() !== "granted") throw 0; } window.addEventListener("devicemotion", onMotion); }
   catch (e) { if (REC && !REC.done) { motionAsk = () => motionOn(); document.addEventListener("pointerdown", motionAsk, { capture: true, once: true }); } }
 }
-function motionOff() { window.removeEventListener("devicemotion", onMotion); if (motionAsk) { document.removeEventListener("pointerdown", motionAsk, true); motionAsk = null; } }
+function motionOff() { gyroFn = null; window.removeEventListener("devicemotion", onMotion); if (motionAsk) { document.removeEventListener("pointerdown", motionAsk, true); motionAsk = null; } }
 function checkFall(q) {
   if (!spike || q[0] < spike.t) return; if (q[0] - spike.t > 4000) { spike = null; return; }
   const P = REC.pts; if (P.length < 4) return;
@@ -378,7 +383,7 @@ function checkFall(q) {
 }
 async function checkIn(r) {
   if (!navigator.geolocation) { alert("この端末では位置が取れません"); return; }
-  REC = { id: "r" + Date.now(), t0: Date.now(), pts: [], falls: [], done: false, cid: r.cid, name: r.nm }; motionOn(); await dbPut(REC);
+  REC = { id: "r" + Date.now(), t0: Date.now(), pts: [], falls: [], done: false, cid: r.cid, name: r.nm }; gyroOn(); motionOn(); await dbPut(REC);
   enterLive(r);
 }
 async function enterLive(r) {
@@ -524,9 +529,15 @@ function setup3D(an) {
   const off = Math.max(1.5, api.rr * 0.5);
   let xyz = [], col = [], cur = -1;
   const flush = () => { if (xyz.length >= 6) { if (cur) api.addLine(xyz, null, 6.5, 0xffffff, 1); api.addLine(xyz, col, cur ? 3.5 : 2, 0, 2); } };
+  const F = an.fine; let fi = 0;
   for (let i = 0; i < pt.length; i++) { const run = inRun[i];
     if (i && (pt[i].t - pt[i - 1].t > 60000 || run !== cur)) { flush(); const join = pt[i].t - pt[i - 1].t <= 60000; const lx = xyz.slice(-3), lc = col.slice(-3); xyz = join ? lx : []; col = join ? lc : []; }
-    cur = run; xyz.push(pt[i].x, api.Y(pt[i].x, pt[i].z) + off, pt[i].z); const c = new THREE.Color(run ? spdCol(pt[i].v) : "#80868b"); col.push(c.r, c.g, c.b); }
+    cur = run; const c = new THREE.Color(run ? spdCol(pt[i].v) : "#80868b");
+    // 滑走中は回転で描き足した細かい道(前の点からこの点まで)
+    if (run && F && i && inRun[i - 1]) { while (fi < F.t.length && F.t[fi] <= pt[i - 1].t) fi++; let used = 0;
+      for (; fi < F.t.length && F.t[fi] < pt[i].t; fi++) { xyz.push(F.x[fi], api.Y(F.x[fi], F.z[fi]) + off, F.z[fi]); col.push(c.r, c.g, c.b); used++; }
+      if (used) continue; }
+    xyz.push(pt[i].x, api.Y(pt[i].x, pt[i].z) + off, pt[i].z); col.push(c.r, c.g, c.b); }
   flush();
   for (const it of an.items) if (it.kind === "fall") api.addL(new THREE.Vector3(it.x, api.Y(it.x, it.z) + api.rr * 2, it.z), "✕ 転倒", "fall", -0.5);
   const mk = new THREE.Mesh(new THREE.SphereGeometry(api.rr * 4, 16, 12), new THREE.MeshBasicMaterial({ color: 0xd93025, depthTest: false })); mk.renderOrder = 10; api.scene.add(mk);
@@ -548,7 +559,10 @@ $("spdC").onclick = e => { const b = e.target.closest("button"); if (!b) return;
   mult = +b.dataset.m; $("spdC").querySelectorAll("[data-m]").forEach(x => x.classList.toggle("on", +x.dataset.m === mult)); };
 function posAt(t) { const { pt } = RP.an; let i = RP.i; if (pt[i].t > t) i = 0; while (i < pt.length - 2 && pt[i + 1].t <= t) i++; RP.i = i;
   const a = pt[i], b = pt[Math.min(pt.length - 1, i + 1)], f = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
-  return { i, x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f, v: a.v + (b.v - a.v) * f, e: a.e + (b.e - a.e) * f }; }
+  let x = a.x + (b.x - a.x) * f, z = a.z + (b.z - a.z) * f; const F = RP.an.fine;
+  if (F && RP.runAt[i] >= 0 && RP.runAt[Math.min(pt.length - 1, i + 1)] >= 0) { let lo = 0, hi = F.t.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (F.t[m] < t) lo = m + 1; else hi = m; }
+    if (lo > 0 && F.t[lo] >= t && F.t[lo] - F.t[lo - 1] <= 300) { const g = (t - F.t[lo - 1]) / Math.max(1, F.t[lo] - F.t[lo - 1]); x = F.x[lo - 1] + (F.x[lo] - F.x[lo - 1]) * g; z = F.z[lo - 1] + (F.z[lo] - F.z[lo - 1]) * g; } }
+  return { i, x, z, v: a.v + (b.v - a.v) * f, e: a.e + (b.e - a.e) * f }; }
 function render() { if (!RP || !A3) return; const { an, mk, ring, lab } = RP, q = posAt(RP.t), api = A3;
   const li = RP.liftAt[q.i], onL = li >= 0 && !an.items[li].walk, y = api.Y(q.x, q.z) + (onL ? RP.CL * 0.9 : api.rr * 2);
   mk.position.set(q.x, y, q.z); ring.position.copy(mk.position);
