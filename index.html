@@ -142,7 +142,14 @@ input[type=range]{width:100%;accent-color:var(--glide)}
   .sp-leg{flex-direction:column;flex-wrap:nowrap;width:118px;flex-shrink:0;font-size:12px;padding:6px 8px;gap:3px;overflow:hidden}.sp-leg svg{width:16px;height:16px}}
 /* 見取り図を出している間は、案内のバナーと下のバーだけ残して見やすく（ルート外れの再検索は出す） */
 body.spon #hSign,body.spon #sDeck,body.spon #sLead,body.spon .sgpin,body.spon #sapaCard,body.spon #tunCard,body.spon #jamCard,body.spon #detCard,body.spon #skiCard,body.spon #navEco{display:none!important}
-body.spon #nvToast{display:none!important} /* ルート外れの再検索は見取り図の見出しに出す */
+body.spon #nvToast{display:none!important}
+#rerouteBtn{white-space:nowrap;flex:none}
+.nav-stack .nav-toast.bo{justify-content:flex-end;padding-top:5px;padding-bottom:5px}
+/* 左の案内が下のバーまで届く時（行き先の提案・迂回の提案が出た時など）は、下のバーをしまう */
+body.stfit .nav-bottom{transform:translateY(calc(100% + 24px))}
+@media (orientation:landscape){
+  .skisug{padding:6px 12px;gap:2px}.skisug .dr small{font-size:11.5px}.skisug .nm{font-size:14px}
+  .skisug .db{margin-top:2px}.skisug button{padding:6px 10px;font-size:13.5px}} /* ルート外れの再検索は見取り図の見出しに出す */
 .sapa .nm{display:block;overflow:hidden;text-overflow:ellipsis}
 .sapa .fi{display:flex;gap:4px;margin-top:3px}
 #mapNote{left:auto;top:auto;right:8px;bottom:calc(max(8px,env(safe-area-inset-bottom)) + 70px)}
@@ -1628,7 +1635,7 @@ function updSnap(){
 function updOnRoute(){if(!curPos){onRouteF=true;return;}if(onRouteF&&offD>0.15)onRouteF=false;else if(!onRouteF&&offD<0.08)onRouteF=true;}
 /* ---- 滑らかな追従：GPSは1秒に1回程度なので、その間は速度から先読みして毎フレーム動かす ---- */
 /* ---- 版：詳細画面に出す。開いた時・画面を戻した時に新しい版があれば知らせる（GitHub Pagesは最大10分ほど古い版を見せることがある） ---- */
-const BUILD="2026-11-02 17:40";
+const BUILD="2026-11-22 03:50";
 // 新しい版：案内中でなければ自動で読み込み直す（ホーム画面のアプリを開いた時も）。案内中はバーを出してタップで更新
 function hardReload(){try{if(!localStorage.getItem("updFrom"))localStorage.setItem("updFrom",BUILD);}catch(e){}location.replace(location.pathname+"?v="+Date.now());}
 async function checkUpdate(auto){
@@ -2091,7 +2098,9 @@ function syncNav(){
   const off=!$("offroute").hidden,tr=!$("trafficBox").hidden,ad=!$("advice").hidden;
   const nt=NOTE&&Date.now()-NOTE.t<5000?NOTE.msg:"";
   $("nvToast").hidden=!(off||nt||tr||ad);
-  $("nvToastTxt").textContent=off?T("offroute"):nt?nt:tr?T("trafficBox"):ad?T("advice"):"";
+  {const tt=off?T("offroute"):nt?nt:tr?T("trafficBox"):ad?T("advice"):"";
+   // 上の案内と同じ文（ルートから外れています）は繰り返さず、再検索ボタンだけにする
+   $("nvToastTxt").textContent=tt===$("nvTxt").textContent?"":tt;$("nvToast").classList.toggle("bo",!$("nvToastTxt").textContent);}
   $("detBtn").hidden=!(typeof google!=="undefined"&&google.maps&&typeof google.maps.importLibrary==="function");
   $("detBtn").textContent=checking?"…":"迂回";
   $("rerouteBtn").hidden=!(off&&curPos&&!rerouting);
@@ -3184,6 +3193,15 @@ $("skiCard").addEventListener("click",async e=>{const b=e.target.closest("button
   const ok=await reroute(true);
   if(!ok){DEST=prev;return;}
   SKS.prop=null;SKS.html="";$("skiCard").hidden=true;SKI.key="";SKI.res=null;SKS.t=Date.now();addHist(DEST);drawMarks();saveRoute();speak(p.name+"に行き先を変えました");});
+// 左の案内の列が下のバーに重なるかを調べる（バーがしまわれていても、出ている時の位置で比べる）
+function fitStack(){
+  const st=$("navStack"),bb=$("navBottom");if(!st||!bb)return;
+  const cs=getComputedStyle(bb),bbTop=innerHeight-(parseFloat(cs.bottom)||8)-bb.offsetHeight;
+  let low=0;for(const c of st.children)if(!c.hidden&&c.offsetParent!==null)low=Math.max(low,c.getBoundingClientRect().bottom);
+  document.body.classList.toggle("stfit",MODE==="nav"&&low>bbTop-6);
+}
+if(window.ResizeObserver){const ro=new ResizeObserver(()=>fitStack());ro.observe($("navStack"));ro.observe($("navBottom"));}
+addEventListener("resize",fitStack);
 let planSeq=0;
 async function planRoute(){
   const seq=++planSeq;$("pvGo").disabled=true;showPreview("経路を検索中…");ICFORCE=[];ICRUNS=[];
